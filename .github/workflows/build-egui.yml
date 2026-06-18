@@ -1,0 +1,66 @@
+name: Build egui
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install egui deps
+        working-directory: egui
+        run: cargo fetch
+
+      - name: Build egui
+        working-directory: egui
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare egui binary
+        run: |
+          mkdir -p release-artifacts
+          BINARY="guitar-tuner-egui"
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            EXT=".exe"
+          fi
+          cp "egui/target/${{ matrix.target }}/release/${BINARY}${EXT}" "release-artifacts/guitar-tuner-egui-${{ matrix.os }}-${{ matrix.target }}${EXT}"
+
+      - name: Upload egui artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: egui-${{ matrix.os }}-${{ matrix.target }}
+          path: release-artifacts/
+          retention-days: 7
+          if-no-files-found: warn

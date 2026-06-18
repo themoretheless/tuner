@@ -80,7 +80,7 @@
 - Кросс-платформенность: Windows, macOS, Linux + браузер
 
 CI и деплой страницы (GitHub Pages для онлайн-версии) настроены как в cut-log:
-- build.yml, deploy.yml, pr-deploy.yml, release.yml
+- build-web.yml, build-tauri.yml, build-egui.yml, deploy.yml, pr-deploy.yml, release.yml
 - Страница: https://themoretheless.github.io/tuner/ (включи GitHub Pages с source "GitHub Actions")
 - Для десктоп-релизов бинари собираются в release с матрицей (Win/Mac/Linux) и добавляются в GitHub Release
 - Страница двуязычная (RU/EN) с переключателем, как в cut-log

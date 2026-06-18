@@ -58,7 +58,7 @@ jobs:
   build:
     needs: deploy-from-release
     if: needs.deploy-from-release.outputs.found != 'true'
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/build-web.yml
 
   deploy-from-build:
     needs: [deploy-from-release, build]

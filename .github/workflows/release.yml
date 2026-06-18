@@ -24,17 +24,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    uses: ./.github/workflows/build.yml
+  build-web:
+    uses: ./.github/workflows/build-web.yml
 
-  build-desktop:
-    needs: build
-    uses: ./.github/workflows/build-desktop.yml
-    # Builds both Tauri and egui versions.
-    # Failures in one don't block the other or pages (if: always in release)
+  build-tauri:
+    needs: build-web
+    uses: ./.github/workflows/build-tauri.yml
+
+  build-egui:
+    needs: build-web
+    uses: ./.github/workflows/build-egui.yml
 
   pages-deploy:
-    needs: build
+    needs: build-web
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -45,8 +47,9 @@ jobs:
         uses: actions/deploy-pages@v5
 
   release:
-    needs: [build, build-desktop]
-    if: always()  # run even if desktop fails
+    needs: [build-web, build-tauri, build-egui]
+    if: always()  # run even if some desktop builds fail
+
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -85,14 +88,14 @@ jobs:
         run: tar -cf artifact.tar -C _site .
 
       - name: Download Tauri artifacts
-        if: steps.version.outputs.skip != 'true' && needs.build-desktop.result == 'success'
+        if: steps.version.outputs.skip != 'true' && needs.build-tauri.result == 'success'
         uses: actions/download-artifact@v8
         with:
           path: tauri-artifacts
           merge-multiple: true
 
       - name: Download egui artifacts
-        if: steps.version.outputs.skip != 'true' && needs.build-desktop.result == 'success'
+        if: steps.version.outputs.skip != 'true' && needs.build-egui.result == 'success'
         uses: actions/download-artifact@v8
         with:
           path: egui-artifacts
