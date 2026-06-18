@@ -20,11 +20,11 @@
 
 CI и деплой страницы (GitHub Pages для онлайн-версии) настроены как в cut-log:
 - build.yml, deploy.yml, pr-deploy.yml, release.yml
-- Страница: https://<you>.github.io/Tuner/ (включи GitHub Pages с source "GitHub Actions")
+- Страница: https://themoretheless.github.io/tuner/ (включи GitHub Pages с source "GitHub Actions")
 - Для десктоп-релизов бинари собираются в release с матрицей (Win/Mac/Linux) и добавляются в GitHub Release
 - Страница двуязычная (RU/EN) с переключателем, как в cut-log
 
-Base в web/vite.config.ts = '/Tuner/' — поменяй если имя репозитория отличается.
+Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 
 ## Скачать / Собрать
 

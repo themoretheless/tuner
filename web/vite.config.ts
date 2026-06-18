@@ -4,7 +4,7 @@ import ver from '../version.json'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/Tuner/',
+  base: '/tuner/',
   plugins: [vue()],
   define: { __PKG_VERSION__: JSON.stringify(ver.version) },
 
