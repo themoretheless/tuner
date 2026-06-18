@@ -178,9 +178,9 @@ export function useTuner() {
     if (!analyser || !isListening.value) return;
 
     if (!timeDomainBuffer || timeDomainBuffer.length !== analyser.fftSize) {
-      timeDomainBuffer = new Float32Array(analyser.fftSize);
+      timeDomainBuffer = new Float32Array(analyser.fftSize) as Float32Array<ArrayBuffer>;
     }
-    analyser.getFloatTimeDomainData(timeDomainBuffer);
+    analyser.getFloatTimeDomainData(timeDomainBuffer as Float32Array<ArrayBuffer>);
 
     const rms = computeRmsVolume(timeDomainBuffer);
     volume.value = normalizeLevel(rms);
@@ -218,7 +218,7 @@ export function useTuner() {
     refOsc.frequency.value = freq;
     refGain.gain.value = 0.18;
 
-    const lp = refAudio.createBiquadFilter();
+    const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 1600;
 
@@ -276,9 +276,9 @@ export function useTuner() {
   onUnmounted(() => {
     stop();
     stopReferenceTone();
-    if (refAudio) {
-      refAudio.close().catch(() => {});
-      refAudio = null;
+    if (sharedAudio) {
+      sharedAudio.close().catch(() => {});
+      sharedAudio = null;
     }
   });
 
