@@ -2,7 +2,9 @@
 
 **Кросс-платформенный гитарный тюнер**
 
-- **Оффлайн десктопное приложение**: Windows • macOS • Linux (native egui + cpal in Rust)
+- **Оффлайн десктопные приложения**:
+  - Tauri версия (Vue frontend + Rust backend)
+  - egui версия (pure native Rust + cpal, no webview)
 - **Онлайн сайт**: любой современный браузер (Vue 3)
 
 Точный, быстрый и полностью работает без интернета в десктопной версии.
@@ -14,7 +16,7 @@
 - Waveform визуализатор, reference tone, ear training (random note)
 - Bilingual RU/EN с toggle, keyboard shortcuts (Space, 1-6, R)
 - Persistence (Tauri Store + localStorage)
-- CI/CD как у cut-log: build (web + desktop matrix), deploy, pr-deploy, release (с attachment бинарей)
+- CI/CD как у cut-log: build (web + Tauri + egui matrix), deploy, pr-deploy, release (с attachment бинарей обоих десктопов)
 - GitHub Pages для демо, PWA manifest, regenerated icons
 - Компонентная структура, SVG gauge, shared audio context
 
@@ -94,7 +96,8 @@ Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 ```
 Tuner/
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
-├── egui/                # Native offline app (egui + cpal in pure Rust)
+├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
+├── egui/                # Pure native offline (egui + cpal, no webview)
 └── README.md
 ```
 
@@ -142,12 +145,29 @@ npm run tauri dev
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-### Запуск оффлайн нативного приложения (egui)
+### Десктопные приложения
+
+Есть две версии оффлайн десктопа:
+
+### 1. Tauri (Vue + Rust)
+Использует веб-фронтенд из `web/`, упакованный в нативное приложение.
+
+```bash
+cd desktop
+npm run tauri build
+```
+
+Бинарники в `desktop/src-tauri/target/release/bundle/`
+
+### 2. egui (pure native Rust)
+Лёгкая версия без WebView, полностью на Rust + egui.
 
 ```bash
 cd egui
-cargo run --release
+cargo build --release
 ```
+
+Бинарник в `egui/target/release/guitar-tuner-egui`
 
 ## Сборка веб-версии
 
@@ -155,8 +175,6 @@ cargo run --release
 cd web
 npm run build
 ```
-
-(Для десктопной версии egui отдельная сборка не требуется — cargo build --release в папке egui)
 
 #### macOS
 

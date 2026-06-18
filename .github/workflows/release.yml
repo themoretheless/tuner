@@ -30,8 +30,8 @@ jobs:
   build-desktop:
     needs: build
     uses: ./.github/workflows/build-desktop.yml
-    # Desktop build failures should not block the web page deploy
-    # (we still want the release if possible, but page is priority)
+    # Builds both Tauri and egui versions.
+    # Failures in one don't block the other or pages (if: always in release)
 
   pages-deploy:
     needs: build
@@ -84,11 +84,18 @@ jobs:
         if: steps.version.outputs.skip != 'true'
         run: tar -cf artifact.tar -C _site .
 
-      - name: Download desktop artifacts
+      - name: Download Tauri artifacts
         if: steps.version.outputs.skip != 'true' && needs.build-desktop.result == 'success'
         uses: actions/download-artifact@v8
         with:
-          path: desktop-artifacts
+          path: tauri-artifacts
+          merge-multiple: true
+
+      - name: Download egui artifacts
+        if: steps.version.outputs.skip != 'true' && needs.build-desktop.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          path: egui-artifacts
           merge-multiple: true
 
       - name: Create tag
@@ -107,4 +114,5 @@ jobs:
           generate_release_notes: true
           files: |
             artifact.tar
-            desktop-artifacts/**/*
+            tauri-artifacts/**/*
+            egui-artifacts/**/*
