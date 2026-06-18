@@ -83,29 +83,7 @@ onUnmounted(() => {
         <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
         <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
 
-        <!-- Error -->
-        <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900">
-          {{ tuner.error.value }}
-          <button @click="tuner.clearError()" class="ml-2 underline">dismiss</button>
-        </div>
-
-        <NoteDisplay
-          :display="tuner.currentNoteDisplay.value"
-          :is-detected="!!tuner.detectedNote.value"
-          :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
-          :target-freq="tuner.targetNote.value.frequency"
-          :format-freq="tuner.formatFreq"
-        />
-
-        <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
-
-        <FreqReadout
-          :detected="tuner.smoothedFrequency.value"
-          :target="tuner.targetNote.value.frequency"
-          :format-freq="tuner.formatFreq"
-        />
-
-        <!-- Simple A4 control + waveform toggle -->
+        <!-- A4 + visual toggles (placed near the visualizers) -->
         <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
           <div class="flex items-center gap-2">
             <span>{{ t('a4.label') }}</span>
@@ -129,6 +107,28 @@ onUnmounted(() => {
             <span>{{ t('spectrum') }}</span>
           </label>
         </div>
+
+        <!-- Error -->
+        <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900">
+          {{ tuner.error.value }}
+          <button @click="tuner.clearError()" class="ml-2 underline">dismiss</button>
+        </div>
+
+        <NoteDisplay
+          :display="tuner.currentNoteDisplay.value"
+          :is-detected="!!tuner.detectedNote.value"
+          :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
+          :target-freq="tuner.targetNote.value.frequency"
+          :format-freq="tuner.formatFreq"
+        />
+
+        <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
+
+        <FreqReadout
+          :detected="tuner.smoothedFrequency.value"
+          :target="tuner.targetNote.value.frequency"
+          :format-freq="tuner.formatFreq"
+        />
       </div>
 
       <div class="card p-6 space-y-4">

@@ -26,14 +26,21 @@ function draw() {
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
 
-  // Show first ~160 bins (~3.4 kHz at 44.1k), similar to egui
-  const displayBins = Math.min(160, binCount)
+  // Show first 200 bins (~4.3 kHz at 44.1k), similar to egui
+  const displayBins = Math.min(200, binCount)
   const barWidth = w / displayBins
+
+  // Per-frame normalize so quiet signals still show full height spectrum (like egui)
+  let maxV = 0
+  for (let i = 0; i < displayBins; i++) {
+    if (dataArray.value[i] > maxV) maxV = dataArray.value[i]
+  }
+  if (maxV < 1) maxV = 1
 
   ctx.fillStyle = '#4ade80'
 
   for (let i = 0; i < displayBins; i++) {
-    const v = dataArray.value[i] / 255
+    const v = dataArray.value[i] / maxV
     const barH = v * h
     const x = i * barWidth
     ctx.fillRect(x, h - barH, Math.max(1, barWidth - 0.6), barH)

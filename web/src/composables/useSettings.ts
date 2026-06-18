@@ -17,7 +17,7 @@ export function useSettings() {
   const a4 = ref(440);
   const lastTuningId = ref('standard');
   const showWaveform = ref(true);
-  const showSpectrum = ref(false);
+  const showSpectrum = ref(true);
 
   async function load() {
     if (isTauri) {
