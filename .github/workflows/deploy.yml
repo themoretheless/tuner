@@ -1,0 +1,73 @@
+name: Deploy
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # Try to deploy from release artifact (instant, no rebuild)
+  deploy-from-release:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      found: ${{ steps.download.outputs.found }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Try download release artifact
+        id: download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "Looking for artifact in release $TAG"
+          if gh release download "$TAG" -p "artifact.tar" 2>/dev/null; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            mkdir -p _site
+            tar xf artifact.tar -C _site
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No release artifact, will build from source"
+          fi
+
+      - name: Upload pages artifact
+        if: steps.download.outputs.found == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - name: Deploy
+        if: steps.download.outputs.found == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  # Fallback: build from source (for branches without release)
+  build:
+    needs: deploy-from-release
+    if: needs.deploy-from-release.outputs.found != 'true'
+    uses: ./.github/workflows/build.yml
+
+  deploy-from-build:
+    needs: [deploy-from-release, build]
+    if: needs.deploy-from-release.outputs.found != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5

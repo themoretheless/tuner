@@ -1,0 +1,84 @@
+name: Build
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Check version
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          VERSION=$(node -p 'require("./version.json").version')
+          LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1 | sed 's/^v//' || echo "0.0.0")
+
+          # Check if code files changed (not just CI/docs)
+          CODE_CHANGED=$(git diff --name-only origin/main...HEAD \
+            | grep -v '^\.github/' \
+            | grep -v '^\.vscode/' \
+            | grep -v '^\.claude/' \
+            | grep -v '^\.gitignore' \
+            | grep -v '^README' \
+            | grep -v '^LICENSE' \
+            | grep -v '^CHANGELOG' \
+            | grep -v '^\.env' \
+            | grep -v '\.md$' \
+            || true)
+
+          if [ -n "$CODE_CHANGED" ]; then
+            if git tag -l "v${VERSION}" | grep -q .; then
+              echo "::error::v${VERSION} already released. Bump version.json."
+              exit 1
+            fi
+            if [ "$(printf '%s\n' "$LATEST" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+              echo "::error::v${VERSION} is less than latest release v${LATEST}. Version must be higher."
+              exit 1
+            fi
+            echo "New version v${VERSION} (latest: v${LATEST})"
+          else
+            echo "No code changes, version bump not required"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: web
+        run: npx vue-tsc --noEmit
+
+      - name: Build Vue
+        working-directory: web
+        run: npm run build
+        env:
+          VITE_APP_VERSION: ${{ inputs.ref || '' }}
+          VITE_APP_SHA: ${{ github.sha }}
+
+      - name: SPA fallback for GitHub Pages
+        run: cp web/dist/index.html web/dist/404.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist

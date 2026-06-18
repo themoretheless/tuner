@@ -1,0 +1,71 @@
+name: PR Deploy
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.pr.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: React to comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions -f content=rocket
+
+      - name: Get PR branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} --jq '.head.ref')
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          gh pr comment ${{ github.event.issue.number }} -b "🚀 Deploying branch \`$BRANCH\`..."
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.prepare.outputs.branch }}
+
+  deploy:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+      - uses: actions/checkout@v6
+
+      - name: Read version
+        id: version
+        run: echo "value=$(jq -r .version version.json)" >> $GITHUB_OUTPUT
+
+      - name: Comment result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deployment.outputs.page_url }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: gh pr comment ${{ github.event.issue.number }} -b "✅ Deployed v$VERSION $URL"
