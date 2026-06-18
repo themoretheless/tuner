@@ -30,9 +30,23 @@ jobs:
   build-desktop:
     needs: build
     uses: ./.github/workflows/build-desktop.yml
+    # Desktop build failures should not block the web page deploy
+    # (we still want the release if possible, but page is priority)
+
+  pages-deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
 
   release:
     needs: [build, build-desktop]
+    if: always()  # run even if desktop fails
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -71,7 +85,7 @@ jobs:
         run: tar -cf artifact.tar -C _site .
 
       - name: Download desktop artifacts
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.skip != 'true' && needs.build-desktop.result == 'success'
         uses: actions/download-artifact@v8
         with:
           path: desktop-artifacts
@@ -94,15 +108,3 @@ jobs:
           files: |
             artifact.tar
             desktop-artifacts/**/*
-
-  deploy:
-    needs: release
-    if: needs.release.result == 'success'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
