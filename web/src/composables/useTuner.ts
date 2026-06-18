@@ -305,6 +305,7 @@ export function useTuner() {
     // for visualizers
     analyser: analyserRef,
     showWaveform: settings.showWaveform,
+    showSpectrum: settings.showSpectrum,
 
     // actions
     start,

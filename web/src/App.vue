@@ -11,6 +11,7 @@ import StringSelector from './components/StringSelector.vue'
 import TunerControls from './components/TunerControls.vue'
 import TuningSelector from './components/TuningSelector.vue'
 import Waveform from './components/Waveform.vue'
+import Spectrum from './components/Spectrum.vue'
 
 const tuner = useTuner()
 const { lang, t, toggleLang } = useL10n()
@@ -80,6 +81,7 @@ onUnmounted(() => {
         <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
         <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
 
         <!-- Error -->
         <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900">
@@ -121,6 +123,10 @@ onUnmounted(() => {
           <label class="flex items-center gap-1 cursor-pointer">
             <input type="checkbox" v-model="tuner.showWaveform.value" class="accent-emerald-500" />
             <span>{{ t('waveform') }}</span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
+            <span>{{ t('spectrum') }}</span>
           </label>
         </div>
       </div>
