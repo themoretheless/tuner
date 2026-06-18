@@ -23,11 +23,11 @@ export function useSettings() {
       const s = await getStore();
       if (s) {
         const savedA4 = await s.get<number>('a4');
-        if (savedA4) a4.value = savedA4;
+        if (savedA4 != null) a4.value = savedA4;
         const savedTuning = await s.get<string>('lastTuningId');
         if (savedTuning) lastTuningId.value = savedTuning;
         const savedWave = await s.get<boolean>('showWaveform');
-        if (savedWave !== undefined) showWaveform.value = savedWave;
+        if (savedWave != null) showWaveform.value = savedWave;
       }
     } else {
       const savedA4 = localStorage.getItem('a4');
@@ -60,6 +60,7 @@ export function useSettings() {
     save();
   }, { deep: true });
 
+  // Load async, but initial values are fine for first render
   load();
 
   return {

@@ -1,6 +1,7 @@
 // Pitch detection utilities
 // YIN algorithm (much better for guitar than plain autocorrelation)
 // + fallback to improved autocorrelation
+// TODO (perf/arch): move core to Rust+WASM for shared desktop/web perf and testability
 
 const GUITAR_MIN_FREQ = 30;
 const GUITAR_MAX_FREQ = 400;
@@ -29,6 +30,10 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
   const size = buffer.length;
   const half = Math.floor(size / 2);
 
+  // Limit tau to guitar frequency range for perf (avoid useless high lags)
+  const minTau = Math.floor(sampleRate / GUITAR_MAX_FREQ);
+  const maxTau = Math.min(half, Math.floor(sampleRate / GUITAR_MIN_FREQ));
+
   // Gate on energy
   let sumSq = 0;
   let maxAbs = 0;
@@ -43,8 +48,8 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
 
   const { yin, diff } = ensureYinBuffers(size);
 
-  // 1. Difference function
-  for (let tau = 0; tau < half; tau++) {
+  // 1. Difference function (limited range)
+  for (let tau = minTau; tau < maxTau; tau++) {
     let sum = 0;
     for (let i = 0; i < half; i++) {
       const delta = buffer[i] - buffer[i + tau];
@@ -53,20 +58,20 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
     diff[tau] = sum;
   }
 
-  // 2. Cumulative mean normalized difference
+  // 2. Cumulative mean normalized difference (limited)
   yin[0] = 1;
   let runningSum = 0;
-  for (let tau = 1; tau < half; tau++) {
+  for (let tau = minTau; tau < maxTau; tau++) {
     runningSum += diff[tau];
     yin[tau] = diff[tau] * (tau / runningSum);
   }
 
-  // 3. Absolute threshold + find first dip below threshold
+  // 3. Absolute threshold + find first dip below threshold (limited)
   let tauEstimate = -1;
-  for (let tau = 1; tau < half; tau++) {
+  for (let tau = minTau; tau < maxTau; tau++) {
     if (yin[tau] < YIN_THRESHOLD) {
       // search for local minimum
-      while (tau + 1 < half && yin[tau + 1] < yin[tau]) {
+      while (tau + 1 < maxTau && yin[tau + 1] < yin[tau]) {
         tau++;
       }
       tauEstimate = tau;
@@ -74,10 +79,10 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
     }
   }
 
-  // Fallback: global minimum if no threshold crossed
+  // Fallback: global minimum if no threshold crossed (limited)
   if (tauEstimate === -1) {
     let minVal = Infinity;
-    for (let tau = 1; tau < half; tau++) {
+    for (let tau = minTau; tau < maxTau; tau++) {
       if (yin[tau] < minVal) {
         minVal = yin[tau];
         tauEstimate = tau;
@@ -90,7 +95,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
 
   // 4. Parabolic interpolation
   let betterTau = tauEstimate;
-  if (tauEstimate > 1 && tauEstimate < half - 1) {
+  if (tauEstimate > 1 && tauEstimate < maxTau - 1) {
     const s0 = yin[tauEstimate - 1];
     const s1 = yin[tauEstimate];
     const s2 = yin[tauEstimate + 1];

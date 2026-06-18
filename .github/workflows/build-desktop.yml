@@ -73,5 +73,6 @@ jobs:
         with:
           name: desktop-${{ matrix.os }}-${{ matrix.target }}
           path: |
-            desktop/src-tauri/target/release/bundle/**/*
+            desktop/src-tauri/target/**/bundle/**/*
           retention-days: 7
+          if-no-files-found: warn

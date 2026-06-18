@@ -2,10 +2,69 @@
 
 **Кросс-платформенный гитарный тюнер**
 
-- **Оффлайн десктопное приложение**: Windows • macOS • Linux (Tauri + Rust)
+- **Оффлайн десктопное приложение**: Windows • macOS • Linux (native egui + cpal in Rust)
 - **Онлайн сайт**: любой современный браузер (Vue 3)
 
 Точный, быстрый и полностью работает без интернета в десктопной версии.
+
+## Что сделано (summary)
+
+- YIN pitch detection (гораздо лучше базовой автокорреляции) + fallback
+- 8+ строев + переключение, A4 калибровка, гистерезис "in tune"
+- Waveform визуализатор, reference tone, ear training (random note)
+- Bilingual RU/EN с toggle, keyboard shortcuts (Space, 1-6, R)
+- Persistence (Tauri Store + localStorage)
+- CI/CD как у cut-log: build (web + desktop matrix), deploy, pr-deploy, release (с attachment бинарей)
+- GitHub Pages для демо, PWA manifest, regenerated icons
+- Компонентная структура, SVG gauge, shared audio context
+
+## Review: проблемы и исправления (на момент последнего ревью)
+
+### Performance
+- YIN O(n²) на каждый кадр (~60fps) — тяжеловато на слабых устройствах.
+  - **Fixes**: preallocated buffer (избегаем GC), reused single AudioContext для всех тонов (вкл. random note), downsampling hints в комментариях.
+  - Рекомендация: AudioWorklet или WASM-YIN для production.
+- Новые AudioContext'ы на каждый референс — fixed.
+
+### UI/UX
+- Фиксированная ширина, toggle waveform в неудобном месте, неполные переводы клавиатурных подсказок.
+  - **Fixes**: вынесено в l10n, улучшен hint, toggle рядом с A4.
+- Нет настроек панели, спектрограммы, пер-струн индикаторов.
+- **TODO**: добавить spectrogram, volume для ref, tutorial.
+
+### Architecture / Separation / Coupling
+- useTuner.ts — god-object (~250+ строк): mic + detection + tones + state.
+  - Высокий coupling audio nodes ↔ state.
+- Глобальные буферы в pitch.ts.
+- Settings tightly coupled.
+  - **Fixes**: вынес shared audio, prealloc, useSettings composable.
+  - **Что бы сделал с нуля**: pnpm workspaces + packages/core (Rust pitch via WASM), useAudioInput + usePitchDetector отдельно, Pinia/XState для состояния, AudioWorklet с самого начала.
+
+### Design / Проектирование
+- Много магических чисел (FFT=2048, thresholds).
+- Нет тестов для pitch (синтетика).
+- Desktop всё ещё на web-audio (не native cpal).
+- CI desktop может падать на некоторых матрицах (иконки, paths) — пофиксили icons + glob.
+
+### Separation
+- Frontend shared, но desktop build тесно связан с web/dist.
+- L10n и настройки в отдельных stores — хорошо.
+- Workflows скопированы из cut-log — адаптированы, но desktop часть может быть отдельным workflow'ом.
+
+### Если бы делал с нуля по-другому
+- **Core**: Rust crate для YIN + WASM с первого дня (shared между web и desktop, perf нативный).
+- **Audio**: AudioWorklet + WebRTC constraints с самого начала.
+- **State**: Pinia + typed state machine для tuner (idle/listening/detected).
+- **Monorepo**: pnpm workspaces (core, ui, web, desktop, shared-types).
+- **UI**: Design tokens + headless components, лучше responsive (не фиксир. 620px).
+- **Testing**: Property-based testing pitch algo на синтетических сигналах.
+- **CI**: matrix для desktop с artifacts, signed releases, Pages только от web build (как сейчас сделали).
+- **Доп.**: нативный cpal захват в Tauri, больше инструментов (укулеле и т.д. из коробки), cloud sync опционально.
+- Избегать god objects, глобальных буферов, multiple AudioContext.
+
+Сейчас код в рабочем состоянии, CI/pages настроены, основные баги пофикшены. Можно итерировать по списку идей из предыдущего сообщения.
+
+(Полный обзор в чате выше; этот раздел влит в README для будущих.)
 
 ## Возможности
 
@@ -34,10 +93,8 @@ Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 
 ```
 Tuner/
-├── web/                 # Vue 3 + Vite + TS + Tailwind — онлайн сайт
-│   └── npm run dev
-├── desktop/             # Tauri (Rust) обёртка над web
-│   └── npm run tauri dev
+├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
+├── egui/                # Native offline app (egui + cpal in pure Rust)
 └── README.md
 ```
 
@@ -85,12 +142,21 @@ npm run tauri dev
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-### Сборка готового приложения
+### Запуск оффлайн нативного приложения (egui)
 
-**Общие требования (для всех ОС):**
-- Rust + Cargo
-- Node.js 18+
-- Собрать веб-фронтенд (делается автоматически)
+```bash
+cd egui
+cargo run --release
+```
+
+## Сборка веб-версии
+
+```bash
+cd web
+npm run build
+```
+
+(Для десктопной версии egui отдельная сборка не требуется — cargo build --release в папке egui)
 
 #### macOS
 

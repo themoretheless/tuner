@@ -30,6 +30,7 @@ export function useTuner() {
   const referencePlaying = ref(false);
 
   // Tunable A4 + current tuning
+  // TODO (architecture): extract to useTuningState + useAudioInput + useReferenceTone for better separation
   const settings = useSettings();
   const a4 = settings.a4;
   const currentTuning = ref<Tuning>(TUNINGS.find(t => t.id === settings.lastTuningId.value) || TUNINGS[0]);
@@ -42,8 +43,19 @@ export function useTuner() {
   const smoother = new FrequencySmoother();
   const analyserRef = ref<AnalyserNode | null>(null); // for visualizers
 
-  // Separate playback context + nodes (reused)
-  let refAudio: AudioContext | null = null;
+  // Preallocated buffer to avoid GC pressure every frame (perf)
+  let timeDomainBuffer: Float32Array | null = null;
+
+  // Reusable audio context for all tones (perf + avoid multiple contexts)
+  let sharedAudio: AudioContext | null = null;
+  function getSharedAudio() {
+    if (!sharedAudio) {
+      sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return sharedAudio;
+  }
+
+  // Separate playback context + nodes (reused) - now using shared
   let refOsc: OscillatorNode | null = null;
   let refGain: GainNode | null = null;
 
@@ -165,13 +177,15 @@ export function useTuner() {
   function tick() {
     if (!analyser || !isListening.value) return;
 
-    const buffer = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buffer);
+    if (!timeDomainBuffer || timeDomainBuffer.length !== analyser.fftSize) {
+      timeDomainBuffer = new Float32Array(analyser.fftSize);
+    }
+    analyser.getFloatTimeDomainData(timeDomainBuffer);
 
-    const rms = computeRmsVolume(buffer);
+    const rms = computeRmsVolume(timeDomainBuffer);
     volume.value = normalizeLevel(rms);
 
-    const freq = detectPitch(buffer, audioContext?.sampleRate ?? TARGET_SAMPLE_RATE);
+    const freq = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? TARGET_SAMPLE_RATE);
     currentFrequency.value = freq;
 
     const smoothed = smoother.add(freq);
@@ -196,11 +210,9 @@ export function useTuner() {
     const freq = targetNote.value.frequency;
     if (!freq) return;
 
-    if (!refAudio) {
-      refAudio = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    refOsc = refAudio.createOscillator();
-    refGain = refAudio.createGain();
+    const ctx = getSharedAudio();
+    refOsc = ctx.createOscillator();
+    refGain = ctx.createGain();
 
     refOsc.type = 'sine';
     refOsc.frequency.value = freq;
@@ -212,7 +224,7 @@ export function useTuner() {
 
     refOsc.connect(lp);
     lp.connect(refGain);
-    refGain.connect(refAudio.destination);
+    refGain.connect(ctx.destination);
 
     refOsc.start();
     referencePlaying.value = true;
@@ -239,7 +251,7 @@ export function useTuner() {
   function playRandomString() {
     const random = strings.value[Math.floor(Math.random() * strings.value.length)];
     stopReferenceTone();
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = getSharedAudio();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';

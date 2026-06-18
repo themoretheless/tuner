@@ -156,7 +156,7 @@ onUnmounted(() => {
       </button>
 
       <div class="text-center text-[11px] text-slate-500 max-w-sm mx-auto">
-        {{ t('quiet.room') }}
+        {{ t('quiet.room') }} {{ t('keyboard.hint') }}
       </div>
     </div>
 

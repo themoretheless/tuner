@@ -26,6 +26,7 @@ const ru: Record<string, string> = {
   'a4.label': 'A4',
   'waveform': 'Волна',
   'quiet.room': 'Тихая комната. Играй по одной струне. Используй ручной выбор для точности.',
+  'keyboard.hint': 'Space/M микрофон, 1-6 струны, R референс',
   'footer': 'Гитарный Тюнер — Vue + Tauri/Rust',
   'subtitle': 'работает оффлайн • браузер + десктоп',
 }
@@ -50,6 +51,7 @@ const en: Record<string, string> = {
   'a4.label': 'A4',
   'waveform': 'Waveform',
   'quiet.room': 'Works best in a quiet room. Pluck one string at a time. Use manual selection for best accuracy.',
+  'keyboard.hint': 'Space/M mic, 1-6 strings, R reference',
   'footer': 'Guitar Tuner — Vue frontend • Tauri/Rust desktop',
   'subtitle': 'works offline • browser + desktop',
 }
