@@ -200,7 +200,7 @@ impl eframe::App for App {
                     if !spec.is_empty() {
                         let max_bins = 200; // ~0-4300 Hz at 44.1kHz
                         let bar_width = 2.5;
-                        let max_h = 60.0;
+                        let max_h = 80.0;
                         let total_w = max_bins as f32 * bar_width;
                         let (rect, _) = ui.allocate_exact_size(egui::vec2(total_w, max_h), egui::Sense::hover());
                         let painter = ui.painter();

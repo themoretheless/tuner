@@ -14,6 +14,14 @@ const dataArray = ref<Uint8Array | null>(null)
 function draw() {
   if (!props.analyser || !ctx || !canvas.value) return
 
+  // Ensure canvas size (so height change takes effect even without remount)
+  const targetWidth = 520
+  const targetHeight = 100
+  if (canvas.value.width !== targetWidth || canvas.value.height !== targetHeight) {
+    canvas.value.width = targetWidth
+    canvas.value.height = targetHeight
+  }
+
   const w = canvas.value.width
   const h = canvas.value.height
 
@@ -68,7 +76,7 @@ onMounted(() => {
   if (canvas.value) {
     ctx = canvas.value.getContext('2d', { alpha: true })
     canvas.value.width = 520
-    canvas.value.height = 64
+    canvas.value.height = 100
   }
   watch(() => [props.isListening, props.analyser], () => {
     if (props.isListening) startDraw()
