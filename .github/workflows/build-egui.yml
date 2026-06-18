@@ -54,6 +54,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Prepare egui binary
+        shell: bash
         run: |
           mkdir -p release-artifacts
           BINARY="guitar-tuner-egui"
