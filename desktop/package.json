@@ -4,11 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "tauri": "tauri",
-    "dev": "tauri dev",
-    "build": "cd ../web && npm run build && cd ../desktop && tauri build",
-    "build:debug": "cd ../web && npm run build && cd ../desktop && tauri build --debug",
-    "icon": "tauri icon"
+    "tauri": "../web/node_modules/.bin/tauri",
+    "dev": "../web/node_modules/.bin/tauri dev",
+    "build": "cd ../web && npm run build:tauri && cd ../desktop && ../web/node_modules/.bin/tauri build",
+    "build:debug": "cd ../web && npm run build:tauri && cd ../desktop && ../web/node_modules/.bin/tauri build --debug",
+    "icon": "../web/node_modules/.bin/tauri icon"
   },
   "dependencies": {
     "@tauri-apps/plugin-store": "^2.4.3"

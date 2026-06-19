@@ -5,7 +5,6 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use rustfft::{FftPlanner, num_complex::Complex};
 
-const A4: f32 = 440.0;
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 #[derive(Clone)]
@@ -93,7 +92,7 @@ impl Smoother {
             if let Some(e) = self.ema { self.hist.push(e); if self.hist.len()>self.maxh {self.hist.remove(0);} }
         }
         if self.hist.is_empty() { return self.ema; }
-        let mut s = self.hist.clone(); s.sort_by(|a,b|a.partial_cmp(b).unwrap());
+        let mut s = self.hist.clone(); s.sort_by(|a,b|a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let m = s.len()/2; Some(if s.len()%2==1 {s[m]} else {(s[m-1]+s[m])*0.5})
     }
     fn reset(&mut self){self.ema=None; self.hist.clear();}
@@ -120,6 +119,8 @@ struct App {
     sm: Smoother,
     hist: VecDeque<f32>,
     spec: bool,
+    error: Option<String>,
+    random_stop_at: Option<std::time::Instant>,
 
 }
 
@@ -130,13 +131,19 @@ impl Default for App {
             tunings: get_tunings(), t_idx:0, a4:440.0,
             listen:false, inp:None, out:None, ref_on:false,
             sm: Smoother::new(), hist: VecDeque::with_capacity(80), spec:false,
+            error: None,
+            random_stop_at: None,
         }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let s = self.st.lock().unwrap().clone();
+        if self.random_stop_at.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+            self.out = None;
+            self.random_stop_at = None;
+        }
+        let s = self.st.lock().map(|state| state.clone()).unwrap_or_default();
 
         // Keyboard shortcuts
         if ctx.input(|i| i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::M)) {
@@ -152,6 +159,9 @@ impl eframe::App for App {
                 ui.label(egui::RichText::new(ns).size(78.0).strong());
                 if let Some(f) = s.freq { ui.label(format!("{:.1} Hz", f)); }
                 ui.label(format!("{:.1} ¢", s.cents));
+                if let Some(err) = &self.error {
+                    ui.colored_label(egui::Color32::from_rgb(255, 140, 140), err);
+                }
 
                 // input level
                 ui.add(egui::ProgressBar::new(s.level).text("Input level").desired_width(200.0));
@@ -240,17 +250,30 @@ impl App {
     fn toggle_mic(&mut self, ctx:&egui::Context) {
         if self.listen { self.inp=None; self.listen=false; self.sm.reset(); return; }
         let st=self.st.clone(); let ctx2=ctx.clone(); let a4=self.a4;
-        let h=cpal::default_host(); let d=h.default_input_device().expect("no mic");
-        let cf:StreamConfig = d.default_input_config().unwrap().into(); let sr = cf.sample_rate.0 as f32;
+        let h=cpal::default_host();
+        let Some(d)=h.default_input_device() else {
+            self.error = Some("No input microphone found".into());
+            return;
+        };
+        let cf:StreamConfig = match d.default_input_config() {
+            Ok(config) => config.into(),
+            Err(e) => {
+                self.error = Some(format!("Could not read microphone config: {e}"));
+                return;
+            }
+        };
+        let sr = cf.sample_rate.0 as f32;
         let mut b:Vec<f32>=vec![];
         let mut fft_planner = FftPlanner::new();
         let fft = fft_planner.plan_fft_forward(2048);
         let mut spectrum_buffer: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); 2048];
-        let s = d.build_input_stream(&cf, move |d:&[f32],_|{
+        let mut smoother = Smoother::new();
+        let s = match d.build_input_stream(&cf, move |d:&[f32],_|{
             b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
             if b.len()>=2048 {
                 let window = &b[b.len()-2048..];
                 if let Some(f) = detect_pitch_yin(window, sr) {
+                    let f = smoother.add(Some(f)).unwrap_or(f);
                     let (n, cc) = frequency_to_note(f, a4);
                     if let Ok(mut g)=st.lock() { g.freq=Some(f); g.note=Some(n); g.cents=cc; }
                     ctx2.request_repaint();
@@ -280,38 +303,98 @@ impl App {
                     ctx2.request_repaint();
                 }
             }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.inp=Some(s); self.listen=true;
+        }, |e|eprintln!("{}",e), None) {
+            Ok(stream) => stream,
+            Err(e) => {
+                self.error = Some(format!("Could not create microphone stream: {e}"));
+                return;
+            }
+        };
+        if let Err(e)=s.play() {
+            self.error = Some(format!("Could not start microphone stream: {e}"));
+            return;
+        }
+        self.error = None;
+        self.inp=Some(s); self.listen=true;
     }
 
     fn toggle_ref(&mut self) {
-        if self.ref_on { self.out=None; self.ref_on=false; return; }
+        if self.ref_on { self.out=None; self.ref_on=false; self.random_stop_at=None; return; }
         let f = self.tunings[self.t_idx].strings[0].frequency;
-        let h=cpal::default_host(); let d=h.default_output_device().expect("no speaker");
-        let cf:StreamConfig = d.default_output_config().unwrap().into(); let sr=cf.sample_rate.0 as f32;
+        let h=cpal::default_host();
+        let Some(d)=h.default_output_device() else {
+            self.error = Some("No output speaker found".into());
+            return;
+        };
+        let cf:StreamConfig = match d.default_output_config() {
+            Ok(config) => config.into(),
+            Err(e) => {
+                self.error = Some(format!("Could not read speaker config: {e}"));
+                return;
+            }
+        };
+        let sr=cf.sample_rate.0 as f32;
         let mut ph=0.0f32;
-        let s = d.build_output_stream(&cf, move |data:&mut [f32],_| {
+        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
             for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.out=Some(s); self.ref_on=true;
+        }, |e|eprintln!("{}",e), None) {
+            Ok(stream) => stream,
+            Err(e) => {
+                self.error = Some(format!("Could not create speaker stream: {e}"));
+                return;
+            }
+        };
+        if let Err(e)=s.play() {
+            self.error = Some(format!("Could not start speaker stream: {e}"));
+            return;
+        }
+        self.error = None;
+        self.random_stop_at = None;
+        self.out=Some(s); self.ref_on=true;
     }
 
     fn play_random_string(&mut self) {
         let strings = &self.tunings[self.t_idx].strings;
-        let idx = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() % strings.len() as u128) as usize;
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let idx = (seed % strings.len() as u128) as usize;
         let f = strings[idx].frequency;
         // stop previous
         self.out = None;
-        let h=cpal::default_host(); let d=h.default_output_device().expect("no speaker");
-        let cf:StreamConfig = d.default_output_config().unwrap().into(); let sr=cf.sample_rate.0 as f32;
+        self.ref_on = false;
+        self.random_stop_at = None;
+        let h=cpal::default_host();
+        let Some(d)=h.default_output_device() else {
+            self.error = Some("No output speaker found".into());
+            return;
+        };
+        let cf:StreamConfig = match d.default_output_config() {
+            Ok(config) => config.into(),
+            Err(e) => {
+                self.error = Some(format!("Could not read speaker config: {e}"));
+                return;
+            }
+        };
+        let sr=cf.sample_rate.0 as f32;
         let mut ph=0.0f32;
-        let s = d.build_output_stream(&cf, move |data:&mut [f32],_| {
+        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
             for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.out=Some(s);
-        // auto stop after 1.5s
-        let out_clone = self.out.take(); // to stop later? simple, let it drop after timeout but for simplicity keep short
-        // For simplicity, let user stop or add timer later
+        }, |e|eprintln!("{}",e), None) {
+            Ok(stream) => stream,
+            Err(e) => {
+                self.error = Some(format!("Could not create speaker stream: {e}"));
+                return;
+            }
+        };
+        if let Err(e)=s.play() {
+            self.error = Some(format!("Could not start speaker stream: {e}"));
+            return;
+        }
+        self.error = None;
+        self.out = Some(s);
+        self.random_stop_at = Some(std::time::Instant::now() + std::time::Duration::from_millis(1500));
     }
 }
 

@@ -38,14 +38,6 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
 
-      - name: Download pre-built web
-        id: download-web
-        uses: actions/download-artifact@v4
-        with:
-          name: github-pages
-          path: web/dist
-        continue-on-error: true
-
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -72,7 +64,6 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install web deps
-        if: steps.download-web.outcome == 'failure'
         working-directory: web
         run: npm ci
 
@@ -80,14 +71,13 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build web
-        if: steps.download-web.outcome == 'failure'
+      - name: Build web for Tauri
         working-directory: web
-        run: npm run build
+        run: npm run build:tauri
 
       - name: Build Tauri
         working-directory: desktop
-        run: npx tauri build --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
         env:
           CARGO_INCREMENTAL: 0
 
