@@ -54,13 +54,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libudev-dev pkg-config
 
-      - name: Install egui deps
-        working-directory: egui
-        run: cargo fetch
-
       - name: Build egui
         working-directory: egui
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_INCREMENTAL: 0
 
       - name: Prepare egui binary
         run: |
