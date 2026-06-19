@@ -6,9 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Guitar Tuner (egui)</title>
     <meta name="description" content="Accurate guitar tuner. egui native + web." />
+    <style>
+      body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; }
+      #the_canvas_id { border: 1px solid #333; background: #000; }
+    </style>
   </head>
   <body>
-    <canvas id="the_canvas_id" width="700" height="600"></canvas>
+    <canvas id="the_canvas_id" width="800" height="600"></canvas>
     <script type="module">
       (async () => {
         const mod = await import(/* @vite-ignore */ '/egui-wasm/guitar_tuner_egui.js');
