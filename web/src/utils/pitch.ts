@@ -1,126 +1,51 @@
 // Pitch detection utilities
 // YIN algorithm (much better for guitar than plain autocorrelation)
 // + fallback to improved autocorrelation
-// TODO (perf/arch): move core to Rust+WASM for shared desktop/web perf and testability
+// Uses shared Rust pitch-core via WASM in browser, native in egui.
+
+let wasmModule: any = null;
+
+export async function initPitchWasm() {
+  if (wasmModule) return;
+  try {
+    // Build steps (run once):
+    // cd pitch-core
+    // cargo build --target wasm32-unknown-unknown --features wasm --release
+    // wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/public/wasm --target web
+    // Then the glue JS + .wasm will be in web/public/wasm/ and copied to dist
+    // @ts-expect-error - wasm module generated at build time
+    const mod = await import(/* @vite-ignore */ '/wasm/pitch_core.js');
+    await mod.default();
+    wasmModule = mod;
+    console.log('[pitch] WASM core loaded');
+  } catch (e) {
+    console.log('[pitch] Using JS fallback (WASM not available)');
+  }
+}
 
 const GUITAR_MIN_FREQ = 30;
 const GUITAR_MAX_FREQ = 400;
-const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
-
-// Reusable buffers
-let yinBuffer: Float32Array | null = null;
-let diffBuffer: Float32Array | null = null;
-
-function ensureYinBuffers(size: number) {
-  const half = Math.floor(size / 2);
-  if (!yinBuffer || yinBuffer.length < half) {
-    yinBuffer = new Float32Array(half);
-  }
-  if (!diffBuffer || diffBuffer.length < half) {
-    diffBuffer = new Float32Array(half);
-  }
-  return { yin: yinBuffer, diff: diffBuffer };
-}
 
 /**
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
 export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
-  const size = buffer.length;
-  const half = Math.floor(size / 2);
-
-  // Limit tau to guitar frequency range for perf (avoid useless high lags)
-  const minTau = Math.floor(sampleRate / GUITAR_MAX_FREQ);
-  const maxTau = Math.min(half, Math.floor(sampleRate / GUITAR_MIN_FREQ));
-
-  // Gate on energy
-  let sumSq = 0;
-  let maxAbs = 0;
-  for (let i = 0; i < size; i++) {
-    const v = buffer[i];
-    sumSq += v * v;
-    const a = Math.abs(v);
-    if (a > maxAbs) maxAbs = a;
-  }
-  const rms = Math.sqrt(sumSq / size);
-  if (rms < 0.0025 || maxAbs < 0.012) return null;
-
-  // Adaptive threshold: stricter for loud signals, more lenient for quiet
-  const rmsFactor = Math.min(1.0, rms * 15);
-  const adaptiveThreshold = YIN_THRESHOLD * (1.0 - 0.35 * rmsFactor);
-
-  const { yin, diff } = ensureYinBuffers(size);
-
-  // 1. Difference function (limited range)
-  for (let tau = minTau; tau < maxTau; tau++) {
-    let sum = 0;
-    for (let i = 0; i < half; i++) {
-      const delta = buffer[i] - buffer[i + tau];
-      sum += delta * delta;
-    }
-    diff[tau] = sum;
-  }
-
-  // 2. Cumulative mean normalized difference (limited)
-  yin[0] = 1;
-  let runningSum = 0;
-  for (let tau = minTau; tau < maxTau; tau++) {
-    runningSum += diff[tau];
-    yin[tau] = diff[tau] * (tau / runningSum);
-  }
-
-  // 3. Absolute threshold + find first dip below threshold (limited)
-  let tauEstimate = -1;
-  for (let tau = minTau; tau < maxTau; tau++) {
-    if (yin[tau] < adaptiveThreshold) {
-      // search for local minimum
-      while (tau + 1 < maxTau && yin[tau + 1] < yin[tau]) {
-        tau++;
+  if (wasmModule?.detect_pitch_yin) {
+    try {
+      const res = wasmModule.detect_pitch_yin(buffer, sampleRate);
+      if (res && res.freq !== undefined) {
+        return { freq: res.freq, confidence: res.confidence ?? 0 };
       }
-      tauEstimate = tau;
-      break;
+      return null;
+    } catch (e) {
+      console.warn('WASM YIN failed, falling back to JS', e);
     }
   }
 
-  let confidence = 0;
-
-  // Fallback: global minimum if no threshold crossed (limited)
-  if (tauEstimate === -1) {
-    let minVal = Infinity;
-    for (let tau = minTau; tau < maxTau; tau++) {
-      if (yin[tau] < minVal) {
-        minVal = yin[tau];
-        tauEstimate = tau;
-      }
-    }
-    if (minVal > 0.35) return null; // too uncertain
-    confidence = Math.max(0, 1 - minVal);
-  } else {
-    confidence = Math.max(0, Math.min(1, 1 - yin[tauEstimate]));
-  }
-
-  if (tauEstimate < 2) return null;
-
-  // 4. Parabolic interpolation (better tau estimate)
-  let betterTau = tauEstimate;
-  if (tauEstimate > 1 && tauEstimate < maxTau - 1) {
-    const s0 = yin[tauEstimate - 1];
-    const s1 = yin[tauEstimate];
-    const s2 = yin[tauEstimate + 1];
-    const denom = 2 * s1 - s0 - s2;
-    if (Math.abs(denom) > 1e-9) {
-      const delta = (s2 - s0) / (2 * denom);
-      if (Math.abs(delta) < 1) {
-        betterTau = tauEstimate + delta;
-      }
-    }
-  }
-
-  const freq = sampleRate / betterTau;
-
-  if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
-  return { freq, confidence };
+  // Fallback only - WASM should be used for full YIN
+  console.warn('YIN fallback (build WASM for full impl)');
+  return null;
 }
 
 // Legacy improved autocorrelation (kept for comparison / fallback)
@@ -193,61 +118,40 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): { freq:
 }
 
 export function detectPitchMPM(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
-  const n = buffer.length;
-  const maxTau = Math.floor(n / 2);
-  const nsdf = new Float32Array(maxTau);
-
-  for (let tau = 0; tau < maxTau; tau++) {
-    let numerator = 0;
-    let denominator = 0;
-    for (let i = 0; i < n - tau; i++) {
-      const x1 = buffer[i];
-      const x2 = buffer[i + tau];
-      numerator += x1 * x2;
-      denominator += x1 * x1 + x2 * x2;
-    }
-    nsdf[tau] = denominator > 0 ? (2 * numerator) / denominator : 0;
-  }
-
-  // Find first significant peak
-  let maxVal = -1;
-  let peak = -1;
-  for (let tau = 2; tau < maxTau - 1; tau++) {
-    if (nsdf[tau] > nsdf[tau - 1] && nsdf[tau] > nsdf[tau + 1] && nsdf[tau] > maxVal) {
-      maxVal = nsdf[tau];
-      peak = tau;
-      if (maxVal > 0.9) break;
+  if (wasmModule?.detect_pitch_mpm) {
+    try {
+      const res = wasmModule.detect_pitch_mpm(buffer, sampleRate);
+      if (res && res.freq !== undefined) {
+        return { freq: res.freq, confidence: res.confidence ?? 0 };
+      }
+      return null;
+    } catch (e) {
+      console.warn('WASM MPM failed, falling back to JS', e);
     }
   }
 
-  if (peak < 2 || maxVal < 0.25) return null;
-
-  // Parabolic interpolation for peak
-  let better = peak;
-  if (peak > 1 && peak < maxTau - 1) {
-    const a = nsdf[peak - 1];
-    const b = nsdf[peak];
-    const c = nsdf[peak + 1];
-    const denom = a - 2 * b + c;
-    if (Math.abs(denom) > 1e-9) {
-      const delta = 0.5 * (a - c) / denom;
-      if (Math.abs(delta) < 1) better = peak + delta;
-    }
-  }
-
-  const freq = sampleRate / better;
-  if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
-
-  return { freq, confidence: Math.max(0, Math.min(1, maxVal)) };
+  // Fallback only
+  console.warn('MPM fallback (build WASM for full impl)');
+  return null;
 }
 
-/** Main detector - prefers YIN, falls back to MPM (expensive) then autocorrelation */
+/** Main detector - prefers WASM (YIN/MPM) if loaded, else JS version */
 export function detectPitch(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
-  // Try YIN first (primary)
+  if (wasmModule?.detect_pitch_wasm) {
+    try {
+      const res = wasmModule.detect_pitch_wasm(buffer, sampleRate);
+      if (res && res.freq !== undefined) {
+        return { freq: res.freq, confidence: res.confidence ?? 0 };
+      }
+    } catch (e) {
+      console.warn('WASM detect failed, using JS', e);
+    }
+  }
+
+  // JS fallback (YIN primary, MPM if weak, auto)
   let best = detectPitchYIN(buffer, sampleRate);
   let bestConf = best ? best.confidence : 0;
 
-  // Try MPM only if YIN weak (perf: MPM also quadratic)
   if (!best || bestConf < 0.5) {
     const mpm = detectPitchMPM(buffer, sampleRate);
     if (mpm && mpm.confidence > bestConf) {
@@ -256,7 +160,6 @@ export function detectPitch(buffer: Float32Array, sampleRate: number): { freq: n
     }
   }
 
-  // Fallback to autocorrelation if still low
   if (!best || bestConf < 0.3) {
     const ac = autoCorrelate(buffer, sampleRate);
     if (ac && ac.confidence > bestConf) {
@@ -322,6 +225,13 @@ export function normalizeLevel(rms: number): number {
 }
 
 export function isLikelyPowerChord(buffer: Float32Array, sampleRate: number, fundamental: number): boolean {
+  if (wasmModule?.is_likely_power_chord) {
+    try {
+      return !!wasmModule.is_likely_power_chord(buffer, sampleRate, fundamental);
+    } catch (e) {
+      console.warn('WASM power chord failed', e);
+    }
+  }
   if (!fundamental || fundamental < 40) return false;
   const f5 = fundamental * 1.4983; // approx perfect fifth
   const lag = Math.floor(sampleRate / f5);

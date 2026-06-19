@@ -1595,6 +1595,7 @@ dependencies = [
  "eframe",
  "egui",
  "num-complex",
+ "pitch-core",
  "rustfft",
 ]
 
@@ -2469,6 +2470,10 @@ dependencies = [
  "fastrand 2.4.1",
  "futures-io",
 ]
+
+[[package]]
+name = "pitch-core"
+version = "0.1.0"
 
 [[package]]
 name = "pkg-config"

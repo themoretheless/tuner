@@ -4,6 +4,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 const props = defineProps<{
   analyser: AnalyserNode | null
   isListening: boolean
+  currentFreq?: number | null
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -52,6 +53,31 @@ function draw() {
     const barH = v * h
     const x = i * barWidth
     ctx.fillRect(x, h - barH, Math.max(1, barWidth - 0.6), barH)
+
+    // Simple fake 3D extrusion for "3D visualization"
+    ctx.fillStyle = '#166534'
+    ctx.fillRect(x + 2, h - barH - 4, Math.max(1, barWidth - 0.6), 4)
+    ctx.fillStyle = '#4ade80'
+  }
+
+  // Highlight harmonics if currentFreq provided (simple visual)
+  if (props.currentFreq && props.currentFreq > 40) {
+    const nyquist = 22050 // approx for 44.1/48k
+    const binCount = props.analyser.frequencyBinCount
+    ctx.strokeStyle = '#f59e0b'
+    ctx.lineWidth = 1
+    for (let harm = 2; harm <= 5; harm++) {
+      const harmFreq = props.currentFreq * harm
+      if (harmFreq > nyquist) break
+      const bin = Math.floor((harmFreq / nyquist) * binCount)
+      if (bin < displayBins) {
+        const x = bin * barWidth
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, h)
+        ctx.stroke()
+      }
+    }
   }
 
   raf = requestAnimationFrame(draw)

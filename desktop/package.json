@@ -6,7 +6,7 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "cd ../web && npm run build && cd ../desktop && tauri build",
+    "build": "cd ../web && npm run build && mkdir -p src-tauri/public/wasm 2>/dev/null || true && cp -r ../web/dist/wasm/* src-tauri/public/wasm/ 2>/dev/null || true && cd ../desktop && tauri build",
     "build:debug": "cd ../web && npm run build && cd ../desktop && tauri build --debug",
     "icon": "tauri icon"
   },

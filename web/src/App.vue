@@ -13,9 +13,14 @@ import TuningSelector from './components/TuningSelector.vue'
 import Waveform from './components/Waveform.vue'
 import Spectrum from './components/Spectrum.vue'
 import PerStringCents from './components/PerStringCents.vue'
+import CentsHistory from './components/CentsHistory.vue'
+import Spectrogram from './components/Spectrogram.vue'
+import Fretboard from './components/Fretboard.vue'
 
 const tuner = useTuner()
 const { lang, t, toggleLang } = useL10n()
+
+
 
 function toggleMic() {
   if (tuner.isListening.value) tuner.stop()
@@ -82,7 +87,8 @@ onUnmounted(() => {
         <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
         <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-        <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Spectrogram v-if="tuner.showSpectrogram.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" />
 
         <!-- A4 + visual toggles (placed near the visualizers) -->
         <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
@@ -107,6 +113,10 @@ onUnmounted(() => {
             <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
             <span>{{ t('spectrum') }}</span>
           </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500" />
+            <span>{{ t('spectrogram') }}</span>
+          </label>
         </div>
 
         <!-- Error -->
@@ -126,6 +136,12 @@ onUnmounted(() => {
         />
 
         <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
+
+        <CentsHistory
+          v-if="tuner.isListening.value"
+          :history="tuner.centsHistory.value"
+          :is-listening="tuner.isListening.value"
+        />
 
         <FreqReadout
           :detected="tuner.smoothedFrequency.value"
@@ -154,6 +170,14 @@ onUnmounted(() => {
         <PerStringCents
           v-if="tuner.isListening.value"
           :strings-with-cents="tuner.stringsWithCents.value"
+        />
+
+        <Fretboard
+          v-if="tuner.isListening.value"
+          :strings="tuner.strings.value"
+          :target-freq="tuner.targetNote.value.frequency"
+          :selected-string="tuner.selectedString.value"
+          @select="tuner.toggleString"
         />
       </div>
 

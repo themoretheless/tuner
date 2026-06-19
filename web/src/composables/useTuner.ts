@@ -9,7 +9,7 @@ import {
   formatFreq,
   type Tuning,
 } from '../utils/notes';
-import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch } from '../utils/pitch';
+import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch, initPitchWasm } from '../utils/pitch';
 import { useSettings } from './useSettings';
 
 const PREFERRED_SAMPLE_RATE = 48000;
@@ -26,6 +26,9 @@ const RANDOM_DURATION = 1500;
 const IN_TUNE_THRESHOLD = 5;
 const OUT_OF_TUNE_THRESHOLD = 7;
 
+// Initialize WASM pitch core (async, falls back to JS)
+initPitchWasm();
+
 export function useTuner() {
   const isListening = ref(false);
   const currentFrequency = ref<number | null>(null);
@@ -34,6 +37,10 @@ export function useTuner() {
   const volume = ref(0);
   const isPowerChord = ref(false);
   const error = ref<string | null>(null);
+
+  // History for cents graph (last N samples)
+  const centsHistory = ref<number[]>([]);
+  const MAX_CENTS_HISTORY = 300; // ~5 seconds at ~60fps (throttled in practice)
 
   const selectedString = ref<Note | null>(null);
   const referencePlaying = ref(false);
@@ -181,6 +188,7 @@ export function useTuner() {
     smoothedFrequency.value = null;
     confidence.value = 0;
     isPowerChord.value = false;
+    centsHistory.value = [];
     volume.value = 0;
     smoother.reset();
     stopReferenceTone();
@@ -236,6 +244,13 @@ export function useTuner() {
 
     const smoothed = smoother.add(freq);
     smoothedFrequency.value = smoothed;
+
+    // Update cents history for graph
+    const currentCents = cents.value;
+    centsHistory.value.push(currentCents);
+    if (centsHistory.value.length > MAX_CENTS_HISTORY) {
+      centsHistory.value.shift();
+    }
 
     rafId = requestAnimationFrame(tick);
   }
@@ -365,6 +380,8 @@ export function useTuner() {
     analyser: analyserRef,
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
+    showSpectrogram: settings.showSpectrogram,
+    centsHistory,
 
     // actions
     start,

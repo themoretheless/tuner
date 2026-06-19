@@ -39,6 +39,8 @@ desktop/src-tauri/gen/
 
 # WASM / generated
 *.wasm
+web/public/wasm/
+web/src/wasm/
 
 # Logs
 logs

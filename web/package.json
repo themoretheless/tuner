@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "npm run build:wasm && vue-tsc -b && vite build",
     "preview": "vite preview",
-    "build:wasm": "cd ../pitch-core && cargo build --target wasm32-unknown-unknown --features wasm --release && echo 'Run wasm-bindgen manually: wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/src/wasm --target web'",
+    "build:wasm": "cd ../pitch-core && cargo build --target wasm32-unknown-unknown --features wasm --release && (wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/public/wasm --target web || (cargo install wasm-bindgen-cli && wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/public/wasm --target web))",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
     "tauri:build": "npm run build && cd ../desktop && npm run tauri build"
   },

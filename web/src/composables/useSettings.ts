@@ -18,6 +18,7 @@ export function useSettings() {
   const lastTuningId = ref('standard');
   const showWaveform = ref(true);
   const showSpectrum = ref(true);
+  const showSpectrogram = ref(false);
 
   async function load() {
     if (isTauri) {
@@ -31,6 +32,8 @@ export function useSettings() {
         if (savedWave != null) showWaveform.value = savedWave;
         const savedSpec = await s.get<boolean>('showSpectrum');
         if (savedSpec != null) showSpectrum.value = savedSpec;
+        const savedSpecGram = await s.get<boolean>('showSpectrogram');
+        if (savedSpecGram != null) showSpectrogram.value = savedSpecGram;
       }
     } else {
       const savedA4 = localStorage.getItem('a4');
@@ -41,6 +44,8 @@ export function useSettings() {
       if (savedWave !== null) showWaveform.value = savedWave === 'true';
       const savedSpec = localStorage.getItem('showSpectrum');
       if (savedSpec !== null) showSpectrum.value = savedSpec === 'true';
+      const savedSpecGram = localStorage.getItem('showSpectrogram');
+      if (savedSpecGram !== null) showSpectrogram.value = savedSpecGram === 'true';
     }
   }
 
@@ -52,6 +57,7 @@ export function useSettings() {
         await s.set('lastTuningId', lastTuningId.value);
         await s.set('showWaveform', showWaveform.value);
         await s.set('showSpectrum', showSpectrum.value);
+        await s.set('showSpectrogram', showSpectrogram.value);
         await s.save();
       }
     } else {
@@ -59,11 +65,12 @@ export function useSettings() {
       localStorage.setItem('lastTuningId', lastTuningId.value);
       localStorage.setItem('showWaveform', showWaveform.value.toString());
       localStorage.setItem('showSpectrum', showSpectrum.value.toString());
+      localStorage.setItem('showSpectrogram', showSpectrogram.value.toString());
     }
   }
 
   // Auto save on change
-  watch([a4, lastTuningId, showWaveform, showSpectrum], () => {
+  watch([a4, lastTuningId, showWaveform, showSpectrum, showSpectrogram], () => {
     save();
   }, { deep: true });
 
@@ -75,6 +82,7 @@ export function useSettings() {
     lastTuningId,
     showWaveform,
     showSpectrum,
+    showSpectrogram,
     load,
     save,
   };

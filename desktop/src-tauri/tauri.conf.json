@@ -5,7 +5,7 @@
   "identifier": "com.tuner.guitar",
   "build": {
     "beforeDevCommand": "cd ../web && npm run dev",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "cd ../web && npm run build",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../web/dist"
   },

@@ -2,6 +2,22 @@ const GUITAR_MIN_FREQ: f32 = 30.0;
 const GUITAR_MAX_FREQ: f32 = 400.0;
 const YIN_THRESHOLD: f32 = 0.12;
 
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub struct PitchDetection {
+    pub freq: f32,
+    pub confidence: f32,
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+impl PitchDetection {
+    #[wasm_bindgen(constructor)]
+    pub fn new(freq: f32, confidence: f32) -> Self {
+        Self { freq, confidence }
+    }
+}
+
 fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
     let size = buffer.len();
     let half = size / 2;
@@ -195,20 +211,20 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn detect_pitch_yin(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
-    detect_pitch_yin_internal(buffer, sample_rate)
+pub fn detect_pitch_yin(buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
+    detect_pitch_yin_internal(buffer, sample_rate).map(|(f, c)| PitchDetection::new(f, c))
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn detect_pitch_mpm(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
-    detect_pitch_mpm_internal(buffer, sample_rate)
+pub fn detect_pitch_mpm(buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
+    detect_pitch_mpm_internal(buffer, sample_rate).map(|(f, c)| PitchDetection::new(f, c))
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn detect_pitch_wasm(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
-    detect_pitch(buffer, sample_rate)
+pub fn detect_pitch_wasm(buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
+    detect_pitch(buffer, sample_rate).map(|(f, c)| PitchDetection::new(f, c))
 }
 
 pub fn detect_pitch_native(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
