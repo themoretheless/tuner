@@ -1,35 +1,34 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
 
 const props = defineProps<{
   analyser: AnalyserNode | null
   isListening: boolean
 }>()
 
-const canvas = ref<HTMLCanvasElement | null>(null)
 let raf = 0
-let ctx: CanvasRenderingContext2D | null = null
-const dataArray = ref<Float32Array | null>(null)
+const dataArray = ref<Float32Array<ArrayBuffer> | null>(null)
+const CSS_HEIGHT = 80
+const canvasSurface = useHiDpiCanvas(CSS_HEIGHT)
+const canvas = canvasSurface.canvas
+
+function setCanvas(el: unknown) {
+  canvas.value = el instanceof HTMLCanvasElement ? el : null
+}
 
 function draw() {
-  if (!props.analyser || !ctx || !canvas.value) return
+  if (!props.analyser) return
 
-  // Ensure canvas size (so height change takes effect even without remount)
-  const targetWidth = 520
-  const targetHeight = 80
-  if (canvas.value.width !== targetWidth || canvas.value.height !== targetHeight) {
-    canvas.value.width = targetWidth
-    canvas.value.height = targetHeight
-  }
-
-  const w = canvas.value.width
-  const h = canvas.value.height
+  const frame = canvasSurface.resize()
+  if (!frame) return
+  const { ctx, w, h } = frame
 
   const bufferLength = props.analyser.fftSize
   if (!dataArray.value || dataArray.value.length !== bufferLength) {
-    dataArray.value = new Float32Array(bufferLength)
+    dataArray.value = new Float32Array(bufferLength) as Float32Array<ArrayBuffer>
   }
-  props.analyser.getFloatTimeDomainData(dataArray.value as any)
+  props.analyser.getFloatTimeDomainData(dataArray.value)
 
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
@@ -65,18 +64,11 @@ function startDraw() {
 
 function stopDraw() {
   cancelAnimationFrame(raf)
-  if (ctx && canvas.value) {
-    ctx.fillStyle = '#11151b'
-    ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-  }
+  canvasSurface.clear()
 }
 
 onMounted(() => {
-  if (canvas.value) {
-    ctx = canvas.value.getContext('2d', { alpha: true })
-    canvas.value.width = 520
-    canvas.value.height = 80
-  }
+  canvasSurface.setup()
   watch(() => [props.isListening, props.analyser], () => {
     if (props.isListening) startDraw()
     else stopDraw()
@@ -91,8 +83,8 @@ onUnmounted(() => {
 <template>
   <div class="w-full flex justify-center">
     <canvas
-      ref="canvas"
-      class="rounded-lg bg-[#11151b] border border-slate-800"
+      :ref="setCanvas"
+      class="w-full max-w-[520px] h-20 rounded-lg bg-[#11151b] border border-slate-800"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>
