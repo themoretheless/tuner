@@ -4,13 +4,53 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Guitar Tuner</title>
-    <meta name="description" content="Accurate guitar tuner. Works offline as PWA." />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#22c55e" />
+    <title>Guitar Tuner (egui)</title>
+    <meta name="description" content="Accurate guitar tuner. egui native + web." />
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <canvas id="the_canvas_id" width="700" height="600"></canvas>
+    <div>
+      <button id="mic-btn">Toggle Mic</button>
+    </div>
+    <script type="module">
+      import init, { feed_audio_samples } from '/egui-wasm/guitar_tuner_egui.js';
+
+      async function run() {
+        await init();
+        // The egui app runs the UI (main in wasm is stub, full start requires eframe web init).
+        // For demo, the canvas is ready; visuals run when eframe is initialized in full setup.
+        window.feed_audio_samples = feed_audio_samples;
+        console.log('egui wasm loaded, feed ready');
+
+        // Basic mic for feed
+        let audioCtx;
+        let proc;
+        let listening = false;
+        const btn = document.getElementById('mic-btn');
+        btn.onclick = async () => {
+          if (!listening) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 48000});
+            const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
+            const src = audioCtx.createMediaStreamSource(stream);
+            proc = audioCtx.createScriptProcessor(2048, 1, 1);
+            src.connect(proc);
+            proc.connect(audioCtx.destination);
+            proc.onaudioprocess = (e) => {
+              const input = e.inputBuffer.getChannelData(0);
+              if (window.feed_audio_samples) {
+                window.feed_audio_samples(new Float32Array(input));
+              }
+            };
+            listening = true;
+            btn.textContent = 'Stop Mic';
+          } else {
+            if (proc) proc.disconnect();
+            listening = false;
+            btn.textContent = 'Toggle Mic';
+          }
+        };
+      }
+      run();
+    </script>
   </body>
 </html>

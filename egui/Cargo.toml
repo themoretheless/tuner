@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = "0.27"
+eframe = { version = "0.27", features = ["glow"] }
 egui = "0.27"
 cpal = "0.15"
-rustfft = "6.1"
-num-complex = "0.4"
 pitch-core = { path = "../pitch-core", default-features = false }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1.7"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["console"] }

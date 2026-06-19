@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "pitch-core",
+    "egui",
+]
+
+# Common profile settings for the workspace (native + future wasm)
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[workspace.dependencies]
+# Shared dependency versions can go here later
+# e.g. wasm-bindgen = "0.2"

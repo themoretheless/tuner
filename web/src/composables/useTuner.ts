@@ -26,7 +26,7 @@ const RANDOM_DURATION = 1500;
 const IN_TUNE_THRESHOLD = 5;
 const OUT_OF_TUNE_THRESHOLD = 7;
 
-// Initialize WASM pitch core (async, falls back to JS)
+// Initialize WASM pitch core (shared with native via pitch-core)
 initPitchWasm();
 
 export function useTuner() {
@@ -37,6 +37,10 @@ export function useTuner() {
   const volume = ref(0);
   const isPowerChord = ref(false);
   const error = ref<string | null>(null);
+
+  // Input device selection
+  const inputDevices = ref<{ deviceId: string; label: string }[]>([]);
+  const selectedInputDeviceId = ref<string | null>(null);
 
   // History for cents graph (last N samples)
   const centsHistory = ref<number[]>([]);
@@ -75,6 +79,23 @@ export function useTuner() {
       }
     }
     return sharedAudio;
+  }
+
+  async function listInputDevices() {
+    try {
+      // Request permission first so labels are populated
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      inputDevices.value = devices
+        .filter((d) => d.kind === 'audioinput')
+        .map((d) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Microphone (${d.deviceId.slice(0, 8)}...)`,
+        }));
+    } catch (e) {
+      console.warn('Could not list input devices', e);
+      inputDevices.value = [];
+    }
   }
 
   // Separate playback context + nodes (reused) - now using shared
@@ -146,15 +167,18 @@ export function useTuner() {
     if (isListening.value) return;
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-          sampleRate: { ideal: PREFERRED_SAMPLE_RATE },
-        },
-      });
+      const audioConstraints: any = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 1,
+        sampleRate: { ideal: PREFERRED_SAMPLE_RATE },
+      };
+      if (selectedInputDeviceId.value) {
+        audioConstraints.deviceId = { exact: selectedInputDeviceId.value };
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
 
       // Try to create AudioContext at 48 kHz for better resolution
       try {
@@ -383,6 +407,10 @@ export function useTuner() {
     showSpectrogram: settings.showSpectrogram,
     centsHistory,
 
+    // input devices
+    inputDevices,
+    selectedInputDeviceId,
+
     // actions
     start,
     stop,
@@ -392,6 +420,7 @@ export function useTuner() {
     setA4,
     setTuning,
     playRandomString,
+    listInputDevices,
 
     // data
     allTunings: TUNINGS,

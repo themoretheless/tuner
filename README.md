@@ -306,7 +306,17 @@ npx tauri icon ./icon.png
 10. **Accessibility + i18n** + клавиатурные сокращения (space, 1-6).
 11. **Стабильность чтения**: доверие (confidence), индикатор "держи" (стабильно 300мс).
 
-Текущая версия — разумный MVP. Гораздо лучше первой итерации.
+Текущая версия — egui везде (натив + веб).
+
+Переход завершён:
+- Вся логика (pitch, notes, tunings, engine, spectrum) в pitch-core.
+- UI в egui (waveform, spectrum с гармониками, spectrogram heatmap, cents history, device selection).
+- Веб — хост для egui wasm + JS для захвата микрофона и feed в Rust.
+- Tauri может использовать тот же веб хост или остаться на Vue как опция.
+
+Сборка egui wasm: npm run build:egui-wasm (в web).
+
+Натив: cargo run -p guitar-tuner-egui.
 
 ## Следующие улучшения (рекомендуемые)
 

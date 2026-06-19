@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "npm run build:wasm && vue-tsc -b && vite build",
+    "dev": "npm run build:egui-wasm && vite",
+    "build": "npm run build:egui-wasm && vue-tsc -b && vite build",
     "preview": "vite preview",
-    "build:wasm": "cd ../pitch-core && cargo build --target wasm32-unknown-unknown --features wasm --release && (wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/public/wasm --target web || (cargo install wasm-bindgen-cli && wasm-bindgen target/wasm32-unknown-unknown/release/pitch_core.wasm --out-dir ../web/public/wasm --target web)) || echo 'WASM build skipped or failed, JS fallback will be used'",
+    "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
+    "build:egui-wasm": "cd ../egui && cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --target web --out-dir ../web/public/egui-wasm --no-typescript ../egui/target/wasm32-unknown-unknown/release/guitar_tuner_egui.wasm || echo 'egui wasm build skipped or failed'",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
     "tauri:build": "npm run build && cd ../desktop && npm run tauri build"
   },

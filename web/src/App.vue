@@ -119,6 +119,23 @@ onUnmounted(() => {
           </label>
         </div>
 
+        <!-- Input device selector -->
+        <div class="mt-1 flex items-center gap-2 text-xs">
+          <span class="text-slate-400">Mic:</span>
+          <button @click="tuner.listInputDevices()" class="px-2 py-0.5 rounded bg-slate-800 text-[10px]">List</button>
+          <select
+            v-model="tuner.selectedInputDeviceId.value"
+            class="bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-xs max-w-[220px]"
+            @change="if (tuner.isListening.value) { /* user can re-toggle mic */ }"
+          >
+            <option :value="null">Default</option>
+            <option v-for="d in tuner.inputDevices.value" :key="d.deviceId" :value="d.deviceId">
+              {{ d.label }}
+            </option>
+          </select>
+          <span v-if="tuner.isListening.value" class="text-emerald-400 text-[10px]">●</span>
+        </div>
+
         <!-- Error -->
         <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900">
           {{ tuner.error.value }}
