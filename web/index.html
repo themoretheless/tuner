@@ -9,44 +9,11 @@
   </head>
   <body>
     <canvas id="the_canvas_id" width="700" height="600"></canvas>
-    <div>
-      <button id="mic-btn">Toggle Mic</button>
-    </div>
     <script type="module">
       (async () => {
         const mod = await import(/* @vite-ignore */ '/egui-wasm/guitar_tuner_egui.js');
-        const feed = mod.feed_audio_samples || mod.default;
-        window.feed_audio_samples = feed;
+        window.feed_audio_samples = mod.feed_audio_samples || mod.default;
         console.log('egui wasm loaded, feed ready');
-        // Note: full egui UI requires proper eframe web bootstrap (currently stub in wasm main).
-
-        // Basic mic for feed
-        let audioCtx;
-        let proc;
-        let listening = false;
-        const btn = document.getElementById('mic-btn');
-        btn.onclick = async () => {
-          if (!listening) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 48000});
-            const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
-            const src = audioCtx.createMediaStreamSource(stream);
-            proc = audioCtx.createScriptProcessor(2048, 1, 1);
-            src.connect(proc);
-            proc.connect(audioCtx.destination);
-            proc.onaudioprocess = (e) => {
-              const input = e.inputBuffer.getChannelData(0);
-              if (window.feed_audio_samples) {
-                window.feed_audio_samples(new Float32Array(input));
-              }
-            };
-            listening = true;
-            btn.textContent = 'Stop Mic';
-          } else {
-            if (proc) proc.disconnect();
-            listening = false;
-            btn.textContent = 'Toggle Mic';
-          }
-        };
       })();
     </script>
   </body>

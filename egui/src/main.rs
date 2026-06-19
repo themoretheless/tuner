@@ -491,6 +491,18 @@ impl App {
     }
 
     #[cfg(target_arch = "wasm32")]
+    fn toggle_ref(&mut self) {
+        self.ref_on = !self.ref_on;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn play_random_string(&mut self) {
+        // TODO: web audio version
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl App {
     pub fn feed_audio_samples(&mut self, samples: &[f32]) {
         if samples.len() < 2048 {
             return;
@@ -516,16 +528,6 @@ impl App {
                 g.spectrum = update.spectrum.clone();
             }
         }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn toggle_ref(&mut self) {
-        self.ref_on = !self.ref_on;
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn play_random_string(&mut self) {
-        // TODO: web audio version
     }
 }
 
@@ -562,7 +564,17 @@ fn main() -> eframe::Result<()> {
 #[cfg(target_arch = "wasm32")]
 fn main() {
     console_error_panic_hook::set_once();
-    // Stub: full eframe web bootstrap (start_web) not resolving in this setup.
-    // The canvas and feed JS are provided; for full UI, would need proper web init.
-    // See https://github.com/emilk/eframe_template for standard web setup.
+
+    let web_options = eframe::WebOptions::default();
+    wasm_bindgen_futures::spawn_local(async {
+        let runner = eframe::WebRunner::new();
+        runner
+            .start(
+                "the_canvas_id",
+                web_options,
+                Box::new(|_cc| Box::new(App::default())),
+            )
+            .await
+            .expect("failed to start eframe");
+    });
 }
