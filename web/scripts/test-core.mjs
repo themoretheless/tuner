@@ -44,6 +44,21 @@ try {
   const closest = notes.findClosestString(111, standardWithCapo.strings);
   assert.equal(notes.getNoteDisplay(closest), 'A#2');
 
+  assert.ok(notes.INSTRUMENTS.some((instrument) => instrument.id === 'guitar-7'));
+  assert.ok(notes.INSTRUMENTS.some((instrument) => instrument.id === 'mandolin'));
+  assert.ok(notes.TEMPERAMENTS.some((temperament) => temperament.id === 'vallotti'));
+  assert.equal(notes.BUILT_IN_TUNINGS.find((tuning) => tuning.id === 'guitar-7-standard').strings.length, 7);
+  assert.equal(notes.BUILT_IN_TUNINGS.find((tuning) => tuning.id === 'twelve-string-standard').strings.length, 12);
+  assert.equal(notes.getNoteDisplay(notes.BUILT_IN_TUNINGS.find((tuning) => tuning.id === 'cello-standard').strings[0]), 'C2');
+
+  assert.equal(notes.temperamentOffset('C', 'just', 'C'), 0);
+  assert.notEqual(notes.temperamentOffset('C', 'just', 'A'), 0);
+  const customTemperaments = [
+    ...notes.TEMPERAMENTS,
+    { id: 'custom-test', name: 'Custom Test', offsets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+  ];
+  assert.equal(notes.temperamentOffset('D', 'custom-test', 'C', customTemperaments), 2);
+
   const sampleRate = 44100;
   const buffer = new Float32Array(2048);
   for (let i = 0; i < buffer.length; i += 1) {
