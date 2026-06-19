@@ -179,6 +179,8 @@ export function useTuner() {
     isListening.value = false;
     currentFrequency.value = null;
     smoothedFrequency.value = null;
+    confidence.value = 0;
+    isPowerChord.value = false;
     volume.value = 0;
     smoother.reset();
     stopReferenceTone();
