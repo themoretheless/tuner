@@ -19,6 +19,25 @@
         const mod = await import(/* @vite-ignore */ '/egui-wasm/guitar_tuner_egui.js');
         window.feed_audio_samples = mod.feed_audio_samples || mod.default;
         console.log('egui wasm loaded, feed ready');
+
+        // Auto-start mic capture for web (feeds into egui via engine)
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 48000});
+          const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
+          const src = audioCtx.createMediaStreamSource(stream);
+          const proc = audioCtx.createScriptProcessor(2048, 1, 1);
+          src.connect(proc);
+          proc.connect(audioCtx.destination);
+          proc.onaudioprocess = (e) => {
+            const input = e.inputBuffer.getChannelData(0);
+            if (window.feed_audio_samples) {
+              window.feed_audio_samples(new Float32Array(input));
+            }
+          };
+          console.log('web mic auto-started');
+        } catch(e) {
+          console.warn('web mic start failed', e);
+        }
       })();
     </script>
   </body>
