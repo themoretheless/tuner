@@ -101,8 +101,8 @@ onUnmounted(() => {
 
         <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
-        <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-        <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Waveform v-if="tuner.showWaveform.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Spectrum v-if="tuner.showSpectrum.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
 
         <!-- A4 + visual toggles (placed near the visualizers) -->
         <div class="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 mt-1">
@@ -127,7 +127,19 @@ onUnmounted(() => {
             <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
             <span>{{ t('spectrum') }}</span>
           </label>
+          <label v-if="tuner.nativeAudioAvailable.value" class="flex items-center gap-2">
+            <span>{{ t('audio.backend') }}</span>
+            <select
+              class="bg-[#1f2937] border border-slate-700 rounded px-2 py-1 text-sm"
+              :value="tuner.audioBackend.value"
+              @change="tuner.setAudioBackend(($event.target as HTMLSelectElement).value as 'web' | 'native')"
+            >
+              <option value="web">{{ t('audio.backend.web') }}</option>
+              <option value="native">{{ t('audio.backend.native') }}</option>
+            </select>
+          </label>
           <InputDeviceSelector
+            v-if="!tuner.usingNativeAudio.value"
             :devices="tuner.inputDevices.value"
             :selected-device-id="tuner.selectedInputDeviceId.value"
             @refresh="tuner.refreshInputDevices"

@@ -12,6 +12,7 @@ import type {
 export type DisplayMode = 'gauge' | 'needle' | 'strobe';
 export type LayoutMode = 'default' | 'stage' | 'compact';
 export type ThemeMode = 'dark' | 'light' | 'colorblind';
+export type AudioBackend = 'web' | 'native';
 
 export interface PracticeHistoryEntry {
   at: number;
@@ -22,6 +23,7 @@ export interface PracticeHistoryEntry {
 export interface PersistedSettings {
   a4: number;
   activeInstrument: InstrumentId;
+  audioBackend: AudioBackend;
   capo: number;
   customInstruments: InstrumentPreset[];
   customTemperaments: Temperament[];
@@ -91,6 +93,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
     return {
       a4: await s.get<number>('a4') ?? undefined,
       activeInstrument: await s.get<InstrumentId>('activeInstrument') ?? undefined,
+      audioBackend: await s.get<AudioBackend>('audioBackend') ?? undefined,
       capo: await s.get<number>('capo') ?? undefined,
       customInstruments: await s.get<InstrumentPreset[]>('customInstruments') ?? undefined,
       customTemperaments: await s.get<Temperament[]>('customTemperaments') ?? undefined,
@@ -122,6 +125,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
   return {
     a4: savedA4 ? Number(savedA4) : undefined,
     activeInstrument: readLocal('activeInstrument') as InstrumentId | undefined,
+    audioBackend: readLocal('audioBackend') as AudioBackend | undefined,
     capo: readLocal('capo') ? Number(readLocal('capo')) : undefined,
     customInstruments: readJson<InstrumentPreset[]>('customInstruments'),
     customTemperaments: readJson<Temperament[]>('customTemperaments'),
@@ -158,6 +162,7 @@ export async function savePersistedSettings(settings: PersistedSettings) {
     if (!s) return;
     await s.set('a4', settings.a4);
     await s.set('activeInstrument', settings.activeInstrument);
+    await s.set('audioBackend', settings.audioBackend);
     await s.set('capo', settings.capo);
     await s.set('customInstruments', settings.customInstruments);
     await s.set('customTemperaments', settings.customTemperaments);
@@ -185,6 +190,7 @@ export async function savePersistedSettings(settings: PersistedSettings) {
 
   writeLocal('a4', settings.a4.toString());
   writeLocal('activeInstrument', settings.activeInstrument);
+  writeLocal('audioBackend', settings.audioBackend);
   writeLocal('capo', settings.capo.toString());
   writeLocal('customInstruments', JSON.stringify(settings.customInstruments));
   writeLocal('customTemperaments', JSON.stringify(settings.customTemperaments));

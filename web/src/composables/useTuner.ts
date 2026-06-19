@@ -3,19 +3,25 @@ import { useAudioInput } from './useAudioInput';
 import { useCentsHistory } from './useCentsHistory';
 import { useEarTraining } from './useEarTraining';
 import { useMetronome } from './useMetronome';
+import { useNativeAudioInput } from './useNativeAudioInput';
 import { usePitchLoop } from './usePitchLoop';
 import { useReferenceTone } from './useReferenceTone';
 import { useSettings } from './useSettings';
 import { useTuningState } from './useTuningState';
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
-import type { DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
+import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
   const settings = useSettings();
   const audio = useAudioInput(settings.selectedInputDeviceId);
+  const nativeAudio = useNativeAudioInput();
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
   const pitch = usePitchLoop(audio.readFrame, detectionRange);
-  const tuning = useTuningState(pitch.smoothedFrequency, {
+  const usingNativeAudio = computed(() => settings.audioBackend.value === 'native' && nativeAudio.available.value);
+  const detectedFrequencySource = computed(() => (
+    usingNativeAudio.value ? nativeAudio.frequency.value : pitch.smoothedFrequency.value
+  ));
+  const tuning = useTuningState(detectedFrequencySource, {
     onResetDetection: pitch.reset,
   });
   const referenceTone = useReferenceTone(() => tuning.targetNote.value);
@@ -30,9 +36,17 @@ export function useTuner() {
 
   watch(tuning.detectionRange, (range) => {
     detectionRange.value = range;
+    void nativeAudio.setRange(range);
   }, { immediate: true });
 
   async function start() {
+    if (usingNativeAudio.value) {
+      centsHistory.clear();
+      pitch.reset();
+      await nativeAudio.start(tuning.detectionRange.value);
+      return;
+    }
+
     await audio.start();
     if (audio.isListening.value) {
       centsHistory.clear();
@@ -44,6 +58,7 @@ export function useTuner() {
   function stop() {
     pitch.stop();
     audio.stop();
+    void nativeAudio.stop();
     referenceTone.stopReferenceTone();
   }
 
@@ -67,6 +82,19 @@ export function useTuner() {
 
   function setLeftHanded(enabled: boolean) {
     settings.leftHanded.value = enabled;
+  }
+
+  function setAudioBackend(backend: AudioBackend) {
+    if (backend !== 'web' && backend !== 'native') return;
+    const shouldRestart = audio.isListening.value || nativeAudio.isListening.value;
+    if (shouldRestart) stop();
+    settings.audioBackend.value = backend;
+    if (shouldRestart) void start();
+  }
+
+  function clearError() {
+    audio.clearError();
+    nativeAudio.clearError();
   }
 
   async function toggleFullscreen() {
@@ -105,11 +133,12 @@ export function useTuner() {
 
   return {
     // state
-    isListening: audio.isListening,
-    currentFrequency: pitch.currentFrequency,
-    smoothedFrequency: pitch.smoothedFrequency,
-    volume: pitch.volume,
-    error: audio.error,
+    isListening: computed(() => usingNativeAudio.value ? nativeAudio.isListening.value : audio.isListening.value),
+    currentFrequency: computed(() => usingNativeAudio.value ? nativeAudio.frequency.value : pitch.currentFrequency.value),
+    smoothedFrequency: detectedFrequencySource,
+    volume: computed(() => usingNativeAudio.value ? nativeAudio.level.value : pitch.volume.value),
+    error: computed(() => usingNativeAudio.value ? nativeAudio.error.value : audio.error.value),
+    audioBackend: settings.audioBackend,
     inputDevices: audio.inputDevices,
     selectedString: tuning.selectedString,
     selectedInputDeviceId: audio.selectedInputDeviceId,
@@ -147,6 +176,8 @@ export function useTuner() {
     practiceHistory: settings.practiceHistory,
     practiceSummary,
     sweeteningProfile: tuning.sweeteningProfile,
+    nativeAudioAvailable: nativeAudio.available,
+    usingNativeAudio,
 
     // computed
     detectedNote: tuning.detectedNote,
@@ -159,7 +190,7 @@ export function useTuner() {
     isChromaticMode: tuning.isChromaticMode,
 
     // visualizers / persisted UI settings
-    analyser: audio.analyser,
+    analyser: computed(() => usingNativeAudio.value ? null : audio.analyser.value),
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
 
@@ -168,10 +199,11 @@ export function useTuner() {
     stop,
     toggleString: tuning.toggleString,
     toggleReferenceTone: referenceTone.toggleReferenceTone,
-    clearError: audio.clearError,
+    clearError,
     clearCentsHistory: centsHistory.clear,
     refreshInputDevices: audio.refreshInputDevices,
     setA4: tuning.setA4,
+    setAudioBackend,
     setCapo: tuning.setCapo,
     setDisplayMode,
     setInputDevice: audio.setInputDevice,

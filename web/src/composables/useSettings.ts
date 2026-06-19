@@ -15,6 +15,7 @@ import {
   type Tuning,
 } from '../utils/notes';
 import type {
+  AudioBackend,
   DisplayMode,
   LayoutMode,
   PracticeHistoryEntry,
@@ -24,6 +25,7 @@ import { loadPersistedSettings, savePersistedSettings } from '../utils/settingsS
 
 const a4 = ref(440);
 const activeInstrument = ref<InstrumentId>('guitar');
+const audioBackend = ref<AudioBackend>('web');
 const capo = ref(0);
 const customInstruments = ref<InstrumentPreset[]>([]);
 const customTemperaments = ref<Temperament[]>([]);
@@ -84,6 +86,10 @@ function normalizeOffsets(value: unknown): number[] {
 
 function normalizeDisplayMode(value: unknown): DisplayMode {
   return value === 'needle' || value === 'strobe' ? value : 'gauge';
+}
+
+function normalizeAudioBackend(value: unknown): AudioBackend {
+  return value === 'native' ? 'native' : 'web';
 }
 
 function normalizeThemeMode(value: unknown): ThemeMode {
@@ -200,6 +206,7 @@ async function load() {
 
       if (saved.a4 != null) a4.value = normalizeA4(saved.a4);
       if (saved.activeInstrument) activeInstrument.value = normalizeInstrument(saved.activeInstrument, instrumentOptions);
+      if (saved.audioBackend) audioBackend.value = normalizeAudioBackend(saved.audioBackend);
       if (saved.capo != null) capo.value = normalizeInteger(saved.capo, 0, 12, 0);
       if (saved.displayMode) displayMode.value = normalizeDisplayMode(saved.displayMode);
       if (saved.lastTuningId) lastTuningId.value = saved.lastTuningId;
@@ -233,6 +240,7 @@ async function save() {
   await savePersistedSettings({
     a4: a4.value,
     activeInstrument: activeInstrument.value,
+    audioBackend: audioBackend.value,
     capo: capo.value,
     customInstruments: customInstruments.value,
     customTemperaments: customTemperaments.value,
@@ -275,6 +283,7 @@ function ensureWatcher() {
     watch([
       a4,
       activeInstrument,
+      audioBackend,
       capo,
       customInstruments,
       customTemperaments,
@@ -309,6 +318,7 @@ export function useSettings() {
   return {
     a4,
     activeInstrument,
+    audioBackend,
     capo,
     customInstruments,
     customTemperaments,
