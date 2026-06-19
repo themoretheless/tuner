@@ -241,17 +241,19 @@ export function detectPitchMPM(buffer: Float32Array, sampleRate: number): { freq
   return { freq, confidence: Math.max(0, Math.min(1, maxVal)) };
 }
 
-/** Main detector - prefers YIN, falls back to MPM then autocorrelation */
+/** Main detector - prefers YIN, falls back to MPM (expensive) then autocorrelation */
 export function detectPitch(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
-  // Try YIN first
+  // Try YIN first (primary)
   let best = detectPitchYIN(buffer, sampleRate);
   let bestConf = best ? best.confidence : 0;
 
-  // Try MPM as alternative
-  const mpm = detectPitchMPM(buffer, sampleRate);
-  if (mpm && mpm.confidence > bestConf) {
-    best = mpm;
-    bestConf = mpm.confidence;
+  // Try MPM only if YIN weak (perf: MPM also quadratic)
+  if (!best || bestConf < 0.5) {
+    const mpm = detectPitchMPM(buffer, sampleRate);
+    if (mpm && mpm.confidence > bestConf) {
+      best = mpm;
+      bestConf = mpm.confidence;
+    }
   }
 
   // Fallback to autocorrelation if still low
@@ -300,6 +302,17 @@ export function computeRmsVolume(buffer: Float32Array): number {
     sum += v * v;
   }
   return Math.sqrt(sum / buffer.length);
+}
+
+// Downsample for pitch detection perf (YIN O(n^2) expensive on 2048@60fps)
+export function downsampleForPitch(buffer: Float32Array, factor: number = 2): Float32Array {
+  if (factor <= 1) return buffer;
+  const outLen = Math.floor(buffer.length / factor);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    out[i] = buffer[i * factor];
+  }
+  return out;
 }
 
 // Convenience normalized 0..1 level (with soft knee)

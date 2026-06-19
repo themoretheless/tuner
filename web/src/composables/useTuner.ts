@@ -9,11 +9,18 @@ import {
   formatFreq,
   type Tuning,
 } from '../utils/notes';
-import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord } from '../utils/pitch';
+import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch } from '../utils/pitch';
 import { useSettings } from './useSettings';
 
 const PREFERRED_SAMPLE_RATE = 48000;
 const FFT_SIZE = 2048;
+
+// Magic numbers extracted for clarity and maintainability
+const SMOOTHING_TIME = 0.55;
+const LP_FREQ = 1600;
+const REF_GAIN = 0.18;
+const RANDOM_GAIN = 0.15;
+const RANDOM_DURATION = 1500;
 
 // Simple hysteresis to avoid flickering IN TUNE label
 const IN_TUNE_THRESHOLD = 5;
@@ -52,7 +59,13 @@ export function useTuner() {
   let sharedAudio: AudioContext | null = null;
   function getSharedAudio() {
     if (!sharedAudio) {
-      sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)();
+      try {
+        sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: PREFERRED_SAMPLE_RATE,
+        });
+      } catch {
+        sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
     }
     return sharedAudio;
   }
@@ -63,6 +76,7 @@ export function useTuner() {
 
   // Hysteresis state
   let _inTuneStable = false;
+  let chordCheckCounter = 0;
 
   const detectedNote = computed<DetectedNote | null>(() => {
     const f = smoothedFrequency.value;
@@ -145,7 +159,7 @@ export function useTuner() {
       }
       analyser = audioContext.createAnalyser();
       analyser.fftSize = FFT_SIZE;
-      analyser.smoothingTimeConstant = 0.55;
+      analyser.smoothingTimeConstant = SMOOTHING_TIME;
       analyserRef.value = analyser;
 
       source = audioContext.createMediaStreamSource(stream);
@@ -204,13 +218,19 @@ export function useTuner() {
     const rms = computeRmsVolume(timeDomainBuffer);
     volume.value = normalizeLevel(rms);
 
-    const result = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE);
+    // Downsample for expensive pitch (perf fix)
+    const pitchBuffer = timeDomainBuffer.length > 1024 ? downsampleForPitch(timeDomainBuffer, 2) : timeDomainBuffer;
+    const pitchSr = (audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE) / (pitchBuffer.length < timeDomainBuffer.length ? 2 : 1);
+
+    const result = detectPitch(pitchBuffer, pitchSr);
     const freq = result ? result.freq : null;
     currentFrequency.value = freq;
     confidence.value = result ? result.confidence : 0;
 
-    // Simple power chord detection (root + fifth)
-    isPowerChord.value = !!freq && isLikelyPowerChord(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE, freq);
+    // Simple power chord detection (root + fifth) - not every frame for perf
+    if (++chordCheckCounter % 5 === 0) {
+      isPowerChord.value = !!freq && isLikelyPowerChord(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE, freq);
+    }
 
     const smoothed = smoother.add(freq);
     smoothedFrequency.value = smoothed;
@@ -240,11 +260,11 @@ export function useTuner() {
 
     refOsc.type = 'sine';
     refOsc.frequency.value = freq;
-    refGain.gain.value = 0.18;
+    refGain.gain.value = REF_GAIN;
 
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 1600;
+    lp.frequency.value = LP_FREQ;
 
     refOsc.connect(lp);
     lp.connect(refGain);
@@ -252,6 +272,31 @@ export function useTuner() {
 
     refOsc.start();
     referencePlaying.value = true;
+  }
+
+  function playTone(freq: number, gainVal: number = RANDOM_GAIN, durationMs: number = 0) {
+    const ctx = getSharedAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = gainVal;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = LP_FREQ;
+
+    osc.connect(lp);
+    lp.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    if (durationMs > 0) {
+      setTimeout(() => {
+        try { osc.stop(); } catch {}
+      }, durationMs);
+    }
+    return osc;
   }
 
   function stopReferenceTone() {
@@ -275,22 +320,7 @@ export function useTuner() {
   function playRandomString() {
     const random = strings.value[Math.floor(Math.random() * strings.value.length)];
     stopReferenceTone();
-    const ctx = getSharedAudio();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = random.frequency;
-    gain.gain.value = 0.15;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 1600;
-    osc.connect(lp);
-    lp.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    setTimeout(() => {
-      try { osc.stop(); } catch {}
-    }, 1500);
+    playTone(random.frequency, RANDOM_GAIN, RANDOM_DURATION);
   }
 
   function clearError() {

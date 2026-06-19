@@ -34,8 +34,8 @@ function draw() {
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
 
-  // Show first 200 bins (~4.3 kHz at 44.1k), similar to egui
-  const displayBins = Math.min(200, binCount)
+  // Dynamic bins for full width, keep reasonable density
+  const displayBins = Math.max(50, Math.min(300, Math.floor(w / 2.5)))
   const barWidth = w / displayBins
 
   // Per-frame normalize so quiet signals still show full height spectrum (like egui)
