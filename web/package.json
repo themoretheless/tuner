@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:tauri": "vue-tsc -b && vite build --base ./",
+    "test": "node ./scripts/test-core.mjs",
     "preview": "vite preview",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
-    "tauri:build": "npm run build && cd ../desktop && npm run tauri build"
+    "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
   },
   "dependencies": {
     "@tauri-apps/plugin-store": "^2.4.3",

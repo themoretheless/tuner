@@ -1,11 +1,32 @@
 // Pitch detection utilities
 // YIN algorithm (much better for guitar than plain autocorrelation)
 // + fallback to improved autocorrelation
-// TODO (perf/arch): move core to Rust+WASM for shared desktop/web perf and testability
 
 const GUITAR_MIN_FREQ = 30;
 const GUITAR_MAX_FREQ = 400;
 const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
+const MIN_RMS = 0.0025;
+const MIN_PEAK = 0.012;
+
+export interface SignalStats {
+  rms: number;
+  maxAbs: number;
+}
+
+export function computeSignalStats(buffer: Float32Array): SignalStats {
+  let sumSq = 0;
+  let maxAbs = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    const v = buffer[i];
+    sumSq += v * v;
+    const a = Math.abs(v);
+    if (a > maxAbs) maxAbs = a;
+  }
+  return {
+    rms: Math.sqrt(sumSq / buffer.length),
+    maxAbs,
+  };
+}
 
 // Reusable buffers
 let yinBuffer: Float32Array | null = null;
@@ -26,7 +47,7 @@ function ensureYinBuffers(size: number) {
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
-export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number | null {
+export function detectPitchYIN(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
   const size = buffer.length;
   const half = Math.floor(size / 2);
 
@@ -35,16 +56,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
   const maxTau = Math.min(half, Math.floor(sampleRate / GUITAR_MIN_FREQ));
 
   // Gate on energy
-  let sumSq = 0;
-  let maxAbs = 0;
-  for (let i = 0; i < size; i++) {
-    const v = buffer[i];
-    sumSq += v * v;
-    const a = Math.abs(v);
-    if (a > maxAbs) maxAbs = a;
-  }
-  const rms = Math.sqrt(sumSq / size);
-  if (rms < 0.0025 || maxAbs < 0.012) return null;
+  if (stats.rms < MIN_RMS || stats.maxAbs < MIN_PEAK) return null;
 
   const { yin, diff } = ensureYinBuffers(size);
 
@@ -122,19 +134,11 @@ function ensureBuffers(size: number) {
   return { corr: corrBuffer, win: windowBuffer };
 }
 
-export function autoCorrelate(buffer: Float32Array, sampleRate: number): number | null {
+export function autoCorrelate(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
   const SIZE = buffer.length;
   const maxLag = Math.min(Math.floor(sampleRate / GUITAR_MIN_FREQ), Math.floor(SIZE / 2));
 
-  let sumSq = 0;
-  let maxAbs = 0;
-  for (let i = 0; i < SIZE; i++) {
-    const v = buffer[i];
-    sumSq += v * v;
-    if (Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
-  }
-  const rms = Math.sqrt(sumSq / SIZE);
-  if (rms < 0.002 || maxAbs < 0.01) return null;
+  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
 
   let start = 0, end = SIZE - 1;
   while (start < SIZE / 2 && Math.abs(buffer[start]) < 1e-4) start++;
@@ -173,13 +177,15 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): number 
 }
 
 /** Main detector - prefers YIN */
-export function detectPitch(buffer: Float32Array, sampleRate: number): number | null {
+export function detectPitch(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
+  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
+
   // Try YIN first
-  const yinResult = detectPitchYIN(buffer, sampleRate);
+  const yinResult = detectPitchYIN(buffer, sampleRate, stats);
   if (yinResult != null) return yinResult;
 
   // Fallback to autocorrelation
-  return autoCorrelate(buffer, sampleRate);
+  return autoCorrelate(buffer, sampleRate, stats);
 }
 
 export class FrequencySmoother {
@@ -208,15 +214,6 @@ export class FrequencySmoother {
     this.history.length = 0;
     this.ema = null;
   }
-}
-
-export function computeRmsVolume(buffer: Float32Array): number {
-  let sum = 0;
-  for (let i = 0; i < buffer.length; i++) {
-    const v = buffer[i];
-    sum += v * v;
-  }
-  return Math.sqrt(sum / buffer.length);
 }
 
 // Convenience normalized 0..1 level (with soft knee)
