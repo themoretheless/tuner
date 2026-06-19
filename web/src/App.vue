@@ -121,6 +121,7 @@ onUnmounted(() => {
           :target-freq="tuner.targetNote.value.frequency"
           :format-freq="tuner.formatFreq"
           :confidence="tuner.confidence.value"
+          :is-power-chord="tuner.isPowerChord.value"
         />
 
         <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />

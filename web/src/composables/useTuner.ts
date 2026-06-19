@@ -9,10 +9,10 @@ import {
   formatFreq,
   type Tuning,
 } from '../utils/notes';
-import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel } from '../utils/pitch';
+import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord } from '../utils/pitch';
 import { useSettings } from './useSettings';
 
-const TARGET_SAMPLE_RATE = 44100;
+const PREFERRED_SAMPLE_RATE = 48000;
 const FFT_SIZE = 2048;
 
 // Simple hysteresis to avoid flickering IN TUNE label
@@ -25,6 +25,7 @@ export function useTuner() {
   const smoothedFrequency = ref<number | null>(null);
   const confidence = ref(0);
   const volume = ref(0);
+  const isPowerChord = ref(false);
   const error = ref<string | null>(null);
 
   const selectedString = ref<Note | null>(null);
@@ -130,10 +131,18 @@ export function useTuner() {
           noiseSuppression: false,
           autoGainControl: false,
           channelCount: 1,
+          sampleRate: { ideal: PREFERRED_SAMPLE_RATE },
         },
       });
 
-      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // Try to create AudioContext at 48 kHz for better resolution
+      try {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: PREFERRED_SAMPLE_RATE,
+        });
+      } catch {
+        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
       analyser = audioContext.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = 0.55;
@@ -195,10 +204,13 @@ export function useTuner() {
     const rms = computeRmsVolume(timeDomainBuffer);
     volume.value = normalizeLevel(rms);
 
-    const result = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? TARGET_SAMPLE_RATE);
+    const result = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE);
     const freq = result ? result.freq : null;
     currentFrequency.value = freq;
     confidence.value = result ? result.confidence : 0;
+
+    // Simple power chord detection (root + fifth)
+    isPowerChord.value = !!freq && isLikelyPowerChord(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE, freq);
 
     const smoothed = smoother.add(freq);
     smoothedFrequency.value = smoothed;
@@ -300,6 +312,7 @@ export function useTuner() {
     currentFrequency,
     smoothedFrequency,
     confidence,
+    isPowerChord,
     volume,
     error,
     selectedString,

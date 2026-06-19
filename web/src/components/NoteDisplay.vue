@@ -6,6 +6,7 @@ defineProps<{
   targetFreq: number
   formatFreq: (n: number) => string
   confidence: number
+  isPowerChord?: boolean
 }>()
 </script>
 
@@ -16,6 +17,7 @@ defineProps<{
       <div class="text-sm text-slate-400 tracking-[2px] mt-0.5">DETECTED</div>
       <div class="mt-1 text-[10px] text-slate-500">
         conf {{ (confidence * 100).toFixed(0) }}%
+        <span v-if="isPowerChord" class="text-amber-400 ml-1">(power)</span>
       </div>
     </div>
     <div v-else class="text-6xl text-slate-700 font-light tracking-[-2px] py-6">—</div>

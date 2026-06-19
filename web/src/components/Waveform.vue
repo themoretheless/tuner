@@ -71,11 +71,20 @@ function stopDraw() {
   }
 }
 
+function resizeCanvas() {
+  if (!canvas.value) return
+  const parent = canvas.value.parentElement
+  if (parent) {
+    canvas.value.width = parent.clientWidth
+    canvas.value.height = 80
+  }
+}
+
 onMounted(() => {
   if (canvas.value) {
     ctx = canvas.value.getContext('2d', { alpha: true })
-    canvas.value.width = 520
-    canvas.value.height = 80
+    resizeCanvas()
+    window.addEventListener('resize', resizeCanvas)
   }
   watch(() => [props.isListening, props.analyser], () => {
     if (props.isListening) startDraw()
@@ -85,14 +94,15 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
+  window.removeEventListener('resize', resizeCanvas)
 })
 </script>
 
 <template>
-  <div class="w-full flex justify-center">
+  <div class="w-full">
     <canvas
       ref="canvas"
-      class="rounded-lg bg-[#11151b] border border-slate-800"
+      class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

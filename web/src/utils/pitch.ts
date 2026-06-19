@@ -46,6 +46,10 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq
   const rms = Math.sqrt(sumSq / size);
   if (rms < 0.0025 || maxAbs < 0.012) return null;
 
+  // Adaptive threshold: stricter for loud signals, more lenient for quiet
+  const rmsFactor = Math.min(1.0, rms * 15);
+  const adaptiveThreshold = YIN_THRESHOLD * (1.0 - 0.35 * rmsFactor);
+
   const { yin, diff } = ensureYinBuffers(size);
 
   // 1. Difference function (limited range)
@@ -69,7 +73,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq
   // 3. Absolute threshold + find first dip below threshold (limited)
   let tauEstimate = -1;
   for (let tau = minTau; tau < maxTau; tau++) {
-    if (yin[tau] < YIN_THRESHOLD) {
+    if (yin[tau] < adaptiveThreshold) {
       // search for local minimum
       while (tau + 1 < maxTau && yin[tau + 1] < yin[tau]) {
         tau++;
@@ -98,7 +102,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq
 
   if (tauEstimate < 2) return null;
 
-  // 4. Parabolic interpolation
+  // 4. Parabolic interpolation (better tau estimate)
   let betterTau = tauEstimate;
   if (tauEstimate > 1 && tauEstimate < maxTau - 1) {
     const s0 = yin[tauEstimate - 1];
@@ -107,7 +111,9 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq
     const denom = 2 * s1 - s0 - s2;
     if (Math.abs(denom) > 1e-9) {
       const delta = (s2 - s0) / (2 * denom);
-      betterTau = tauEstimate + delta;
+      if (Math.abs(delta) < 1) {
+        betterTau = tauEstimate + delta;
+      }
     }
   }
 
@@ -170,7 +176,12 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): { freq:
   if (bestLag > 1 && bestLag < corrSize - 1) {
     const x0 = corr[bestLag-1], x1 = corr[bestLag], x2 = corr[bestLag+1];
     const denom = 2*x1 - x0 - x2;
-    if (Math.abs(denom) > 1e-6) period = bestLag + (x2 - x0) / (2 * denom);
+    if (Math.abs(denom) > 1e-6) {
+      const delta = (x2 - x0) / (2 * denom);
+      if (Math.abs(delta) < 1) {
+        period = bestLag + delta;
+      }
+    }
   }
 
   const freq = sampleRate / period;
@@ -181,14 +192,77 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): { freq:
   return { freq, confidence };
 }
 
-/** Main detector - prefers YIN */
+export function detectPitchMPM(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
+  const n = buffer.length;
+  const maxTau = Math.floor(n / 2);
+  const nsdf = new Float32Array(maxTau);
+
+  for (let tau = 0; tau < maxTau; tau++) {
+    let numerator = 0;
+    let denominator = 0;
+    for (let i = 0; i < n - tau; i++) {
+      const x1 = buffer[i];
+      const x2 = buffer[i + tau];
+      numerator += x1 * x2;
+      denominator += x1 * x1 + x2 * x2;
+    }
+    nsdf[tau] = denominator > 0 ? (2 * numerator) / denominator : 0;
+  }
+
+  // Find first significant peak
+  let maxVal = -1;
+  let peak = -1;
+  for (let tau = 2; tau < maxTau - 1; tau++) {
+    if (nsdf[tau] > nsdf[tau - 1] && nsdf[tau] > nsdf[tau + 1] && nsdf[tau] > maxVal) {
+      maxVal = nsdf[tau];
+      peak = tau;
+      if (maxVal > 0.9) break;
+    }
+  }
+
+  if (peak < 2 || maxVal < 0.25) return null;
+
+  // Parabolic interpolation for peak
+  let better = peak;
+  if (peak > 1 && peak < maxTau - 1) {
+    const a = nsdf[peak - 1];
+    const b = nsdf[peak];
+    const c = nsdf[peak + 1];
+    const denom = a - 2 * b + c;
+    if (Math.abs(denom) > 1e-9) {
+      const delta = 0.5 * (a - c) / denom;
+      if (Math.abs(delta) < 1) better = peak + delta;
+    }
+  }
+
+  const freq = sampleRate / better;
+  if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
+
+  return { freq, confidence: Math.max(0, Math.min(1, maxVal)) };
+}
+
+/** Main detector - prefers YIN, falls back to MPM then autocorrelation */
 export function detectPitch(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
   // Try YIN first
-  const yinResult = detectPitchYIN(buffer, sampleRate);
-  if (yinResult != null) return yinResult;
+  let best = detectPitchYIN(buffer, sampleRate);
+  let bestConf = best ? best.confidence : 0;
 
-  // Fallback to autocorrelation
-  return autoCorrelate(buffer, sampleRate);
+  // Try MPM as alternative
+  const mpm = detectPitchMPM(buffer, sampleRate);
+  if (mpm && mpm.confidence > bestConf) {
+    best = mpm;
+    bestConf = mpm.confidence;
+  }
+
+  // Fallback to autocorrelation if still low
+  if (!best || bestConf < 0.3) {
+    const ac = autoCorrelate(buffer, sampleRate);
+    if (ac && ac.confidence > bestConf) {
+      best = ac;
+    }
+  }
+
+  return best;
 }
 
 export class FrequencySmoother {
@@ -232,4 +306,21 @@ export function computeRmsVolume(buffer: Float32Array): number {
 export function normalizeLevel(rms: number): number {
   // Typical mic guitar signal after gate is ~0.01-0.2 rms
   return Math.min(1, rms * 18);
+}
+
+export function isLikelyPowerChord(buffer: Float32Array, sampleRate: number, fundamental: number): boolean {
+  if (!fundamental || fundamental < 40) return false;
+  const f5 = fundamental * 1.4983; // approx perfect fifth
+  const lag = Math.floor(sampleRate / f5);
+  if (lag < 2 || lag >= buffer.length - 64) return false;
+
+  let corr = 0;
+  let energy = 0;
+  const len = Math.min(512, buffer.length - lag);
+  for (let i = 0; i < len; i++) {
+    const v = buffer[i];
+    corr += v * buffer[i + lag];
+    energy += v * v;
+  }
+  return energy > 0 && (corr / energy) > 0.5;
 }
