@@ -6,40 +6,71 @@ use std::sync::{Arc, Mutex};
 use rustfft::{FftPlanner, num_complex::Complex};
 
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const PITCH_WINDOW_SIZE: usize = 4096;
+const FFT_WINDOW_SIZE: usize = 2048;
 
 #[derive(Clone)]
 struct Note { name: &'static str, octave: i32, frequency: f32 }
 #[derive(Clone)]
 struct Tuning { name: &'static str, strings: Vec<Note> }
 
+fn note_index(name: &str) -> usize {
+    NOTE_NAMES.iter().position(|item| *item == name).unwrap_or(0)
+}
+
+fn note_frequency(name: &str, octave: i32) -> f32 {
+    let midi = (octave + 1) * 12 + note_index(name) as i32;
+    440.0 * 2f32.powf((midi - 69) as f32 / 12.0)
+}
+
+fn note(name: &'static str, octave: i32) -> Note {
+    Note { name, octave, frequency: note_frequency(name, octave) }
+}
+
 fn get_tunings() -> Vec<Tuning> {
     vec![
-        Tuning { name: "Standard (EADGBE)", strings: vec![
-            Note{name:"E",octave:2,frequency:82.41}, Note{name:"A",octave:2,frequency:110.0},
-            Note{name:"D",octave:3,frequency:146.83}, Note{name:"G",octave:3,frequency:196.0},
-            Note{name:"B",octave:3,frequency:246.94}, Note{name:"E",octave:4,frequency:329.63},
-        ]},
-        Tuning { name: "Drop D", strings: vec![
-            Note{name:"D",octave:2,frequency:73.42}, Note{name:"A",octave:2,frequency:110.0},
-            Note{name:"D",octave:3,frequency:146.83}, Note{name:"G",octave:3,frequency:196.0},
-            Note{name:"B",octave:3,frequency:246.94}, Note{name:"E",octave:4,frequency:329.63},
-        ]},
-        Tuning { name: "DADGAD", strings: vec![
-            Note{name:"D",octave:2,frequency:73.42}, Note{name:"A",octave:2,frequency:110.0},
-            Note{name:"D",octave:3,frequency:146.83}, Note{name:"G",octave:3,frequency:196.0},
-            Note{name:"A",octave:3,frequency:220.0}, Note{name:"D",octave:4,frequency:293.66},
-        ]},
-        Tuning { name: "Open G", strings: vec![
-            Note{name:"D",octave:2,frequency:73.42}, Note{name:"G",octave:2,frequency:98.0},
-            Note{name:"D",octave:3,frequency:146.83}, Note{name:"G",octave:3,frequency:196.0},
-            Note{name:"B",octave:3,frequency:246.94}, Note{name:"D",octave:4,frequency:293.66},
-        ]},
-        Tuning { name: "Drop C", strings: vec![
-            Note{name:"C",octave:2,frequency:65.41}, Note{name:"G",octave:2,frequency:98.0},
-            Note{name:"C",octave:3,frequency:130.81}, Note{name:"F",octave:3,frequency:174.61},
-            Note{name:"A",octave:3,frequency:220.0}, Note{name:"D",octave:4,frequency:293.66},
-        ]},
+        Tuning { name: "Standard (EADGBE)", strings: vec![note("E",2), note("A",2), note("D",3), note("G",3), note("B",3), note("E",4)] },
+        Tuning { name: "Drop D (DADGBE)", strings: vec![note("D",2), note("A",2), note("D",3), note("G",3), note("B",3), note("E",4)] },
+        Tuning { name: "DADGAD", strings: vec![note("D",2), note("A",2), note("D",3), note("G",3), note("A",3), note("D",4)] },
+        Tuning { name: "Open G (DGDGBD)", strings: vec![note("D",2), note("G",2), note("D",3), note("G",3), note("B",3), note("D",4)] },
+        Tuning { name: "Open D (DADF#AD)", strings: vec![note("D",2), note("A",2), note("D",3), note("F#",3), note("A",3), note("D",4)] },
+        Tuning { name: "Drop C (CGCFAD)", strings: vec![note("C",2), note("G",2), note("C",3), note("F",3), note("A",3), note("D",4)] },
+        Tuning { name: "Half Step Down", strings: vec![note("D#",2), note("G#",2), note("C#",3), note("F#",3), note("A#",3), note("D#",4)] },
+        Tuning { name: "Open E (EBEG#BE)", strings: vec![note("E",2), note("B",2), note("E",3), note("G#",3), note("B",3), note("E",4)] },
+        Tuning { name: "Nashville High Strung", strings: vec![note("E",3), note("A",3), note("D",4), note("G",4), note("B",3), note("E",4)] },
+        Tuning { name: "7-string Standard (BEADGBE)", strings: vec![note("B",1), note("E",2), note("A",2), note("D",3), note("G",3), note("B",3), note("E",4)] },
+        Tuning { name: "7-string Drop A", strings: vec![note("A",1), note("E",2), note("A",2), note("D",3), note("G",3), note("B",3), note("E",4)] },
+        Tuning { name: "Baritone Standard", strings: vec![note("B",1), note("E",2), note("A",2), note("D",3), note("F#",3), note("B",3)] },
+        Tuning { name: "Baritone Drop A", strings: vec![note("A",1), note("E",2), note("A",2), note("D",3), note("F#",3), note("B",3)] },
+        Tuning { name: "12-string Standard", strings: vec![
+            note("E",2), note("E",3), note("A",2), note("A",3), note("D",3), note("D",4),
+            note("G",3), note("G",4), note("B",3), note("B",3), note("E",4), note("E",4),
+        ] },
+        Tuning { name: "Bass Standard (EADG)", strings: vec![note("E",1), note("A",1), note("D",2), note("G",2)] },
+        Tuning { name: "Bass Drop D", strings: vec![note("D",1), note("A",1), note("D",2), note("G",2)] },
+        Tuning { name: "Bass Half Step Down", strings: vec![note("D#",1), note("G#",1), note("C#",2), note("F#",2)] },
+        Tuning { name: "Bass 5-string (BEADG)", strings: vec![note("B",0), note("E",1), note("A",1), note("D",2), note("G",2)] },
+        Tuning { name: "Bass 6-string (BEADGC)", strings: vec![note("B",0), note("E",1), note("A",1), note("D",2), note("G",2), note("C",3)] },
+        Tuning { name: "Ukulele Standard (GCEA)", strings: vec![note("G",4), note("C",4), note("E",4), note("A",4)] },
+        Tuning { name: "Ukulele Low G", strings: vec![note("G",3), note("C",4), note("E",4), note("A",4)] },
+        Tuning { name: "Baritone Ukulele (DGBE)", strings: vec![note("D",3), note("G",3), note("B",3), note("E",4)] },
+        Tuning { name: "Mandolin Standard (GDAE)", strings: vec![note("G",3), note("D",4), note("A",4), note("E",5)] },
+        Tuning { name: "Banjo Open G", strings: vec![note("G",4), note("D",3), note("G",3), note("B",3), note("D",4)] },
+        Tuning { name: "Violin Standard (GDAE)", strings: vec![note("G",3), note("D",4), note("A",4), note("E",5)] },
+        Tuning { name: "Viola Standard (CGDA)", strings: vec![note("C",3), note("G",3), note("D",4), note("A",4)] },
+        Tuning { name: "Cello Standard (CGDA)", strings: vec![note("C",2), note("G",2), note("D",3), note("A",3)] },
+        Tuning { name: "Vocal Pitch Guide", strings: vec![note("C",3), note("G",3), note("C",4), note("G",4), note("C",5)] },
     ]
+}
+
+fn detection_range(tuning: &Tuning) -> (f32, f32) {
+    if tuning.strings.is_empty() {
+        return (65.0, 1100.0);
+    }
+
+    let min = tuning.strings.iter().map(|s| s.frequency).fold(f32::INFINITY, f32::min);
+    let max = tuning.strings.iter().map(|s| s.frequency).fold(0.0, f32::max);
+    ((min * 0.65).max(20.0), (max * 1.45).min(1800.0))
 }
 
 fn frequency_to_note(freq: f32, a4: f32) -> (String, f32) {
@@ -53,12 +84,13 @@ fn frequency_to_note(freq: f32, a4: f32) -> (String, f32) {
     (format!("{}{}", NOTE_NAMES[idx], oct), cents)
 }
 
-fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<f32> {
+fn detect_pitch_yin(buf: &[f32], sr: f32, min_freq: f32, max_freq: f32) -> Option<f32> {
     let n = buf.len(); let h = n / 2; if h < 64 { return None; }
     let rms = buf.iter().map(|x| x*x).sum::<f32>().sqrt() / n as f32;
     if rms < 0.0025 { return None; }
-    let min_t = (sr / 400.0).max(1.0) as usize;
-    let max_t = (sr / 30.0).min(h as f32) as usize;
+    let min_t = (sr / max_freq.max(80.0)).max(1.0) as usize;
+    let max_t = (sr / min_freq.max(20.0)).min(h as f32) as usize;
+    if max_t <= min_t + 2 { return None; }
     let mut d = vec![0.0; h];
     for t in 0..h { let mut s = 0.0; for i in 0..h { let dlt = buf[i]-buf[i+t]; s += dlt*dlt; } d[t] = s; }
     let mut y = vec![0.0; h]; y[0] = 1.0; let mut rs = 0.0;
@@ -80,7 +112,7 @@ fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<f32> {
         if den.abs() > 1e-9 { bt = t + (x2-x0)/(2.0*den); }
     }
     let f = sr / bt;
-    if f > 30.0 && f < 400.0 { Some(f) } else { None }
+    if f >= min_freq && f <= max_freq { Some(f) } else { None }
 }
 
 struct Smoother { ema: Option<f32>, hist: Vec<f32>, alpha: f32, maxh: usize }
@@ -121,18 +153,22 @@ struct App {
     spec: bool,
     error: Option<String>,
     random_stop_at: Option<std::time::Instant>,
+    range: Arc<Mutex<(f32, f32)>>,
 
 }
 
 impl Default for App {
     fn default() -> Self {
+        let tunings = get_tunings();
+        let range = detection_range(&tunings[0]);
         Self {
             st: Arc::new(Mutex::new(State::default())),
-            tunings: get_tunings(), t_idx:0, a4:440.0,
+            tunings, t_idx:0, a4:440.0,
             listen:false, inp:None, out:None, ref_on:false,
             sm: Smoother::new(), hist: VecDeque::with_capacity(80), spec:false,
             error: None,
             random_stop_at: None,
+            range: Arc::new(Mutex::new(range)),
         }
     }
 }
@@ -177,24 +213,40 @@ impl eframe::App for App {
                 }
 
                 ui.add_space(10.0);
+                let mut changed_tuning = false;
                 egui::ComboBox::from_label("Tuning").selected_text(self.tunings[self.t_idx].name)
                     .show_ui(ui, |ui|{
                         for (i,t) in self.tunings.iter().enumerate() {
-                            if ui.selectable_value(&mut self.t_idx, i, t.name).clicked() { self.sm.reset(); }
+                            if ui.selectable_value(&mut self.t_idx, i, t.name).clicked() {
+                                changed_tuning = true;
+                            }
                         }
                     });
+                if changed_tuning {
+                    self.sm.reset();
+                    if let Ok(mut range) = self.range.lock() {
+                        *range = detection_range(&self.tunings[self.t_idx]);
+                    }
+                }
 
+                let mut edited_tuning = false;
                 ui.collapsing("Edit current tuning", |ui| {
                     let tuning = &mut self.tunings[self.t_idx];
                     for s in &mut tuning.strings {
                         ui.horizontal(|ui| {
                             ui.label(format!("{} {}", s.name, s.octave));
-                            if ui.add(egui::Slider::new(&mut s.frequency, 40.0..=400.0).text("Hz")).changed() {
-                                self.sm.reset();
+                            if ui.add(egui::Slider::new(&mut s.frequency, 20.0..=1800.0).text("Hz")).changed() {
+                                edited_tuning = true;
                             }
                         });
                     }
                 });
+                if edited_tuning {
+                    self.sm.reset();
+                    if let Ok(mut range) = self.range.lock() {
+                        *range = detection_range(&self.tunings[self.t_idx]);
+                    }
+                }
 
                 if ui.button(if self.ref_on {"■ Stop Ref"} else {"▶ Play Ref"}).clicked() { self.toggle_ref(); }
                 if ui.button(if self.listen {"Stop Mic"} else {"Start Mic"}).clicked() { self.toggle_mic(ctx); }
@@ -249,7 +301,7 @@ impl eframe::App for App {
 impl App {
     fn toggle_mic(&mut self, ctx:&egui::Context) {
         if self.listen { self.inp=None; self.listen=false; self.sm.reset(); return; }
-        let st=self.st.clone(); let ctx2=ctx.clone(); let a4=self.a4;
+        let st=self.st.clone(); let ctx2=ctx.clone(); let a4=self.a4; let range=self.range.clone();
         let h=cpal::default_host();
         let Some(d)=h.default_input_device() else {
             self.error = Some("No input microphone found".into());
@@ -265,26 +317,28 @@ impl App {
         let sr = cf.sample_rate.0 as f32;
         let mut b:Vec<f32>=vec![];
         let mut fft_planner = FftPlanner::new();
-        let fft = fft_planner.plan_fft_forward(2048);
-        let mut spectrum_buffer: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); 2048];
+        let fft = fft_planner.plan_fft_forward(FFT_WINDOW_SIZE);
+        let mut spectrum_buffer: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); FFT_WINDOW_SIZE];
         let mut smoother = Smoother::new();
         let s = match d.build_input_stream(&cf, move |d:&[f32],_|{
-            b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
-            if b.len()>=2048 {
-                let window = &b[b.len()-2048..];
-                if let Some(f) = detect_pitch_yin(window, sr) {
+            b.extend_from_slice(d); if b.len()>PITCH_WINDOW_SIZE * 2 { b.drain(..b.len()-PITCH_WINDOW_SIZE); }
+            if b.len()>=PITCH_WINDOW_SIZE {
+                let pitch_window = &b[b.len()-PITCH_WINDOW_SIZE..];
+                let fft_window = &b[b.len()-FFT_WINDOW_SIZE..];
+                let (min_freq, max_freq) = range.lock().map(|range| *range).unwrap_or((20.0, 1200.0));
+                if let Some(f) = detect_pitch_yin(pitch_window, sr, min_freq, max_freq) {
                     let f = smoother.add(Some(f)).unwrap_or(f);
                     let (n, cc) = frequency_to_note(f, a4);
                     if let Ok(mut g)=st.lock() { g.freq=Some(f); g.note=Some(n); g.cents=cc; }
                     ctx2.request_repaint();
                 }
                 // input level
-                let rms: f32 = window.iter().map(|&x| x*x).sum::<f32>().sqrt() / window.len() as f32;
+                let rms: f32 = pitch_window.iter().map(|&x| x*x).sum::<f32>().sqrt() / pitch_window.len() as f32;
                 let level = (rms * 12.0).clamp(0.0, 1.0);
                 if let Ok(mut g)=st.lock() { g.level = level; ctx2.request_repaint(); }
                 // Compute FFT spectrum occasionally
                 if b.len() % 512 == 0 {  // every ~ few frames
-                    for (i, &sample) in window.iter().enumerate() {
+                    for (i, &sample) in fft_window.iter().enumerate() {
                         spectrum_buffer[i] = Complex::new(sample * 0.5, 0.0); // windowing simple
                     }
                     fft.process(&mut spectrum_buffer);
@@ -410,11 +464,18 @@ fn main() -> eframe::Result<()> {
                 if let Ok(v) = s.parse() { app.a4 = v; }
             }
             if let Some(s) = storage.get_string("t_idx") {
-                if let Ok(v) = s.parse() { app.t_idx = v; }
+                if let Ok(v) = s.parse::<usize>() {
+                    if v < app.tunings.len() {
+                        app.t_idx = v;
+                    }
+                }
             }
             if let Some(s) = storage.get_string("spec") {
                 app.spec = s == "true";
             }
+        }
+        if let Ok(mut range) = app.range.lock() {
+            *range = detection_range(&app.tunings[app.t_idx]);
         }
         Box::new(app)
     }))
