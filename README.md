@@ -95,6 +95,7 @@ Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 
 ```
 Tuner/
+├── pitch-core/          # Shared Rust pitch core (YIN + MPM) - used by egui, WASM for web
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)

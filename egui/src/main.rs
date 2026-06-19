@@ -4,6 +4,7 @@ use cpal::{Stream, StreamConfig};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use rustfft::{FftPlanner, num_complex::Complex};
+use pitch_core::{detect_pitch_native, is_likely_power_chord_native};
 
 const A4: f32 = 440.0;
 const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -52,57 +53,6 @@ fn frequency_to_note(freq: f32, a4: f32) -> (String, f32) {
     let target = a4 * 2f32.powf((r - 69) as f32 / 12.0);
     let cents = 1200.0 * (freq / target).log2();
     (format!("{}{}", NOTE_NAMES[idx], oct), cents)
-}
-
-fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<(f32, f32)> {
-    let n = buf.len(); let h = n / 2; if h < 64 { return None; }
-    let rms = buf.iter().map(|x| x*x).sum::<f32>().sqrt() / n as f32;
-    if rms < 0.0025 { return None; }
-    let adaptive_th = 0.12 * (1.0 - (rms * 8.0).min(0.4));
-    let min_t = (sr / 400.0).max(1.0) as usize;
-    let max_t = (sr / 30.0).min(h as f32) as usize;
-    let mut d = vec![0.0; h];
-    for t in 0..h { let mut s = 0.0; for i in 0..h { let dlt = buf[i]-buf[i+t]; s += dlt*dlt; } d[t] = s; }
-    let mut y = vec![0.0; h]; y[0] = 1.0; let mut rs = 0.0;
-    for t in 1..h { rs += d[t]; y[t] = if rs>0.0 { d[t]*(t as f32 / rs) } else {1.0}; }
-    let mut te = None;
-    for t in min_t..max_t {
-        if y[t] < adaptive_th { let mut b = t; while b+1 < max_t && y[b+1] < y[b] { b += 1; } te = Some(b); break; }
-    }
-    let (t, conf) = match te { Some(v) => (v as f32, (1.0 - y[v]).clamp(0.0, 1.0)), None => {
-        let mut mv = f32::INFINITY; let mut b = 0usize;
-        for t in min_t..max_t { if y[t] < mv { mv = y[t]; b = t; } }
-        if mv > 0.35 { return None; } (b as f32, (1.0 - mv).clamp(0.0, 1.0))
-    }};
-    let mut bt = t;
-    let ti = t as usize;
-    if ti > 1 && ti < h-1 {
-        let (x0,x1,x2) = (y[ti-1], y[ti], y[ti+1]);
-        let den = 2.0*x1 - x0 - x2;
-        if den.abs() > 1e-9 {
-            let delta = (x2 - x0) / (2.0 * den);
-            if delta.abs() < 1.0 {
-                bt = t + delta;
-            }
-        }
-    }
-    let f = sr / bt;
-    if f > 30.0 && f < 400.0 { Some((f, conf)) } else { None }
-}
-
-fn is_power_chord(buf: &[f32], sr: f32, f: f32) -> bool {
-    if f < 40.0 { return false; }
-    let f5 = f * 1.4983;
-    let lag = (sr / f5) as usize;
-    if lag < 2 || lag >= buf.len() / 2 { return false; }
-    let mut corr = 0.0;
-    let mut e = 0.0;
-    let len = (buf.len() / 2).min(400);
-    for i in 0..len {
-        corr += buf[i] * buf[i + lag];
-        e += buf[i] * buf[i];
-    }
-    e > 0.0 && (corr / e) > 0.45
 }
 
 struct Smoother { ema: Option<f32>, hist: Vec<f32>, alpha: f32, maxh: usize }
@@ -274,9 +224,9 @@ impl App {
             b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
             if b.len()>=2048 {
                 let window = &b[b.len()-2048..];
-                if let Some((f, conf)) = detect_pitch_yin(window, sr) {
+                if let Some((f, conf)) = detect_pitch_native(window, sr) {
                     let (n, cc) = frequency_to_note(f, a4);
-                    let power = is_power_chord(window, sr, f);
+                    let power = is_likely_power_chord_native(window, sr, f);
                     if let Ok(mut g)=st.lock() { g.freq=Some(f); g.note=Some(n); g.cents=cc; g.confidence = conf; g.is_power = power; }
                     ctx2.request_repaint();
                 }
