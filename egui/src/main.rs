@@ -562,6 +562,7 @@ fn main() -> eframe::Result<()> {
 #[cfg(target_arch = "wasm32")]
 fn main() {
     console_error_panic_hook::set_once();
-    // For web, the eframe is initialized from JS using eframe wasm bindings.
-    // Audio feed is done via feed_audio_samples exported.
+    // Stub: full eframe web bootstrap (start_web) not resolving in this setup.
+    // The canvas and feed JS are provided; for full UI, would need proper web init.
+    // See https://github.com/emilk/eframe_template for standard web setup.
 }

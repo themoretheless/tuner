@@ -126,7 +126,7 @@ onUnmounted(() => {
           <select
             v-model="tuner.selectedInputDeviceId.value"
             class="bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-xs max-w-[220px]"
-            @change="if (tuner.isListening.value) { /* user can re-toggle mic */ }"
+            @change="if (tuner.isListening.value) { tuner.stop(); tuner.start(); }"
           >
             <option :value="null">Default</option>
             <option v-for="d in tuner.inputDevices.value" :key="d.deviceId" :value="d.deviceId">

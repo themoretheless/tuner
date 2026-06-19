@@ -13,14 +13,12 @@
       <button id="mic-btn">Toggle Mic</button>
     </div>
     <script type="module">
-      import init, { feed_audio_samples } from '/egui-wasm/guitar_tuner_egui.js';
-
-      async function run() {
-        await init();
-        // The egui app runs the UI (main in wasm is stub, full start requires eframe web init).
-        // For demo, the canvas is ready; visuals run when eframe is initialized in full setup.
-        window.feed_audio_samples = feed_audio_samples;
+      (async () => {
+        const mod = await import(/* @vite-ignore */ '/egui-wasm/guitar_tuner_egui.js');
+        const feed = mod.feed_audio_samples || mod.default;
+        window.feed_audio_samples = feed;
         console.log('egui wasm loaded, feed ready');
+        // Note: full egui UI requires proper eframe web bootstrap (currently stub in wasm main).
 
         // Basic mic for feed
         let audioCtx;
@@ -49,8 +47,7 @@
             btn.textContent = 'Toggle Mic';
           }
         };
-      }
-      run();
+      })();
     </script>
   </body>
 </html>
