@@ -80,10 +80,10 @@ onUnmounted(() => {
     </div>
 
     <div class="w-full max-w-[620px] space-y-6">
-      <!-- Main Card -->
-      <div class="card p-8 flex gap-6">
-        <!-- Left settings sidebar -->
-        <div class="w-40 flex-shrink-0 text-xs space-y-4">
+      <!-- Main area with left sidebar -->
+      <div class="flex gap-4">
+        <!-- Left sidebar with all settings -->
+        <div class="w-44 flex-shrink-0 text-xs space-y-4">
           <!-- Input device selection -->
           <div>
             <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">INPUT</div>
@@ -136,6 +136,28 @@ onUnmounted(() => {
               </label>
             </div>
           </div>
+
+          <!-- Tuning -->
+          <div>
+            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">TUNING</div>
+            <TuningSelector
+              :tunings="tuner.allTunings"
+              :current="tuner.currentTuning.value"
+              @change="tuner.setTuning"
+            />
+          </div>
+
+          <!-- Strings -->
+          <div>
+            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">STRINGS</div>
+            <StringSelector
+              :strings="tuner.strings.value"
+              :selected="tuner.selectedString.value"
+              :get-note-display="tuner.getNoteDisplay"
+              :format-freq="tuner.formatFreq"
+              @toggle="tuner.toggleString"
+            />
+          </div>
         </div>
 
         <!-- Right main content -->
@@ -177,38 +199,23 @@ onUnmounted(() => {
             :target="tuner.targetNote.value.frequency"
             :format-freq="tuner.formatFreq"
           />
-        </div>
-      </div>
 
-      <div class="card p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <TuningSelector
-            :tunings="tuner.allTunings"
-            :current="tuner.currentTuning.value"
-            @change="tuner.setTuning"
+          <PerStringCents
+            v-if="tuner.isListening.value"
+            :strings-with-cents="tuner.stringsWithCents.value"
+            :strings="tuner.strings.value"
+            :selected-string="tuner.selectedString.value"
+            @select="tuner.toggleString"
+          />
+
+          <Fretboard
+            v-if="tuner.isListening.value"
+            :strings="tuner.strings.value"
+            :target-freq="tuner.targetNote.value.frequency"
+            :selected-string="tuner.selectedString.value"
+            @select="tuner.toggleString"
           />
         </div>
-
-        <StringSelector
-          :strings="tuner.strings.value"
-          :selected="tuner.selectedString.value"
-          :get-note-display="tuner.getNoteDisplay"
-          :format-freq="tuner.formatFreq"
-          @toggle="tuner.toggleString"
-        />
-
-        <PerStringCents
-          v-if="tuner.isListening.value"
-          :strings-with-cents="tuner.stringsWithCents.value"
-        />
-
-        <Fretboard
-          v-if="tuner.isListening.value"
-          :strings="tuner.strings.value"
-          :target-freq="tuner.targetNote.value.frequency"
-          :selected-string="tuner.selectedString.value"
-          @select="tuner.toggleString"
-        />
       </div>
 
       <TunerControls
