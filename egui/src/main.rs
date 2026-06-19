@@ -21,6 +21,12 @@ use pitch_core::{
     get_tunings, Tuning, TunerEngine, TunerUpdate,
 };
 
+#[cfg(target_arch = "wasm32")]
+static WEB_ENGINE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<TunerEngine>>> = std::sync::OnceLock::new();
+
+#[cfg(target_arch = "wasm32")]
+static WEB_STATE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<State>>> = std::sync::OnceLock::new();
+
 // Use shared Smoother from pitch-core
 // (native Rust, no WASM)
 
@@ -501,22 +507,30 @@ impl App {
     }
 }
 
+// Free function for web audio feed (exported for JS)
 #[cfg(target_arch = "wasm32")]
-impl App {
-    pub fn feed_audio_samples(&mut self, samples: &[f32]) {
-        if samples.len() < 2048 {
-            return;
-        }
-        let window = &samples[0..2048];
-        let sr = 48000.0;
-        let update = {
-            if let Ok(mut eng) = self.engine.lock() {
-                eng.process(window, sr)
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn feed_audio_samples(samples: &[f32]) {
+    if samples.len() < 2048 {
+        return;
+    }
+    let window = &samples[0..2048];
+    let sr = 48000.0;
+
+    let update = {
+        if let Some(eng) = WEB_ENGINE.get() {
+            if let Ok(mut engine) = eng.lock() {
+                engine.process(window, sr)
             } else {
                 TunerUpdate::default()
             }
-        };
-        if let Ok(mut g) = self.st.lock() {
+        } else {
+            TunerUpdate::default()
+        }
+    };
+
+    if let Some(st) = WEB_STATE.get() {
+        if let Ok(mut g) = st.lock() {
             g.freq = update.freq;
             g.note = Some(update.note.clone());
             g.cents = update.cents;
@@ -530,6 +544,8 @@ impl App {
         }
     }
 }
+
+
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
@@ -562,8 +578,17 @@ fn main() -> eframe::Result<()> {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn main() {
+#[wasm_bindgen::prelude::wasm_bindgen(start)]
+pub fn start() {
     console_error_panic_hook::set_once();
+
+    // init shared state for web audio feed
+    let _ = WEB_ENGINE.get_or_init(|| {
+        std::sync::Arc::new(std::sync::Mutex::new(TunerEngine::new(440.0)))
+    });
+    let _ = WEB_STATE.get_or_init(|| {
+        std::sync::Arc::new(std::sync::Mutex::new(State::default()))
+    });
 
     let web_options = eframe::WebOptions::default();
     wasm_bindgen_futures::spawn_local(async {
@@ -572,9 +597,21 @@ fn main() {
             .start(
                 "the_canvas_id",
                 web_options,
-                Box::new(|_cc| Box::new(App::default())),
+                Box::new(|_cc| {
+                    let mut app = App::default();
+                    if let Some(state) = WEB_STATE.get() {
+                        app.st = state.clone();
+                    }
+                    if let Some(eng) = WEB_ENGINE.get() {
+                        app.engine = eng.clone();
+                    }
+                    Box::new(app)
+                }),
             )
             .await
             .expect("failed to start eframe");
     });
 }
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}

@@ -1,3 +1,15 @@
+/**
+ * @param {Float32Array} samples
+ */
+export function feed_audio_samples(samples) {
+    const ptr0 = passArrayF32ToWasm0(samples, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    wasm.feed_audio_samples(ptr0, len0);
+}
+
+export function start() {
+    wasm.start();
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -1321,6 +1333,13 @@ function makeMutClosure(arg0, arg1, f) {
     };
     CLOSURE_DTORS.register(real, state, state);
     return real;
+}
+
+function passArrayF32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getFloat32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
