@@ -81,90 +81,103 @@ onUnmounted(() => {
 
     <div class="w-full max-w-[620px] space-y-6">
       <!-- Main Card -->
-      <div class="card p-8 flex flex-col items-center gap-6">
-        <MicButton :is-listening="tuner.isListening.value" @toggle="toggleMic" />
-
-        <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
-
-        <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-        <Spectrogram v-if="tuner.showSpectrogram.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-        <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" />
-
-        <!-- A4 + visual toggles (placed near the visualizers) -->
-        <div class="flex items-center gap-3 text-xs text-slate-400 mt-1">
-          <div class="flex items-center gap-2">
-            <span>{{ t('a4.label') }}</span>
-            <input
-              type="number"
-              class="w-16 bg-[#1f2937] border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-sm"
-              :value="tuner.a4.value"
-              @input="tuner.setA4(Number(($event.target as HTMLInputElement).value))"
-              min="420"
-              max="460"
-              step="1"
-            />
-            <span class="text-slate-500">Hz</span>
+      <div class="card p-8 flex gap-6">
+        <!-- Left settings sidebar -->
+        <div class="w-40 flex-shrink-0 text-xs space-y-4">
+          <!-- Input device selection -->
+          <div>
+            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">INPUT</div>
+            <div class="space-y-1">
+              <div class="flex items-center gap-1">
+                <button @click="tuner.listInputDevices()" class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] hover:bg-slate-700">List</button>
+                <select
+                  v-model="tuner.selectedInputDeviceId.value"
+                  class="bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-[9px] flex-1 min-w-0"
+                  @change="if (tuner.isListening.value) { tuner.stop(); tuner.start(); }"
+                >
+                  <option :value="null">Default</option>
+                  <option v-for="d in tuner.inputDevices.value" :key="d.deviceId" :value="d.deviceId">
+                    {{ d.label }}
+                  </option>
+                </select>
+              </div>
+              <div v-if="tuner.isListening.value" class="text-emerald-400 text-[9px]">● active</div>
+            </div>
           </div>
-          <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" v-model="tuner.showWaveform.value" class="accent-emerald-500" />
-            <span>{{ t('waveform') }}</span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
-            <span>{{ t('spectrum') }}</span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500" />
-            <span>{{ t('spectrogram') }}</span>
-          </label>
+
+          <!-- Display settings -->
+          <div>
+            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">DISPLAY</div>
+            <div class="space-y-1">
+              <div class="flex items-center gap-1">
+                <span class="w-6 text-[9px] text-slate-500">A4</span>
+                <input
+                  type="number"
+                  class="w-12 bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-right font-mono text-[9px]"
+                  :value="tuner.a4.value"
+                  @input="tuner.setA4(Number(($event.target as HTMLInputElement).value))"
+                  min="420"
+                  max="460"
+                  step="1"
+                />
+                <span class="text-slate-500 text-[9px]">Hz</span>
+              </div>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" v-model="tuner.showWaveform.value" class="accent-emerald-500 scale-75" />
+                <span class="text-[10px]">Waveform</span>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500 scale-75" />
+                <span class="text-[10px]">Spectrum</span>
+              </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500 scale-75" />
+                <span class="text-[10px]">Spectrogram</span>
+              </label>
+            </div>
+          </div>
         </div>
 
-        <!-- Input device selector -->
-        <div class="mt-1 flex items-center gap-2 text-xs">
-          <span class="text-slate-400">Mic:</span>
-          <button @click="tuner.listInputDevices()" class="px-2 py-0.5 rounded bg-slate-800 text-[10px]">List</button>
-          <select
-            v-model="tuner.selectedInputDeviceId.value"
-            class="bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-xs max-w-[220px]"
-            @change="if (tuner.isListening.value) { tuner.stop(); tuner.start(); }"
-          >
-            <option :value="null">Default</option>
-            <option v-for="d in tuner.inputDevices.value" :key="d.deviceId" :value="d.deviceId">
-              {{ d.label }}
-            </option>
-          </select>
-          <span v-if="tuner.isListening.value" class="text-emerald-400 text-[10px]">●</span>
+        <!-- Right main content -->
+        <div class="flex-1 flex flex-col items-center gap-4 min-w-0">
+          <MicButton :is-listening="tuner.isListening.value" @toggle="toggleMic" />
+
+          <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
+
+          <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+          <Spectrogram v-if="tuner.showSpectrogram.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+          <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" />
+
+          <!-- Error -->
+          <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900 w-full">
+            {{ tuner.error.value }}
+            <button @click="tuner.clearError()" class="ml-2 underline">dismiss</button>
+          </div>
+
+          <NoteDisplay
+            :display="tuner.currentNoteDisplay.value"
+            :is-detected="!!tuner.detectedNote.value"
+            :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
+            :target-freq="tuner.targetNote.value.frequency"
+            :format-freq="tuner.formatFreq"
+            :confidence="tuner.confidence.value"
+            :is-power-chord="tuner.isPowerChord.value"
+          />
+
+          <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
+
+          <CentsHistory
+            v-if="tuner.isListening.value"
+            :history="tuner.centsHistory.value"
+            :is-listening="tuner.isListening.value"
+          />
+
+          <FreqReadout
+            :detected="tuner.smoothedFrequency.value"
+            :target="tuner.targetNote.value.frequency"
+            :format-freq="tuner.formatFreq"
+          />
         </div>
-
-        <!-- Error -->
-        <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900">
-          {{ tuner.error.value }}
-          <button @click="tuner.clearError()" class="ml-2 underline">dismiss</button>
-        </div>
-
-        <NoteDisplay
-          :display="tuner.currentNoteDisplay.value"
-          :is-detected="!!tuner.detectedNote.value"
-          :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
-          :target-freq="tuner.targetNote.value.frequency"
-          :format-freq="tuner.formatFreq"
-          :confidence="tuner.confidence.value"
-          :is-power-chord="tuner.isPowerChord.value"
-        />
-
-        <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
-
-        <CentsHistory
-          v-if="tuner.isListening.value"
-          :history="tuner.centsHistory.value"
-          :is-listening="tuner.isListening.value"
-        />
-
-        <FreqReadout
-          :detected="tuner.smoothedFrequency.value"
-          :target="tuner.targetNote.value.frequency"
-          :format-freq="tuner.formatFreq"
-        />
       </div>
 
       <div class="card p-6 space-y-4">
