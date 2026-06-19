@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Note } from '../utils/notes'
 import { useL10n } from '../stores/l10n'
 
-defineProps<{
+const props = defineProps<{
   strings: Note[]
   selected: Note | null
   selectedIndex: number | null
+  leftHanded: boolean
   getNoteDisplay: (n: Note) => string
   formatFreq: (n: number) => string
 }>()
@@ -15,6 +17,11 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useL10n()
+
+const displayStrings = computed(() => {
+  const items = props.strings.map((string, index) => ({ string, index }))
+  return props.leftHanded ? [...items].reverse() : items
+})
 </script>
 
 <template>
@@ -32,19 +39,19 @@ const { t } = useL10n()
       </button>
     </div>
 
-    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+    <div class="string-grid grid grid-cols-3 sm:grid-cols-6 gap-2">
       <button
-        v-for="(str, index) in strings"
-        :key="`${getNoteDisplay(str)}-${index}`"
+        v-for="item in displayStrings"
+        :key="`${getNoteDisplay(item.string)}-${item.index}`"
         type="button"
-        :data-string-button="getNoteDisplay(str)"
-        :aria-pressed="selectedIndex === index ? 'true' : 'false'"
+        :data-string-button="getNoteDisplay(item.string)"
+        :aria-pressed="selectedIndex === item.index ? 'true' : 'false'"
         class="string-btn"
-        :class="{ active: selectedIndex === index }"
-        @click="emit('toggle', str, index)"
+        :class="{ active: selectedIndex === item.index }"
+        @click="emit('toggle', item.string, item.index)"
       >
-        {{ getNoteDisplay(str) }}
-        <div class="text-[10px] text-slate-500">{{ formatFreq(str.frequency) }}</div>
+        {{ getNoteDisplay(item.string) }}
+        <div class="text-[10px] text-slate-500">{{ formatFreq(item.string.frequency) }}</div>
       </button>
     </div>
   </div>

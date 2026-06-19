@@ -25,7 +25,7 @@ const { t } = useL10n()
 const draftName = ref('')
 const draftStrings = ref<Array<{ name: NoteName; octave: number }>>([])
 const isOpen = ref(false)
-const octaveOptions = [1, 2, 3, 4, 5]
+const octaveOptions = [0, 1, 2, 3, 4, 5, 6]
 
 const isCustom = computed(() => props.current.kind === 'custom')
 

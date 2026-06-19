@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {
-  INSTRUMENTS,
-  TEMPERAMENTS,
+  type InstrumentPreset,
   type InstrumentId,
+  type Temperament,
   type TemperamentId,
 } from '../utils/notes'
 import { useL10n } from '../stores/l10n'
@@ -10,7 +10,9 @@ import { useL10n } from '../stores/l10n'
 defineProps<{
   activeInstrument: InstrumentId
   capo: number
+  instruments: InstrumentPreset[]
   temperament: TemperamentId
+  temperaments: Temperament[]
   transpose: number
 }>()
 
@@ -33,7 +35,7 @@ const { t } = useL10n()
         :value="activeInstrument"
         @change="emit('instrument-change', ($event.target as HTMLSelectElement).value as InstrumentId)"
       >
-        <option v-for="instrument in INSTRUMENTS" :key="instrument.id" :value="instrument.id">
+        <option v-for="instrument in instruments" :key="instrument.id" :value="instrument.id">
           {{ instrument.name }}
         </option>
       </select>
@@ -46,7 +48,7 @@ const { t } = useL10n()
         :value="temperament"
         @change="emit('temperament-change', ($event.target as HTMLSelectElement).value as TemperamentId)"
       >
-        <option v-for="item in TEMPERAMENTS" :key="item.id" :value="item.id">
+        <option v-for="item in temperaments" :key="item.id" :value="item.id">
           {{ item.name }}
         </option>
       </select>

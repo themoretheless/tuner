@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useTuner } from './composables/useTuner'
 import { useL10n } from './stores/l10n'
 import MicButton from './components/MicButton.vue'
@@ -16,14 +16,23 @@ import TuningSelector from './components/TuningSelector.vue'
 import TuningOptions from './components/TuningOptions.vue'
 import CustomTuningEditor from './components/CustomTuningEditor.vue'
 import CustomTuningTransfer from './components/CustomTuningTransfer.vue'
+import DisplayPreferences from './components/DisplayPreferences.vue'
+import InstrumentProfileEditor from './components/InstrumentProfileEditor.vue'
 import StringOffsetsPanel from './components/StringOffsetsPanel.vue'
+import TemperamentPanel from './components/TemperamentPanel.vue'
 import EarTrainingPanel from './components/EarTrainingPanel.vue'
+import PracticeStatsPanel from './components/PracticeStatsPanel.vue'
 import MetronomePanel from './components/MetronomePanel.vue'
 import Waveform from './components/Waveform.vue'
 import Spectrum from './components/Spectrum.vue'
 
 const tuner = useTuner()
 const { lang, t, toggleLang } = useL10n()
+const appClasses = computed(() => [
+  `theme-${tuner.themeMode.value}`,
+  `layout-${tuner.layoutMode.value}`,
+  { 'layout-left-handed': tuner.leftHanded.value },
+])
 
 function toggleMic() {
   if (tuner.isListening.value) tuner.stop()
@@ -41,9 +50,9 @@ function handleKey(e: KeyboardEvent) {
   if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'p') {
     tuner.toggleReferenceTone()
   }
-  // 1-6 for strings
+  // 1-9 for strings
   const num = Number.parseInt(e.key, 10)
-  if (num >= 1 && num <= 6 && tuner.strings.value[num - 1]) {
+  if (num >= 1 && num <= 9 && tuner.strings.value[num - 1]) {
     tuner.toggleString(tuner.strings.value[num - 1], num - 1)
   }
 }
@@ -58,9 +67,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200">
+  <div class="app-root min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200" :class="appClasses">
     <!-- Header -->
-    <div class="w-full max-w-[620px] flex items-center justify-between mb-6">
+    <div class="app-width w-full flex items-center justify-between mb-6">
       <div>
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-[#052e16]">
@@ -85,9 +94,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="w-full max-w-[620px] space-y-6">
+    <div class="app-width w-full space-y-6">
       <!-- Main Card -->
-      <div class="card p-8 flex flex-col items-center gap-6">
+      <div class="main-card card p-8 flex flex-col items-center gap-6">
         <MicButton :is-listening="tuner.isListening.value" @toggle="toggleMic" />
 
         <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
@@ -152,6 +161,16 @@ onUnmounted(() => {
           @change="tuner.setDisplayMode"
         />
 
+        <DisplayPreferences
+          :layout-mode="tuner.layoutMode.value"
+          :left-handed="tuner.leftHanded.value"
+          :theme-mode="tuner.themeMode.value"
+          @fullscreen="tuner.toggleFullscreen"
+          @layout-change="tuner.setLayoutMode"
+          @left-handed-change="tuner.setLeftHanded"
+          @theme-change="tuner.setThemeMode"
+        />
+
         <CentsHistoryGraph :points="tuner.centsHistory.value" />
 
         <FreqReadout
@@ -165,12 +184,25 @@ onUnmounted(() => {
         <TuningOptions
           :active-instrument="tuner.activeInstrument.value"
           :capo="tuner.capo.value"
+          :instruments="tuner.instrumentOptions.value"
           :temperament="tuner.temperament.value"
+          :temperaments="tuner.temperamentOptions.value"
           :transpose="tuner.transpose.value"
           @instrument-change="tuner.setInstrument"
           @capo-change="tuner.setCapo"
           @temperament-change="tuner.setTemperament"
           @transpose-change="tuner.setTranspose"
+        />
+
+        <TemperamentPanel
+          :custom-temperaments="tuner.customTemperaments.value"
+          :offsets="tuner.temperamentOffsets.value"
+          :root="tuner.temperamentRoot.value"
+          :temperament="tuner.temperament.value"
+          :temperaments="tuner.temperamentOptions.value"
+          @delete="tuner.deleteCustomTemperament"
+          @root-change="tuner.setTemperamentRoot"
+          @save="tuner.saveCustomTemperament"
         />
 
         <div class="flex min-w-0 items-center justify-between">
@@ -186,6 +218,7 @@ onUnmounted(() => {
           :strings="tuner.strings.value"
           :selected="tuner.selectedString.value"
           :selected-index="tuner.selectedStringIndex.value"
+          :left-handed="tuner.leftHanded.value"
           :get-note-display="tuner.getNoteDisplay"
           :format-freq="tuner.formatFreq"
           @toggle="tuner.toggleString"
@@ -213,6 +246,11 @@ onUnmounted(() => {
           :tunings="tuner.customTunings.value"
           @import="tuner.importCustomTunings"
         />
+        <InstrumentProfileEditor
+          :custom-instruments="tuner.customInstruments.value"
+          @delete="tuner.deleteInstrumentProfile"
+          @save="tuner.saveInstrumentProfile"
+        />
       </div>
 
       <TunerControls
@@ -236,6 +274,13 @@ onUnmounted(() => {
         @play="tuner.playEarTraining"
         @reset="tuner.resetEarTraining"
         @reveal="tuner.revealEarTraining"
+      />
+
+      <PracticeStatsPanel
+        :export-stats="tuner.exportPracticeStats"
+        :history="tuner.practiceHistory.value"
+        :summary="tuner.practiceSummary.value"
+        @clear="tuner.clearPracticeHistory"
       />
 
       <MetronomePanel
