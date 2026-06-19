@@ -8,7 +8,7 @@ export interface AudioFrame {
   sampleRate: number;
 }
 
-export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 2048) {
+export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096) {
   const isListening = ref(false);
   const error = ref<string | null>(null);
   const analyser = ref<AnalyserNode | null>(null);

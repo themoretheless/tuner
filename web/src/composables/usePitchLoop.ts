@@ -1,11 +1,21 @@
-import { onUnmounted, ref } from 'vue';
+import { onUnmounted, ref, watch, type Ref } from 'vue';
 import type { AudioFrame } from './useAudioInput';
-import { detectPitch, FrequencySmoother, computeSignalStats, normalizeLevel } from '../utils/pitch';
+import {
+  DEFAULT_PITCH_DETECTION_RANGE,
+  detectPitch,
+  FrequencySmoother,
+  computeSignalStats,
+  normalizeLevel,
+  type PitchDetectionRange,
+} from '../utils/pitch';
 
 const DETECTION_MISS_LIMIT = 12;
 const PITCH_DETECT_INTERVAL_MS = 33;
 
-export function usePitchLoop(readFrame: () => AudioFrame | null) {
+export function usePitchLoop(
+  readFrame: () => AudioFrame | null,
+  detectionRange: Ref<PitchDetectionRange> = ref(DEFAULT_PITCH_DETECTION_RANGE),
+) {
   const currentFrequency = ref<number | null>(null);
   const smoothedFrequency = ref<number | null>(null);
   const volume = ref(0);
@@ -58,7 +68,7 @@ export function usePitchLoop(readFrame: () => AudioFrame | null) {
       applyDetectedFrequency(null);
     } else if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
       lastPitchDetectAt = now;
-      applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats));
+      applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats, detectionRange.value));
     }
 
     rafId = requestAnimationFrame(tick);
@@ -80,6 +90,7 @@ export function usePitchLoop(readFrame: () => AudioFrame | null) {
   }
 
   onUnmounted(stop);
+  watch(detectionRange, reset, { deep: true });
 
   return {
     currentFrequency,

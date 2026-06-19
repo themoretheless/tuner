@@ -2,8 +2,16 @@
 // YIN algorithm (much better for guitar than plain autocorrelation)
 // + fallback to improved autocorrelation
 
-const GUITAR_MIN_FREQ = 30;
-const GUITAR_MAX_FREQ = 400;
+export interface PitchDetectionRange {
+  minFrequency: number;
+  maxFrequency: number;
+}
+
+export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
+  minFrequency: 24,
+  maxFrequency: 1200,
+};
+
 const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
 const MIN_RMS = 0.0025;
 const MIN_PEAK = 0.012;
@@ -43,17 +51,35 @@ function ensureYinBuffers(size: number) {
   return { yin: yinBuffer, diff: diffBuffer };
 }
 
+export function normalizePitchDetectionRange(range: Partial<PitchDetectionRange> | null | undefined): PitchDetectionRange {
+  const minFrequency = Math.max(20, Math.min(600, Number(range?.minFrequency) || DEFAULT_PITCH_DETECTION_RANGE.minFrequency));
+  const maxFrequency = Math.max(80, Math.min(1800, Number(range?.maxFrequency) || DEFAULT_PITCH_DETECTION_RANGE.maxFrequency));
+
+  if (maxFrequency <= minFrequency * 1.2) {
+    return { ...DEFAULT_PITCH_DETECTION_RANGE };
+  }
+
+  return { minFrequency, maxFrequency };
+}
+
 /**
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
-export function detectPitchYIN(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
+export function detectPitchYIN(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
   const size = buffer.length;
   const half = Math.floor(size / 2);
+  const detectionRange = normalizePitchDetectionRange(range);
 
-  // Limit tau to guitar frequency range for perf (avoid useless high lags)
-  const minTau = Math.floor(sampleRate / GUITAR_MAX_FREQ);
-  const maxTau = Math.min(half, Math.floor(sampleRate / GUITAR_MIN_FREQ));
+  // Limit tau to the active instrument range for perf and correctness.
+  const minTau = Math.max(1, Math.floor(sampleRate / detectionRange.maxFrequency));
+  const maxTau = Math.min(half, Math.floor(sampleRate / detectionRange.minFrequency));
+  if (maxTau <= minTau + 2) return null;
 
   // Gate on energy
   if (stats.rms < MIN_RMS || stats.maxAbs < MIN_PEAK) return null;
@@ -120,7 +146,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number, stats =
 
   const freq = sampleRate / betterTau;
 
-  if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
+  if (freq < detectionRange.minFrequency || freq > detectionRange.maxFrequency) return null;
   return freq;
 }
 
@@ -134,9 +160,17 @@ function ensureBuffers(size: number) {
   return { corr: corrBuffer, win: windowBuffer };
 }
 
-export function autoCorrelate(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
+export function autoCorrelate(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
   const SIZE = buffer.length;
-  const maxLag = Math.min(Math.floor(sampleRate / GUITAR_MIN_FREQ), Math.floor(SIZE / 2));
+  const detectionRange = normalizePitchDetectionRange(range);
+  const minLag = Math.max(1, Math.floor(sampleRate / detectionRange.maxFrequency));
+  const maxLag = Math.min(Math.floor(sampleRate / detectionRange.minFrequency), Math.floor(SIZE / 2));
+  if (maxLag <= minLag + 2) return null;
 
   if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
 
@@ -156,7 +190,7 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number, stats = 
     corr[lag] = s;
   }
 
-  let d = 1;
+  let d = minLag;
   while (d < corrSize - 1 && corr[d] > corr[d + 1]) d++;
 
   let bestLag = -1, bestVal = -1;
@@ -173,19 +207,24 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number, stats = 
   }
 
   const freq = sampleRate / period;
-  return (freq >= GUITAR_MIN_FREQ && freq <= GUITAR_MAX_FREQ) ? freq : null;
+  return (freq >= detectionRange.minFrequency && freq <= detectionRange.maxFrequency) ? freq : null;
 }
 
 /** Main detector - prefers YIN */
-export function detectPitch(buffer: Float32Array, sampleRate: number, stats = computeSignalStats(buffer)): number | null {
+export function detectPitch(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
   if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
 
   // Try YIN first
-  const yinResult = detectPitchYIN(buffer, sampleRate, stats);
+  const yinResult = detectPitchYIN(buffer, sampleRate, stats, range);
   if (yinResult != null) return yinResult;
 
   // Fallback to autocorrelation
-  return autoCorrelate(buffer, sampleRate, stats);
+  return autoCorrelate(buffer, sampleRate, stats, range);
 }
 
 export class FrequencySmoother {

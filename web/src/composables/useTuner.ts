@@ -1,4 +1,4 @@
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useAudioInput } from './useAudioInput';
 import { useCentsHistory } from './useCentsHistory';
 import { useEarTraining } from './useEarTraining';
@@ -7,12 +7,14 @@ import { usePitchLoop } from './usePitchLoop';
 import { useReferenceTone } from './useReferenceTone';
 import { useSettings } from './useSettings';
 import { useTuningState } from './useTuningState';
+import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
   const settings = useSettings();
   const audio = useAudioInput(settings.selectedInputDeviceId);
-  const pitch = usePitchLoop(audio.readFrame);
+  const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
+  const pitch = usePitchLoop(audio.readFrame, detectionRange);
   const tuning = useTuningState(pitch.smoothedFrequency, {
     onResetDetection: pitch.reset,
   });
@@ -25,6 +27,10 @@ export function useTuner() {
     settings.metronomeSubdivision,
   );
   const practiceSummary = computed(() => summarizePractice(settings.practiceHistory.value));
+
+  watch(tuning.detectionRange, (range) => {
+    detectionRange.value = range;
+  }, { immediate: true });
 
   async function start() {
     await audio.start();
@@ -144,6 +150,7 @@ export function useTuner() {
 
     // computed
     detectedNote: tuning.detectedNote,
+    detectionRange,
     targetNote: tuning.targetNote,
     cents: tuning.cents,
     isInTune: tuning.isInTune,

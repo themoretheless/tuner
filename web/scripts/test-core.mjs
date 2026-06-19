@@ -20,6 +20,14 @@ async function bundleModule(source, outfile) {
   return import(pathToFileURL(output).href);
 }
 
+function sineBuffer(frequency, sampleRate = 44100, size = 4096) {
+  const buffer = new Float32Array(size);
+  for (let i = 0; i < buffer.length; i += 1) {
+    buffer[i] = Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 0.4;
+  }
+  return buffer;
+}
+
 try {
   const notes = await bundleModule('src/utils/notes.ts', 'notes.mjs');
   const pitch = await bundleModule('src/utils/pitch.ts', 'pitch.mjs');
@@ -60,14 +68,33 @@ try {
   assert.equal(notes.temperamentOffset('D', 'custom-test', 'C', customTemperaments), 2);
 
   const sampleRate = 44100;
-  const buffer = new Float32Array(2048);
-  for (let i = 0; i < buffer.length; i += 1) {
-    buffer[i] = Math.sin((2 * Math.PI * 110 * i) / sampleRate) * 0.4;
-  }
+  const buffer = sineBuffer(110, sampleRate, 4096);
   const stats = pitch.computeSignalStats(buffer);
   const detected = pitch.detectPitch(buffer, sampleRate, stats);
   assert.ok(detected != null, 'pitch should be detected');
   assert.ok(Math.abs(detected - 110) < 1.5, `expected ~110Hz, got ${detected}`);
+
+  const b0Frequency = notes.noteWithA4({ name: 'B', octave: 0 }).frequency;
+  const b0Buffer = sineBuffer(b0Frequency, sampleRate, 4096);
+  const b0Detected = pitch.detectPitch(
+    b0Buffer,
+    sampleRate,
+    pitch.computeSignalStats(b0Buffer),
+    { minFrequency: 20, maxFrequency: 80 },
+  );
+  assert.ok(b0Detected != null, 'low bass B0 should be detected');
+  assert.ok(Math.abs(b0Detected - b0Frequency) < 0.8, `expected ~${b0Frequency}Hz, got ${b0Detected}`);
+
+  const e5Frequency = notes.noteWithA4({ name: 'E', octave: 5 }).frequency;
+  const e5Buffer = sineBuffer(e5Frequency, sampleRate, 4096);
+  const e5Detected = pitch.detectPitch(
+    e5Buffer,
+    sampleRate,
+    pitch.computeSignalStats(e5Buffer),
+    { minFrequency: 180, maxFrequency: 1000 },
+  );
+  assert.ok(e5Detected != null, 'high mandolin/violin E5 should be detected');
+  assert.ok(Math.abs(e5Detected - e5Frequency) < 2.5, `expected ~${e5Frequency}Hz, got ${e5Detected}`);
 
   process.stdout.write('core tests passed\n');
 } finally {

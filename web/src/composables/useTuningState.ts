@@ -1,5 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue';
 import type { DetectedNote, Note } from '../utils/notes';
+import type { PitchDetectionRange } from '../utils/pitch';
 import {
   INSTRUMENTS,
   NOTE_NAMES,
@@ -111,6 +112,22 @@ export function useTuningState(
   const strings = computed(() => baseStrings.value.map((string, index) => (
     applyCentsOffset(string, activeStringOffsets.value[index] ?? 0)
   )));
+  const detectionRange = computed<PitchDetectionRange>(() => {
+    const frequencies = strings.value
+      .map((string) => string.frequency)
+      .filter((frequency) => Number.isFinite(frequency) && frequency > 0);
+
+    if (!frequencies.length) {
+      return activeInstrument.value === 'vocal'
+        ? { minFrequency: 65, maxFrequency: 1100 }
+        : { minFrequency: 24, maxFrequency: 1200 };
+    }
+
+    return {
+      minFrequency: Math.max(20, Math.floor(Math.min(...frequencies) * 0.65)),
+      maxFrequency: Math.min(1800, Math.ceil(Math.max(...frequencies) * 1.45)),
+    };
+  });
   const temperamentOffsets = computed(() => temperamentOffsetsByNote(
     temperament.value,
     temperamentRoot.value,
@@ -414,6 +431,7 @@ export function useTuningState(
     deleteCustomTuning,
     deleteInstrumentProfile,
     detectedNote,
+    detectionRange,
     exportCustomTunings,
     formatFreq,
     getNoteDisplay,
