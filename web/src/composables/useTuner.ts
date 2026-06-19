@@ -23,6 +23,7 @@ export function useTuner() {
   const isListening = ref(false);
   const currentFrequency = ref<number | null>(null);
   const smoothedFrequency = ref<number | null>(null);
+  const confidence = ref(0);
   const volume = ref(0);
   const error = ref<string | null>(null);
 
@@ -82,6 +83,15 @@ export function useTuner() {
   });
 
   const cents = computed(() => detectedNote.value?.cents ?? 0);
+
+  const stringsWithCents = computed(() => {
+    const f = smoothedFrequency.value;
+    if (!f) return currentTuning.value.strings.map(s => ({ ...s, cents: null as number | null }));
+    return currentTuning.value.strings.map(s => {
+      const c = getCents(f, s.frequency);
+      return { ...s, cents: c };
+    });
+  });
 
   const isInTune = computed(() => {
     const c = Math.abs(cents.value);
@@ -185,8 +195,10 @@ export function useTuner() {
     const rms = computeRmsVolume(timeDomainBuffer);
     volume.value = normalizeLevel(rms);
 
-    const freq = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? TARGET_SAMPLE_RATE);
+    const result = detectPitch(timeDomainBuffer, audioContext?.sampleRate ?? TARGET_SAMPLE_RATE);
+    const freq = result ? result.freq : null;
     currentFrequency.value = freq;
+    confidence.value = result ? result.confidence : 0;
 
     const smoothed = smoother.add(freq);
     smoothedFrequency.value = smoothed;
@@ -287,6 +299,7 @@ export function useTuner() {
     isListening,
     currentFrequency,
     smoothedFrequency,
+    confidence,
     volume,
     error,
     selectedString,
@@ -301,6 +314,7 @@ export function useTuner() {
     isInTune,
     currentNoteDisplay,
     strings,
+    stringsWithCents,
 
     // for visualizers
     analyser: analyserRef,

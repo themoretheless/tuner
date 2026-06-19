@@ -5,6 +5,7 @@ defineProps<{
   targetName: string
   targetFreq: number
   formatFreq: (n: number) => string
+  confidence: number
 }>()
 </script>
 
@@ -13,6 +14,9 @@ defineProps<{
     <div v-if="isDetected" class="flex flex-col items-center">
       <span class="note-letter text-emerald-400">{{ display }}</span>
       <div class="text-sm text-slate-400 tracking-[2px] mt-0.5">DETECTED</div>
+      <div class="mt-1 text-[10px] text-slate-500">
+        conf {{ (confidence * 100).toFixed(0) }}%
+      </div>
     </div>
     <div v-else class="text-6xl text-slate-700 font-light tracking-[-2px] py-6">—</div>
 

@@ -26,7 +26,7 @@ function ensureYinBuffers(size: number) {
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
-export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number | null {
+export function detectPitchYIN(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
   const size = buffer.length;
   const half = Math.floor(size / 2);
 
@@ -79,6 +79,8 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
     }
   }
 
+  let confidence = 0;
+
   // Fallback: global minimum if no threshold crossed (limited)
   if (tauEstimate === -1) {
     let minVal = Infinity;
@@ -89,6 +91,9 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
       }
     }
     if (minVal > 0.35) return null; // too uncertain
+    confidence = Math.max(0, 1 - minVal);
+  } else {
+    confidence = Math.max(0, Math.min(1, 1 - yin[tauEstimate]));
   }
 
   if (tauEstimate < 2) return null;
@@ -109,7 +114,7 @@ export function detectPitchYIN(buffer: Float32Array, sampleRate: number): number
   const freq = sampleRate / betterTau;
 
   if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
-  return freq;
+  return { freq, confidence };
 }
 
 // Legacy improved autocorrelation (kept for comparison / fallback)
@@ -122,7 +127,7 @@ function ensureBuffers(size: number) {
   return { corr: corrBuffer, win: windowBuffer };
 }
 
-export function autoCorrelate(buffer: Float32Array, sampleRate: number): number | null {
+export function autoCorrelate(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
   const SIZE = buffer.length;
   const maxLag = Math.min(Math.floor(sampleRate / GUITAR_MIN_FREQ), Math.floor(SIZE / 2));
 
@@ -169,11 +174,15 @@ export function autoCorrelate(buffer: Float32Array, sampleRate: number): number 
   }
 
   const freq = sampleRate / period;
-  return (freq >= GUITAR_MIN_FREQ && freq <= GUITAR_MAX_FREQ) ? freq : null;
+  if (freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ) return null;
+
+  // Lower confidence for autocorrelation fallback
+  const confidence = 0.6;
+  return { freq, confidence };
 }
 
 /** Main detector - prefers YIN */
-export function detectPitch(buffer: Float32Array, sampleRate: number): number | null {
+export function detectPitch(buffer: Float32Array, sampleRate: number): { freq: number; confidence: number } | null {
   // Try YIN first
   const yinResult = detectPitchYIN(buffer, sampleRate);
   if (yinResult != null) return yinResult;

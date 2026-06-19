@@ -54,7 +54,7 @@ fn frequency_to_note(freq: f32, a4: f32) -> (String, f32) {
     (format!("{}{}", NOTE_NAMES[idx], oct), cents)
 }
 
-fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<f32> {
+fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<(f32, f32)> {
     let n = buf.len(); let h = n / 2; if h < 64 { return None; }
     let rms = buf.iter().map(|x| x*x).sum::<f32>().sqrt() / n as f32;
     if rms < 0.0025 { return None; }
@@ -68,10 +68,10 @@ fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<f32> {
     for t in min_t..max_t {
         if y[t] < th { let mut b = t; while b+1 < max_t && y[b+1] < y[b] { b += 1; } te = Some(b); break; }
     }
-    let t = match te { Some(v) => v as f32, None => {
+    let (t, conf) = match te { Some(v) => (v as f32, (1.0 - y[v]).clamp(0.0, 1.0)), None => {
         let mut mv = f32::INFINITY; let mut b = 0usize;
         for t in min_t..max_t { if y[t] < mv { mv = y[t]; b = t; } }
-        if mv > 0.35 { return None; } b as f32
+        if mv > 0.35 { return None; } (b as f32, (1.0 - mv).clamp(0.0, 1.0))
     }};
     let mut bt = t;
     let ti = t as usize;
@@ -81,7 +81,7 @@ fn detect_pitch_yin(buf: &[f32], sr: f32) -> Option<f32> {
         if den.abs() > 1e-9 { bt = t + (x2-x0)/(2.0*den); }
     }
     let f = sr / bt;
-    if f > 30.0 && f < 400.0 { Some(f) } else { None }
+    if f > 30.0 && f < 400.0 { Some((f, conf)) } else { None }
 }
 
 struct Smoother { ema: Option<f32>, hist: Vec<f32>, alpha: f32, maxh: usize }
@@ -106,6 +106,7 @@ struct State {
     cents: f32,
     spectrum: Vec<f32>,  // magnitude spectrum, normalized 0..1
     level: f32, // input level 0..1
+    confidence: f32,
 }
 
 struct App {
@@ -151,7 +152,7 @@ impl eframe::App for App {
                 let ns = s.note.unwrap_or("—".into());
                 ui.label(egui::RichText::new(ns).size(78.0).strong());
                 if let Some(f) = s.freq { ui.label(format!("{:.1} Hz", f)); }
-                ui.label(format!("{:.1} ¢", s.cents));
+                ui.label(format!("{:.1} ¢  conf {:.0}%", s.cents, s.confidence * 100.0));
 
                 // input level
                 ui.add(egui::ProgressBar::new(s.level).text("Input level").desired_width(200.0));
@@ -250,9 +251,9 @@ impl App {
             b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
             if b.len()>=2048 {
                 let window = &b[b.len()-2048..];
-                if let Some(f) = detect_pitch_yin(window, sr) {
+                if let Some((f, conf)) = detect_pitch_yin(window, sr) {
                     let (n, cc) = frequency_to_note(f, a4);
-                    if let Ok(mut g)=st.lock() { g.freq=Some(f); g.note=Some(n); g.cents=cc; }
+                    if let Ok(mut g)=st.lock() { g.freq=Some(f); g.note=Some(n); g.cents=cc; g.confidence = conf; }
                     ctx2.request_repaint();
                 }
                 // input level

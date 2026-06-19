@@ -120,6 +120,7 @@ onUnmounted(() => {
           :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
           :target-freq="tuner.targetNote.value.frequency"
           :format-freq="tuner.formatFreq"
+          :confidence="tuner.confidence.value"
         />
 
         <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
@@ -147,6 +148,16 @@ onUnmounted(() => {
           :format-freq="tuner.formatFreq"
           @toggle="tuner.toggleString"
         />
+
+        <!-- Per-string cents (quick feature from ideas) -->
+        <div v-if="tuner.isListening.value && tuner.stringsWithCents.value.length" class="w-full max-w-[620px] text-xs text-slate-400 mt-2">
+          <div class="mb-1">Per string:</div>
+          <div class="flex gap-2 flex-wrap">
+            <span v-for="(s, i) in tuner.stringsWithCents.value" :key="i" class="px-1.5 py-0.5 rounded bg-[#1f2937]">
+              {{ s.name }}{{ s.octave }}: <span :class="Math.abs(s.cents || 0) < 5 ? 'text-emerald-400' : ''">{{ s.cents !== null ? s.cents.toFixed(0) + '¢' : '—' }}</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       <TunerControls
