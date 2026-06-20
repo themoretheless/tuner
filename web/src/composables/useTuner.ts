@@ -166,6 +166,8 @@ export function useTuner() {
     error.value = null;
     if (isListening.value) return;
 
+    await initPitchWasm(); // ensure WASM (incl. RMS) is loaded before using
+
     try {
       const audioConstraints: any = {
         echoCancellation: false,

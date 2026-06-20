@@ -105,7 +105,13 @@ export function computeRmsVolume(buffer: Float32Array): number {
       console.warn('WASM RMS failed');
     }
   }
-  return 0;
+  // JS fallback (simple RMS) - pure math, always available
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    const v = buffer[i];
+    sum += v * v;
+  }
+  return Math.sqrt(sum / buffer.length);
 }
 
 // Downsample for pitch detection perf (YIN O(n^2) expensive on 2048@60fps)
@@ -129,7 +135,8 @@ export function normalizeLevel(rms: number): number {
       console.warn('WASM normalize failed');
     }
   }
-  return 0;
+  // simple fallback for volume (same as core)
+  return Math.min(1, rms * 18);
 }
 
 export function isLikelyPowerChord(buffer: Float32Array, sampleRate: number, fundamental: number): boolean {
