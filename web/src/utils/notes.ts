@@ -131,7 +131,9 @@ export function frequencyToMidi(freq: number, a4 = 440): number {
 
 export function frequencyToNote(freq: number, a4 = 440): Note {
   const midi = frequencyToMidi(freq, a4);
-  const name = NOTE_NAMES[midi % 12];
+  // Guard against negative MIDI (sub-audible / garbage input): JS % keeps the
+  // sign, so midi % 12 could be negative and index NOTE_NAMES out of bounds.
+  const name = NOTE_NAMES[((midi % 12) + 12) % 12];
   const octave = Math.floor(midi / 12) - 1;
   const targetFreq = midiToFrequency(midi, a4);
   return { name, octave, frequency: targetFreq };

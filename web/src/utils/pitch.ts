@@ -3,17 +3,33 @@
 // No JS fallback implementations - build WASM for functionality.
 
 let wasmModule: any = null;
+let wasmFailed = false;
+
+/** True once the WASM pitch core is loaded and detection is available. */
+export function isPitchWasmReady(): boolean {
+  return !!wasmModule;
+}
+
+/** True if a previous load attempt failed (so the UI can surface it). */
+export function didPitchWasmFail(): boolean {
+  return wasmFailed;
+}
 
 export async function initPitchWasm() {
   if (wasmModule) return;
+  wasmFailed = false;
   try {
-    // @ts-expect-error - wasm module generated at build time
-    const mod = await import(/* @vite-ignore */ '/wasm/pitch_core.js');
+    // Resolve relative to the Vite base (e.g. '/tuner/') so the WASM glue and
+    // its .wasm load correctly when the app is not served from the domain root.
+    const base = import.meta.env.BASE_URL || '/';
+    // Built at compile time into public/wasm; specifier is dynamic so TS leaves it as any.
+    const mod = await import(/* @vite-ignore */ `${base}wasm/pitch_core.js`);
     await mod.default();
     wasmModule = mod;
     console.log('[pitch] WASM core loaded');
   } catch (e) {
-    console.warn('[pitch] WASM core failed to load. Functions will return no-op results.');
+    wasmFailed = true;
+    console.warn('[pitch] WASM core failed to load. Functions will return no-op results.', e);
   }
 }
 

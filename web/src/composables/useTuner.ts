@@ -9,7 +9,7 @@ import {
   formatFreq,
   type Tuning,
 } from '../utils/notes';
-import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch, initPitchWasm } from '../utils/pitch';
+import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch, initPitchWasm, isPitchWasmReady } from '../utils/pitch';
 import { useSettings } from './useSettings';
 
 const PREFERRED_SAMPLE_RATE = 48000;
@@ -31,6 +31,7 @@ initPitchWasm();
 
 export function useTuner() {
   const isListening = ref(false);
+  const micPending = ref(false); // true while waiting on the getUserMedia prompt
   const currentFrequency = ref<number | null>(null);
   const smoothedFrequency = ref<number | null>(null);
   const confidence = ref(0);
@@ -84,8 +85,10 @@ export function useTuner() {
 
   async function listInputDevices() {
     try {
-      // Request permission first so labels are populated
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request permission first so labels are populated, then immediately
+      // release the probe stream so the mic does not stay active afterwards.
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((t) => t.stop());
       const devices = await navigator.mediaDevices.enumerateDevices();
       inputDevices.value = devices
         .filter((d) => d.kind === 'audioinput')
@@ -131,13 +134,21 @@ export function useTuner() {
   const stringsWithCents = computed(() => {
     const f = smoothedFrequency.value;
     if (!f) return currentTuning.value.strings.map(s => ({ ...s, cents: null as number | null }));
+    // Scale each target by the A4 calibration so per-string cents match the
+    // closest-string logic (findClosestString applies the same a4/440 ratio).
+    const ratio = a4.value / 440;
     return currentTuning.value.strings.map(s => {
-      const c = getCents(f, s.frequency);
+      const c = getCents(f, s.frequency * ratio);
       return { ...s, cents: c };
     });
   });
 
   const isInTune = computed(() => {
+    // No detected note (silence / gate closed) must never read as "in tune".
+    if (!detectedNote.value) {
+      _inTuneStable = false;
+      return false;
+    }
     const c = Math.abs(cents.value);
     if (c < IN_TUNE_THRESHOLD) _inTuneStable = true;
     else if (c > OUT_OF_TUNE_THRESHOLD) _inTuneStable = false;
@@ -168,7 +179,12 @@ export function useTuner() {
     if (isListening.value) return;
 
     await initPitchWasm(); // ensure WASM (incl. RMS) is loaded before using
+    if (!isPitchWasmReady()) {
+      error.value = 'Pitch engine failed to load (WASM). Please reload the page.';
+      return;
+    }
 
+    micPending.value = true;
     try {
       const audioConstraints: any = {
         echoCancellation: false,
@@ -182,6 +198,7 @@ export function useTuner() {
       }
 
       stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      micPending.value = false;
 
       // Try to create AudioContext at 48 kHz for better resolution
       try {
@@ -191,6 +208,11 @@ export function useTuner() {
       } catch {
         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
+      // Some browsers create the context suspended (autoplay policy); resume it.
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => {});
+      }
+      document.addEventListener('visibilitychange', handleVisibility);
       analyser = audioContext.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = SMOOTHING_TIME;
@@ -209,6 +231,15 @@ export function useTuner() {
     } catch (e: any) {
       error.value = e?.message || 'Microphone access denied or unavailable';
       cleanup();
+    } finally {
+      micPending.value = false;
+    }
+  }
+
+  // Resume the audio graph when returning to a previously-backgrounded tab.
+  function handleVisibility() {
+    if (document.visibilityState === 'visible' && audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
     }
   }
 
@@ -226,6 +257,7 @@ export function useTuner() {
   }
 
   function cleanup() {
+    document.removeEventListener('visibilitychange', handleVisibility);
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -387,6 +419,7 @@ export function useTuner() {
   return {
     // state (refs)
     isListening,
+    micPending,
     currentFrequency,
     smoothedFrequency,
     confidence,

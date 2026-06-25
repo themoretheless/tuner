@@ -247,11 +247,12 @@ impl TunerEngine {
             ("—".to_string(), 0.0)
         };
 
-        // For now cents to first string of current tuning (web-like closest will be added with selection)
+        // Cents relative to the closest string of the current tuning (A4-scaled),
+        // matching the web path; falls back to chromatic cents if no strings.
         let cents = if let Some(f) = freq_opt {
             if !self.tuning.strings.is_empty() {
-                let target = self.tuning.strings[0].frequency * (self.a4 / 440.0);
-                get_cents(f, target)
+                let target = find_closest_string(f, &self.tuning.strings, self.a4);
+                get_cents(f, target.frequency)
             } else {
                 cents_chromatic
             }

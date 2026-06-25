@@ -72,8 +72,8 @@ onUnmounted(() => {
           {{ lang === 'ru' ? 'RU' : 'EN' }}
         </button>
         <div class="px-2.5 py-1 rounded-full bg-[#11151b] border border-slate-800 text-slate-400 flex items-center gap-1.5">
-          <div class="w-1.5 h-1.5 rounded-full" :class="tuner.isListening.value ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'"></div>
-          <span>{{ tuner.isListening.value ? t('listening') : t('ready') }}</span>
+          <div class="w-1.5 h-1.5 rounded-full" :class="tuner.micPending.value ? 'bg-amber-400 animate-pulse' : (tuner.isListening.value ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600')"></div>
+          <span>{{ tuner.micPending.value ? t('requesting') : (tuner.isListening.value ? t('listening') : t('ready')) }}</span>
         </div>
         <div class="text-[10px] px-2 py-1 rounded bg-slate-800/60 text-slate-500 hidden sm:block">Vue + Tauri</div>
       </div>
