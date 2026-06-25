@@ -11,19 +11,48 @@ let raf = 0
 let ctx: CanvasRenderingContext2D | null = null
 const dataArray = ref<Float32Array | null>(null)
 
+// Logical CSS pixel size
+const displayW = ref(400)
+const displayH = ref(80)
+
+function getDpr(): number {
+  return (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+}
+
+function resizeCanvas() {
+  if (!canvas.value) return
+  const parent = canvas.value.parentElement
+  if (!parent) return
+
+  const dpr = getDpr()
+  const cssW = Math.max(260, Math.floor(parent.clientWidth))
+  const cssH = 82
+
+  canvas.value.style.width = cssW + 'px'
+  canvas.value.style.height = cssH + 'px'
+
+  const pxW = Math.floor(cssW * dpr)
+  const pxH = Math.floor(cssH * dpr)
+  if (canvas.value.width !== pxW || canvas.value.height !== pxH) {
+    canvas.value.width = pxW
+    canvas.value.height = pxH
+  }
+
+  if (ctx) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
+  displayW.value = cssW
+  displayH.value = cssH
+}
+
 function draw() {
   if (!props.analyser || !ctx || !canvas.value) return
 
-  // Ensure canvas size (so height change takes effect even without remount)
-  const targetWidth = 520
-  const targetHeight = 80
-  if (canvas.value.width !== targetWidth || canvas.value.height !== targetHeight) {
-    canvas.value.width = targetWidth
-    canvas.value.height = targetHeight
-  }
+  resizeCanvas()
 
-  const w = canvas.value.width
-  const h = canvas.value.height
+  const w = displayW.value
+  const h = displayH.value
 
   const bufferLength = props.analyser.fftSize
   if (!dataArray.value || dataArray.value.length !== bufferLength) {
@@ -43,7 +72,7 @@ function draw() {
 
   for (let i = 0; i < bufferLength; i++) {
     const v = dataArray.value[i]
-    const y = (v * 0.5 + 0.5) * h   // center the waveform
+    const y = (v * 0.5 + 0.5) * h
 
     if (i === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
@@ -66,17 +95,9 @@ function startDraw() {
 function stopDraw() {
   cancelAnimationFrame(raf)
   if (ctx && canvas.value) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.fillStyle = '#11151b'
     ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-  }
-}
-
-function resizeCanvas() {
-  if (!canvas.value) return
-  const parent = canvas.value.parentElement
-  if (parent) {
-    canvas.value.width = parent.clientWidth
-    canvas.value.height = 80
   }
 }
 

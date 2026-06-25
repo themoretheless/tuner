@@ -289,7 +289,7 @@ impl eframe::App for App {
                     let spec = &s.spectrum;
                     if !spec.is_empty() {
                         let max_bins = 200; // ~0-4300 Hz at 44.1kHz
-                        let bar_width = 2.5;
+                        let bar_width = 3.0; // integer-ish for crisp bars
                         let max_h = 80.0;
                         let total_w = max_bins as f32 * bar_width;
                         let (rect, _) = ui.allocate_exact_size(egui::vec2(total_w, max_h), egui::Sense::hover());
@@ -297,18 +297,21 @@ impl eframe::App for App {
                         painter.rect_filled(rect, 2.0, egui::Color32::from_gray(30));
                         for (i, &mag) in spec.iter().enumerate().take(max_bins) {
                             let h = mag * max_h;
-                            let x = rect.min.x + i as f32 * bar_width;
+                            let x = (rect.min.x + i as f32 * bar_width).round();
+                            let bw = bar_width - 1.0;
                             let bar_rect = egui::Rect::from_min_max(
                                 egui::pos2(x, rect.max.y - h),
-                                egui::pos2(x + bar_width - 0.5, rect.max.y),
+                                egui::pos2(x + bw, rect.max.y),
                             );
                             painter.rect_filled(bar_rect, 0.0, egui::Color32::from_rgb(80, 200, 120));
-                            // fake 3D extrusion
-                            let dark_rect = egui::Rect::from_min_max(
-                                egui::pos2(x + bar_width * 0.6, rect.max.y - h),
-                                egui::pos2(x + bar_width - 0.5, rect.max.y),
-                            );
-                            painter.rect_filled(dark_rect, 0.0, egui::Color32::from_rgb(40, 120, 60));
+                            // subtle top highlight (no fat extrusion that blurs)
+                            if h > 3.0 {
+                                let top_rect = egui::Rect::from_min_max(
+                                    egui::pos2(x, rect.max.y - h),
+                                    egui::pos2(x + bw, rect.max.y - h + 1.5),
+                                );
+                                painter.rect_filled(top_rect, 0.0, egui::Color32::from_rgb(134, 239, 172));
+                            }
                         }
 
                         // Harmonics
@@ -317,7 +320,7 @@ impl eframe::App for App {
                             for harm in 2..=5 {
                                 let hf = f * harm as f32;
                                 let bin = ((hf / (sr / 2048.0)) as usize).min(max_bins - 1);
-                                let x = rect.min.x + bin as f32 * bar_width;
+                                let x = (rect.min.x + bin as f32 * bar_width).round() + 0.5;
                                 painter.vline(
                                     x,
                                     rect.y_range(),
@@ -441,27 +444,22 @@ impl App {
                     }
                 };
 
+                // Single lock + single repaint per frame (was 3x lock, 3x repaint).
+                // Reuse the waveform Vec capacity instead of reallocating each callback.
                 if let Ok(mut g)=st.lock() {
                     g.freq = update.freq;
-                    g.note = Some(update.note.clone());
                     g.cents = update.cents;
                     g.confidence = update.confidence;
                     g.is_power = update.is_power;
-                    g.waveform = window.to_vec();
+                    g.level = normalize_level(update.rms);
+                    g.note = Some(update.note);
+                    g.waveform.clear();
+                    g.waveform.extend_from_slice(window);
+                    if !update.spectrum.is_empty() {
+                        g.spectrum = update.spectrum;
+                    }
                 }
                 ctx2.request_repaint();
-
-                // input level from engine update
-                let level = normalize_level(update.rms);
-                if let Ok(mut g)=st.lock() { g.level = level; ctx2.request_repaint(); }
-
-                // Spectrum from engine
-                if !update.spectrum.is_empty() {
-                    if let Ok(mut g) = st.lock() {
-                        g.spectrum = update.spectrum.clone();
-                    }
-                    ctx2.request_repaint();
-                }
             }
         }, |e|eprintln!("{}",e), None).unwrap();
         s.play().unwrap(); self.audio.inp=Some(s); self.listen=true;

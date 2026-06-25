@@ -16,7 +16,7 @@ const PREFERRED_SAMPLE_RATE = 48000;
 const FFT_SIZE = 2048;
 
 // Magic numbers extracted for clarity and maintainability
-const SMOOTHING_TIME = 0.55;
+const SMOOTHING_TIME = 0.15; // lower for crisp spectrum bars (was 0.55 which smeared them)
 const LP_FREQ = 1600;
 const REF_GAIN = 0.18;
 const RANDOM_GAIN = 0.15;
@@ -62,6 +62,7 @@ export function useTuner() {
   let rafId: number | null = null;
   const smoother = new FrequencySmoother();
   const analyserRef = ref<AnalyserNode | null>(null); // for visualizers
+  const sampleRate = ref(PREFERRED_SAMPLE_RATE);
 
   // Preallocated buffer to avoid GC pressure every frame (perf)
   let timeDomainBuffer: Float32Array | null = null;
@@ -193,7 +194,11 @@ export function useTuner() {
       analyser = audioContext.createAnalyser();
       analyser.fftSize = FFT_SIZE;
       analyser.smoothingTimeConstant = SMOOTHING_TIME;
+      // Better dynamic range for guitar spectrum (makes bars pop more)
+      analyser.minDecibels = -95;
+      analyser.maxDecibels = -15;
       analyserRef.value = analyser;
+      sampleRate.value = audioContext.sampleRate;
 
       source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
@@ -404,6 +409,7 @@ export function useTuner() {
 
     // for visualizers
     analyser: analyserRef,
+    sampleRate,
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
     showSpectrogram: settings.showSpectrogram,

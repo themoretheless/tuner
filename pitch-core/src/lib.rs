@@ -225,9 +225,15 @@ impl TunerEngine {
 
     pub fn process(&mut self, buffer: &[f32], sample_rate: f32) -> TunerUpdate {
         let rms = compute_rms_volume(buffer);
-        let (freq, confidence) = detect_pitch_native(buffer, sample_rate)
+        let (raw_freq, confidence) = detect_pitch_native(buffer, sample_rate)
             .unwrap_or((0.0, 0.0));
-        let freq_opt = if freq > 0.0 { Some(freq) } else { None };
+        let raw_opt = if raw_freq > 0.0 { Some(raw_freq) } else { None };
+
+        // Smooth the detected pitch to de-jitter the readout. When detection
+        // drops (silence / gate closed), clear immediately instead of lingering
+        // on the last smoothed value.
+        let smoothed = self.smoother.add(raw_opt);
+        let freq_opt = if raw_opt.is_some() { smoothed } else { None };
 
         let is_power = if let Some(f) = freq_opt {
             is_likely_power_chord_native(buffer, sample_rate, f)
@@ -253,14 +259,14 @@ impl TunerEngine {
             0.0
         };
 
-        // Smoother currently not changing the returned freq here (egui historically used raw); can be layered outside
-        let _smoothed = self.smoother.add(freq_opt);
-
         // Compute spectrum (reuse buffer)
         let mut spectrum = vec![0.0f32; 512];
         if buffer.len() >= 2048 {
+            let n = 2048f32;
             for (i, &sample) in buffer.iter().take(2048).enumerate() {
-                self.spectrum_buffer[i] = rustfft::num_complex::Complex::new(sample * 0.5, 0.0);
+                // Hann window to reduce spectral leakage (sharper bars, less smearing)
+                let w = 0.5 * (1.0 - (2.0 * i as f32 / (n - 1.0) - 1.0).cos());
+                self.spectrum_buffer[i] = rustfft::num_complex::Complex::new(sample * w, 0.0);
             }
             self.fft.process(&mut self.spectrum_buffer);
             for i in 0..512 {

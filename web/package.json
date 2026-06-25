@@ -8,7 +8,6 @@
     "build": "npm run build:wasm && vue-tsc -b && vite build",
     "preview": "vite preview",
     "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
-    "build:egui-wasm": "cd .. && cargo build -p guitar-tuner-egui --target wasm32-unknown-unknown --release && (wasm-bindgen --target web --out-dir web/public/egui-wasm --out-name guitar_tuner_egui --no-typescript target/wasm32-unknown-unknown/release/guitar-tuner-egui.wasm || (cargo install wasm-bindgen-cli && wasm-bindgen --target web --out-dir web/public/egui-wasm --out-name guitar_tuner_egui --no-typescript target/wasm32-unknown-unknown/release/guitar-tuner-egui.wasm)) || echo 'egui wasm build skipped or failed'",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
     "tauri:build": "npm run build && cd ../desktop && npm run tauri build"
   },

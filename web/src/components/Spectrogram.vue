@@ -14,11 +14,48 @@ let raf = 0
 const history: Uint8Array[] = []
 const MAX_HISTORY = 150 // time steps
 
+// Logical CSS sizes (ctx is scaled by dpr)
+const displayW = ref(400)
+const displayH = ref(120)
+
+function getDpr(): number {
+  return (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+}
+
+function resizeCanvas() {
+  if (!canvas.value) return
+  const parent = canvas.value.parentElement
+  if (!parent) return
+
+  const dpr = getDpr()
+  const cssW = Math.max(260, Math.floor(parent.clientWidth))
+  const cssH = 120
+
+  canvas.value.style.width = cssW + 'px'
+  canvas.value.style.height = cssH + 'px'
+
+  const pxW = Math.floor(cssW * dpr)
+  const pxH = Math.floor(cssH * dpr)
+  if (canvas.value.width !== pxW || canvas.value.height !== pxH) {
+    canvas.value.width = pxW
+    canvas.value.height = pxH
+  }
+
+  if (ctx) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  }
+
+  displayW.value = cssW
+  displayH.value = cssH
+}
+
 function draw() {
   if (!props.analyser || !ctx || !canvas.value) return
 
-  const w = canvas.value.width
-  const h = canvas.value.height
+  resizeCanvas()
+
+  const w = displayW.value
+  const h = displayH.value
 
   // Get current freq data
   const binCount = props.analyser.frequencyBinCount
@@ -60,7 +97,7 @@ function draw() {
       }
 
       ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-      ctx.fillRect(x, y, timeStepW + 1, barH + 1)
+      ctx.fillRect(x, y, timeStepW + 0.5, barH + 0.5)
     }
   }
 
@@ -79,17 +116,9 @@ function startDraw() {
 function stopDraw() {
   cancelAnimationFrame(raf)
   if (ctx && canvas.value) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.fillStyle = '#11151b'
     ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-  }
-}
-
-function resizeCanvas() {
-  if (!canvas.value) return
-  const parent = canvas.value.parentElement
-  if (parent) {
-    canvas.value.width = parent.clientWidth
-    canvas.value.height = 120 // taller for spectrogram
   }
 }
 

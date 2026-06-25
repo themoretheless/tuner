@@ -54,7 +54,7 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200">
     <!-- Header -->
-    <div class="w-full max-w-[620px] flex items-center justify-between mb-6">
+    <div class="w-full max-w-[720px] flex items-center justify-between mb-6">
       <div>
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-[#052e16]">
@@ -79,11 +79,11 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="w-full max-w-[620px] space-y-6">
+    <div class="w-full max-w-[720px] space-y-6">
       <!-- Main area with left sidebar -->
-      <div class="flex gap-4">
+      <div class="flex flex-col-reverse sm:flex-row gap-4">
         <!-- Left sidebar with all settings -->
-        <div class="w-44 flex-shrink-0 text-xs space-y-4">
+        <div class="w-full sm:w-44 sm:flex-shrink-0 text-xs space-y-4">
           <!-- Input device selection -->
           <div>
             <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">INPUT</div>
@@ -166,9 +166,10 @@ onUnmounted(() => {
 
           <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
-          <Waveform v-if="tuner.showWaveform.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-          <Spectrogram v-if="tuner.showSpectrogram.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-          <Spectrum v-if="tuner.showSpectrum.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" />
+          <!-- Viz only take space and render when actually listening -->
+          <Waveform v-if="tuner.showWaveform.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+          <Spectrogram v-if="tuner.showSpectrogram.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+          <Spectrum v-if="tuner.showSpectrum.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" :sample-rate="tuner.sampleRate.value" />
 
           <!-- Error -->
           <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900 w-full">
