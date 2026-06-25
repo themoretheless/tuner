@@ -26,6 +26,10 @@ const RANDOM_DURATION = 1500;
 const IN_TUNE_THRESHOLD = 5;
 const OUT_OF_TUNE_THRESHOLD = 7;
 
+// Below this detector confidence a frame is treated as no detection, so weak
+// or noisy frames do not produce a garbage readout. Tunable.
+const CONFIDENCE_GATE = 0.5;
+
 // Initialize WASM pitch core (shared with native via pitch-core)
 initPitchWasm();
 
@@ -296,17 +300,26 @@ export function useTuner() {
     const pitchSr = (audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE) / (pitchBuffer.length < timeDomainBuffer.length ? 2 : 1);
 
     const result = detectPitch(pitchBuffer, pitchSr);
-    const freq = result ? result.freq : null;
+    // Gate on detector confidence so weak/noisy frames do not show a reading.
+    const detected = result && result.confidence >= CONFIDENCE_GATE ? result : null;
+    const freq = detected ? detected.freq : null;
     currentFrequency.value = freq;
-    confidence.value = result ? result.confidence : 0;
+    confidence.value = detected ? detected.confidence : 0;
 
     // Simple power chord detection (root + fifth) - not every frame for perf
     if (++chordCheckCounter % 5 === 0) {
       isPowerChord.value = !!freq && isLikelyPowerChord(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE, freq);
     }
 
-    const smoothed = smoother.add(freq);
-    smoothedFrequency.value = smoothed;
+    // Clear immediately when detection drops. Otherwise the smoother keeps
+    // returning its last median and the readout lingers (and can read in-tune)
+    // on silence.
+    if (freq != null) {
+      smoothedFrequency.value = smoother.add(freq);
+    } else {
+      smoother.reset();
+      smoothedFrequency.value = null;
+    }
 
     // Update cents history for graph
     const currentCents = cents.value;

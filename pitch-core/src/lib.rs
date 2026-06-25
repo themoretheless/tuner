@@ -344,9 +344,11 @@ fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
     let rms_factor = (rms * 15.0).min(1.0);
     let adaptive_threshold = YIN_THRESHOLD * (1.0 - 0.35 * rms_factor);
 
-    // Difference function
+    // Difference function over the full lag range. Computing it only from
+    // min_tau skewed the cumulative-mean normalization below; canonical YIN
+    // needs d(j) for every j from 1 so the running sum is correct.
     let mut diff = vec![0.0f32; max_tau];
-    for tau in min_tau..max_tau {
+    for tau in 1..max_tau {
         let mut sum = 0.0;
         for i in 0..half {
             let delta = buffer[i] - buffer[i + tau];
@@ -355,11 +357,11 @@ fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
         diff[tau] = sum;
     }
 
-    // CMND
+    // Cumulative mean normalized difference (CMNDF), accumulated from tau=1.
     let mut yin = vec![0.0f32; max_tau];
     yin[0] = 1.0;
     let mut running_sum = 0.0;
-    for tau in min_tau..max_tau {
+    for tau in 1..max_tau {
         running_sum += diff[tau];
         yin[tau] = if running_sum > 0.0 {
             diff[tau] * (tau as f32 / running_sum)
@@ -368,12 +370,15 @@ fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
         };
     }
 
-    // Threshold
+    // Absolute threshold: first lag below the threshold, then descend to the
+    // local minimum of that dip. The walk must compare consecutive values
+    // (yin[b+1] < yin[b]); comparing against the fixed crossing value walked
+    // past the true minimum and read every note ~a semitone flat.
     let mut tau_estimate = None;
     for tau in min_tau..max_tau {
         if yin[tau] < adaptive_threshold {
             let mut b = tau;
-            while b + 1 < max_tau && yin[b + 1] < yin[tau] {
+            while b + 1 < max_tau && yin[b + 1] < yin[b] {
                 b += 1;
             }
             tau_estimate = Some(b);
@@ -490,13 +495,27 @@ fn detect_pitch_mpm_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
 }
 
 pub fn detect_pitch(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
+    if buffer.is_empty() {
+        return None;
+    }
+
+    // Remove DC offset (mic/ADC bias) before detection. A constant offset
+    // inflates the YIN difference function and biases the MPM denominator,
+    // so subtract the mean once for both detectors.
+    let mean = buffer.iter().sum::<f32>() / buffer.len() as f32;
+    let cleaned: Vec<f32> = if mean.abs() > 1e-6 {
+        buffer.iter().map(|&v| v - mean).collect()
+    } else {
+        buffer.to_vec()
+    };
+
     // Prefer YIN
-    if let Some(result) = detect_pitch_yin_internal(buffer, sample_rate) {
+    if let Some(result) = detect_pitch_yin_internal(&cleaned, sample_rate) {
         return Some(result);
     }
 
     // Then MPM
-    if let Some(result) = detect_pitch_mpm_internal(buffer, sample_rate) {
+    if let Some(result) = detect_pitch_mpm_internal(&cleaned, sample_rate) {
         return Some(result);
     }
 
@@ -715,7 +734,7 @@ mod tests {
         for i in 0..n {
             buf[i] = (2.0 * std::f32::consts::PI * 440.0 * i as f32 / sr).sin();
         }
-        let res = detect_pitch_native(&buf, sr); // will use YIN, but test
+        let _ = detect_pitch_native(&buf, sr); // exercises the YIN path
         // For MPM direct
         if let Some((f, _)) = detect_pitch_mpm_internal(&buf, sr) {
             assert!((f - 440.0).abs() < 2.0);
@@ -765,6 +784,40 @@ mod tests {
         // A4 scaling
         let closest_442 = find_closest_string(110.0 * (442.0/440.0), std, 442.0);
         assert_eq!(closest_442.name, "A");
+    }
+
+    #[test]
+    fn test_yin_guitar_notes() {
+        // Every in-range guitar fundamental must detect at the fundamental
+        // (not an octave/subharmonic). Guards the CMNDF normalization.
+        let sr = 44100.0;
+        let n = 2048;
+        for &expected in &[82.4069f32, 110.0, 146.8324, 195.9977, 246.9417, 329.6276] {
+            let mut buf = vec![0.0f32; n];
+            for i in 0..n {
+                buf[i] = (2.0 * std::f32::consts::PI * expected * i as f32 / sr).sin();
+            }
+            let res = detect_pitch_native(&buf, sr);
+            assert!(res.is_some(), "no detection for {} Hz", expected);
+            let (f, c) = res.unwrap();
+            assert!((f - expected).abs() < 2.0, "expected {} Hz, got {} Hz", expected, f);
+            assert!(c > 0.5, "low confidence {} for {} Hz", c, expected);
+        }
+    }
+
+    #[test]
+    fn test_detect_pitch_dc_offset() {
+        // A large DC offset must not break detection (mean is removed first).
+        let sr = 44100.0;
+        let n = 2048;
+        let mut buf = vec![0.0f32; n];
+        for i in 0..n {
+            buf[i] = (2.0 * std::f32::consts::PI * 110.0 * i as f32 / sr).sin() + 0.6;
+        }
+        let res = detect_pitch(&buf, sr);
+        assert!(res.is_some());
+        let (f, _) = res.unwrap();
+        assert!((f - 110.0).abs() < 2.0, "got {} Hz", f);
     }
 }
 

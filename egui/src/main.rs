@@ -417,20 +417,23 @@ impl App {
         let engine_for_cb = self.engine.clone();
         let h=cpal::default_host();
 
-        let d = if let Some(name) = &self.audio.selected_input_device {
-            h.input_devices()
-                .ok()
-                .and_then(|mut devs| {
-                    devs.find(|dev| dev.name().map(|n| &n == name).unwrap_or(false))
-                })
-                .unwrap_or_else(|| h.default_input_device().expect("no mic"))
-        } else {
-            h.default_input_device().expect("no mic")
+        let selected = self.audio.selected_input_device.as_ref().and_then(|name| {
+            h.input_devices().ok().and_then(|mut devs| {
+                devs.find(|dev| dev.name().map(|n| &n == name).unwrap_or(false))
+            })
+        });
+        let d = match selected.or_else(|| h.default_input_device()) {
+            Some(d) => d,
+            None => { eprintln!("[mic] no input device available"); self.listen = false; return; }
         };
 
-        let cf:StreamConfig = d.default_input_config().unwrap().into(); let sr = cf.sample_rate.0 as f32;
+        let cf: StreamConfig = match d.default_input_config() {
+            Ok(c) => c.into(),
+            Err(e) => { eprintln!("[mic] no input config: {}", e); self.listen = false; return; }
+        };
+        let sr = cf.sample_rate.0 as f32;
         let mut b:Vec<f32>=vec![];
-        let s = d.build_input_stream(&cf, move |d:&[f32],_|{
+        let stream = match d.build_input_stream(&cf, move |d:&[f32],_|{
             b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
             if b.len()>=2048 {
                 let window = &b[b.len()-2048..];
@@ -461,37 +464,71 @@ impl App {
                 }
                 ctx2.request_repaint();
             }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.audio.inp=Some(s); self.listen=true;
+        }, |e|eprintln!("{}",e), None) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("[mic] build input stream failed: {}", e); self.listen = false; return; }
+        };
+        if let Err(e) = stream.play() {
+            eprintln!("[mic] stream play failed: {}", e); self.listen = false; return;
+        }
+        self.audio.inp = Some(stream); self.listen = true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn toggle_ref(&mut self) {
         if self.ref_on { self.audio.out=None; self.ref_on=false; return; }
         let f = self.tunings[self.t_idx].strings[0].frequency;
-        let h=cpal::default_host(); let d=h.default_output_device().expect("no speaker");
-        let cf:StreamConfig = d.default_output_config().unwrap().into(); let sr=cf.sample_rate.0 as f32;
+        let h=cpal::default_host();
+        let d = match h.default_output_device() {
+            Some(d) => d,
+            None => { eprintln!("[ref] no output device"); return; }
+        };
+        let cf:StreamConfig = match d.default_output_config() {
+            Ok(c) => c.into(),
+            Err(e) => { eprintln!("[ref] no output config: {}", e); return; }
+        };
+        let sr=cf.sample_rate.0 as f32;
         let mut ph=0.0f32;
-        let s = d.build_output_stream(&cf, move |data:&mut [f32],_| {
+        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
             for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.audio.out=Some(s); self.ref_on=true;
+        }, |e|eprintln!("{}",e), None) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("[ref] build output stream failed: {}", e); return; }
+        };
+        if let Err(e) = s.play() { eprintln!("[ref] play failed: {}", e); return; }
+        self.audio.out=Some(s); self.ref_on=true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn play_random_string(&mut self) {
         let strings = &self.tunings[self.t_idx].strings;
-        let idx = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() % strings.len() as u128) as usize;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let idx = (nanos % strings.len() as u128) as usize;
         let f = strings[idx].frequency;
         // stop previous
         self.audio.out = None;
-        let h=cpal::default_host(); let d=h.default_output_device().expect("no speaker");
-        let cf:StreamConfig = d.default_output_config().unwrap().into(); let sr=cf.sample_rate.0 as f32;
+        let h=cpal::default_host();
+        let d = match h.default_output_device() {
+            Some(d) => d,
+            None => { eprintln!("[random] no output device"); return; }
+        };
+        let cf:StreamConfig = match d.default_output_config() {
+            Ok(c) => c.into(),
+            Err(e) => { eprintln!("[random] no output config: {}", e); return; }
+        };
+        let sr=cf.sample_rate.0 as f32;
         let mut ph=0.0f32;
-        let s = d.build_output_stream(&cf, move |data:&mut [f32],_| {
+        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
             for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None).unwrap();
-        s.play().unwrap(); self.audio.out=Some(s);
+        }, |e|eprintln!("{}",e), None) {
+            Ok(s) => s,
+            Err(e) => { eprintln!("[random] build output stream failed: {}", e); return; }
+        };
+        if let Err(e) = s.play() { eprintln!("[random] play failed: {}", e); return; }
+        self.audio.out=Some(s);
         // auto stop after 1.5s
         let out_clone = self.audio.out.take(); // to stop later? simple, let it drop after timeout but for simplicity keep short
         // For simplicity, let user stop or add timer later
