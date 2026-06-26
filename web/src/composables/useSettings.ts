@@ -19,6 +19,8 @@ export function useSettings() {
   const showWaveform = ref(true);
   const showSpectrum = ref(true);
   const showSpectrogram = ref(false);
+  const chromatic = ref(false); // tune to nearest of all 12 notes, not preset strings
+  const inTuneTolerance = ref(5); // cents within which a note reads as in tune
 
   async function load() {
     if (isTauri) {
@@ -34,6 +36,10 @@ export function useSettings() {
         if (savedSpec != null) showSpectrum.value = savedSpec;
         const savedSpecGram = await s.get<boolean>('showSpectrogram');
         if (savedSpecGram != null) showSpectrogram.value = savedSpecGram;
+        const savedChromatic = await s.get<boolean>('chromatic');
+        if (savedChromatic != null) chromatic.value = savedChromatic;
+        const savedTol = await s.get<number>('inTuneTolerance');
+        if (savedTol != null) inTuneTolerance.value = savedTol;
       }
     } else {
       const savedA4 = localStorage.getItem('a4');
@@ -46,6 +52,10 @@ export function useSettings() {
       if (savedSpec !== null) showSpectrum.value = savedSpec === 'true';
       const savedSpecGram = localStorage.getItem('showSpectrogram');
       if (savedSpecGram !== null) showSpectrogram.value = savedSpecGram === 'true';
+      const savedChromatic = localStorage.getItem('chromatic');
+      if (savedChromatic !== null) chromatic.value = savedChromatic === 'true';
+      const savedTol = localStorage.getItem('inTuneTolerance');
+      if (savedTol !== null) inTuneTolerance.value = parseInt(savedTol);
     }
   }
 
@@ -58,6 +68,8 @@ export function useSettings() {
         await s.set('showWaveform', showWaveform.value);
         await s.set('showSpectrum', showSpectrum.value);
         await s.set('showSpectrogram', showSpectrogram.value);
+        await s.set('chromatic', chromatic.value);
+        await s.set('inTuneTolerance', inTuneTolerance.value);
         await s.save();
       }
     } else {
@@ -66,11 +78,13 @@ export function useSettings() {
       localStorage.setItem('showWaveform', showWaveform.value.toString());
       localStorage.setItem('showSpectrum', showSpectrum.value.toString());
       localStorage.setItem('showSpectrogram', showSpectrogram.value.toString());
+      localStorage.setItem('chromatic', chromatic.value.toString());
+      localStorage.setItem('inTuneTolerance', inTuneTolerance.value.toString());
     }
   }
 
   // Auto save on change
-  watch([a4, lastTuningId, showWaveform, showSpectrum, showSpectrogram], () => {
+  watch([a4, lastTuningId, showWaveform, showSpectrum, showSpectrogram, chromatic, inTuneTolerance], () => {
     save();
   }, { deep: true });
 
@@ -83,6 +97,8 @@ export function useSettings() {
     showWaveform,
     showSpectrum,
     showSpectrogram,
+    chromatic,
+    inTuneTolerance,
     load,
     save,
   };

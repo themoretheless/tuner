@@ -22,9 +22,9 @@ const REF_GAIN = 0.18;
 const RANDOM_GAIN = 0.15;
 const RANDOM_DURATION = 1500;
 
-// Simple hysteresis to avoid flickering IN TUNE label
-const IN_TUNE_THRESHOLD = 5;
-const OUT_OF_TUNE_THRESHOLD = 7;
+// Extra cents beyond the user tolerance before the IN TUNE label drops, to
+// avoid flickering exactly at the boundary.
+const HYSTERESIS_MARGIN = 2;
 
 // Below this detector confidence a frame is treated as no detection, so weak
 // or noisy frames do not produce a garbage readout. Tunable.
@@ -118,17 +118,25 @@ export function useTuner() {
     const f = smoothedFrequency.value;
     if (!f) return null;
 
-    const target = selectedString.value ?? findClosestString(f, strings.value, a4.value);
-    const cents = getCents(f, target.frequency);
     const note = frequencyToNote(f, a4.value);
-
-    return { note, cents, frequency: f };
+    // Chromatic mode: measure deviation from the nearest equal-tempered note
+    // rather than from a preset string.
+    if (settings.chromatic.value) {
+      return { note, cents: getCents(f, note.frequency), frequency: f };
+    }
+    const target = selectedString.value ?? findClosestString(f, strings.value, a4.value);
+    return { note, cents: getCents(f, target.frequency), frequency: f };
   });
 
   const strings = computed(() => currentTuning.value.strings);
 
   const targetNote = computed<Note>(() => {
     const f = smoothedFrequency.value;
+    // In chromatic mode the target is whatever note is nearest, ignoring the
+    // preset strings and any manual string selection.
+    if (settings.chromatic.value) {
+      return f ? frequencyToNote(f, a4.value) : strings.value[0];
+    }
     if (selectedString.value) return selectedString.value;
     return f ? findClosestString(f, strings.value, a4.value) : strings.value[0];
   });
@@ -153,9 +161,12 @@ export function useTuner() {
       _inTuneStable = false;
       return false;
     }
+    // User-configurable tolerance, with a small hysteresis margin to avoid
+    // flicker at the boundary.
+    const tol = settings.inTuneTolerance.value;
     const c = Math.abs(cents.value);
-    if (c < IN_TUNE_THRESHOLD) _inTuneStable = true;
-    else if (c > OUT_OF_TUNE_THRESHOLD) _inTuneStable = false;
+    if (c < tol) _inTuneStable = true;
+    else if (c > tol + HYSTERESIS_MARGIN) _inTuneStable = false;
     return _inTuneStable;
   });
 
@@ -177,6 +188,30 @@ export function useTuner() {
     selectedString.value = null; // reset manual selection on tuning change
     smoother.reset();
   }
+
+  // Apply shareable state from the URL (?tuning=&a4=&chromatic=). Runs after
+  // persisted settings load so a shared link reproduces the intended config.
+  function applyUrlState() {
+    if (typeof window === 'undefined') return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const tid = p.get('tuning');
+      if (tid) {
+        const t = TUNINGS.find(x => x.id === tid);
+        if (t) setTuning(t);
+      }
+      const a4p = p.get('a4');
+      if (a4p) {
+        const n = Number(a4p);
+        if (!Number.isNaN(n)) setA4(n);
+      }
+      const chrom = p.get('chromatic');
+      if (chrom === '1' || chrom === 'true') settings.chromatic.value = true;
+    } catch {
+      /* ignore malformed URL */
+    }
+  }
+  applyUrlState();
 
   async function start() {
     error.value = null;
@@ -459,6 +494,8 @@ export function useTuner() {
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
     showSpectrogram: settings.showSpectrogram,
+    chromatic: settings.chromatic,
+    inTuneTolerance: settings.inTuneTolerance,
     centsHistory,
 
     // input devices

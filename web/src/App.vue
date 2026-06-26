@@ -134,6 +134,22 @@ onUnmounted(() => {
                 <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500 scale-75" />
                 <span class="text-[10px]">Spectrogram</span>
               </label>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" v-model="tuner.chromatic.value" class="accent-emerald-500 scale-75" />
+                <span class="text-[10px]">{{ t('chromatic') }}</span>
+              </label>
+              <div class="flex items-center gap-1">
+                <span class="text-[9px] text-slate-500">{{ t('tolerance') }}</span>
+                <input
+                  type="number"
+                  class="w-10 bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-right font-mono text-[9px]"
+                  v-model.number="tuner.inTuneTolerance.value"
+                  min="1"
+                  max="25"
+                  step="1"
+                />
+                <span class="text-slate-500 text-[9px]">¢</span>
+              </div>
             </div>
           </div>
 

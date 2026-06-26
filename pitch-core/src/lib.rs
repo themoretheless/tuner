@@ -111,6 +111,61 @@ pub fn get_tunings() -> Vec<Tuning> {
                 Note { name: "E", octave: 4, frequency: 329.6276 },
             ],
         },
+        Tuning {
+            name: "Drop B (BF#BEG#C#)",
+            strings: vec![
+                Note { name: "B", octave: 1, frequency: 61.7354 },
+                Note { name: "F#", octave: 2, frequency: 92.4986 },
+                Note { name: "B", octave: 2, frequency: 123.4708 },
+                Note { name: "E", octave: 3, frequency: 164.8138 },
+                Note { name: "G#", octave: 3, frequency: 207.6523 },
+                Note { name: "C#", octave: 4, frequency: 277.1826 },
+            ],
+        },
+        Tuning {
+            name: "Open C (CGCGCE)",
+            strings: vec![
+                Note { name: "C", octave: 2, frequency: 65.4064 },
+                Note { name: "G", octave: 2, frequency: 97.9989 },
+                Note { name: "C", octave: 3, frequency: 130.8128 },
+                Note { name: "G", octave: 3, frequency: 195.9977 },
+                Note { name: "C", octave: 4, frequency: 261.6256 },
+                Note { name: "E", octave: 4, frequency: 329.6276 },
+            ],
+        },
+        Tuning {
+            name: "Open A (EAC#EAE)",
+            strings: vec![
+                Note { name: "E", octave: 2, frequency: 82.4069 },
+                Note { name: "A", octave: 2, frequency: 110.0000 },
+                Note { name: "C#", octave: 3, frequency: 138.5913 },
+                Note { name: "E", octave: 3, frequency: 164.8138 },
+                Note { name: "A", octave: 3, frequency: 220.0000 },
+                Note { name: "E", octave: 4, frequency: 329.6276 },
+            ],
+        },
+        Tuning {
+            name: "Full Step Down (DGCFAD)",
+            strings: vec![
+                Note { name: "D", octave: 2, frequency: 73.4162 },
+                Note { name: "G", octave: 2, frequency: 97.9989 },
+                Note { name: "C", octave: 3, frequency: 130.8128 },
+                Note { name: "F", octave: 3, frequency: 174.6141 },
+                Note { name: "A", octave: 3, frequency: 220.0000 },
+                Note { name: "D", octave: 4, frequency: 293.6648 },
+            ],
+        },
+        Tuning {
+            name: "Open Gm (DGDGA#D)",
+            strings: vec![
+                Note { name: "D", octave: 2, frequency: 73.4162 },
+                Note { name: "G", octave: 2, frequency: 97.9989 },
+                Note { name: "D", octave: 3, frequency: 146.8324 },
+                Note { name: "G", octave: 3, frequency: 195.9977 },
+                Note { name: "A#", octave: 3, frequency: 233.0819 },
+                Note { name: "D", octave: 4, frequency: 293.6648 },
+            ],
+        },
     ]
 }
 
@@ -776,7 +831,7 @@ mod tests {
     #[test]
     fn test_find_closest_and_tunings() {
         let tunings = get_tunings();
-        assert!(tunings.len() >= 8);
+        assert!(tunings.len() >= 13);
         let std = &tunings[0].strings;
         let closest = find_closest_string(110.0, std, 440.0);
         assert_eq!(closest.name, "A");
@@ -784,6 +839,16 @@ mod tests {
         // A4 scaling
         let closest_442 = find_closest_string(110.0 * (442.0/440.0), std, 442.0);
         assert_eq!(closest_442.name, "A");
+        // New presets exist and are well-formed (6 strings each, ascending pitch).
+        for name in ["Drop B (BF#BEG#C#)", "Open C (CGCGCE)", "Open A (EAC#EAE)",
+                     "Full Step Down (DGCFAD)", "Open Gm (DGDGA#D)"] {
+            let t = tunings.iter().find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("missing tuning {}", name));
+            assert_eq!(t.strings.len(), 6, "{} should have 6 strings", name);
+            for w in t.strings.windows(2) {
+                assert!(w[1].frequency > w[0].frequency, "{} not ascending", name);
+            }
+        }
     }
 
     #[test]

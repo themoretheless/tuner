@@ -119,6 +119,66 @@ export const TUNINGS: Tuning[] = [
       { name: 'E', octave: 4, frequency: 329.6276 },
     ],
   },
+  {
+    id: 'drop-b',
+    name: 'Drop B (BF#BEG#C#)',
+    strings: [
+      { name: 'B', octave: 1, frequency: 61.7354 },
+      { name: 'F#', octave: 2, frequency: 92.4986 },
+      { name: 'B', octave: 2, frequency: 123.4708 },
+      { name: 'E', octave: 3, frequency: 164.8138 },
+      { name: 'G#', octave: 3, frequency: 207.6523 },
+      { name: 'C#', octave: 4, frequency: 277.1826 },
+    ],
+  },
+  {
+    id: 'open-c',
+    name: 'Open C (CGCGCE)',
+    strings: [
+      { name: 'C', octave: 2, frequency: 65.4064 },
+      { name: 'G', octave: 2, frequency: 97.9989 },
+      { name: 'C', octave: 3, frequency: 130.8128 },
+      { name: 'G', octave: 3, frequency: 195.9977 },
+      { name: 'C', octave: 4, frequency: 261.6256 },
+      { name: 'E', octave: 4, frequency: 329.6276 },
+    ],
+  },
+  {
+    id: 'open-a',
+    name: 'Open A (EAC#EAE)',
+    strings: [
+      { name: 'E', octave: 2, frequency: 82.4069 },
+      { name: 'A', octave: 2, frequency: 110.0000 },
+      { name: 'C#', octave: 3, frequency: 138.5913 },
+      { name: 'E', octave: 3, frequency: 164.8138 },
+      { name: 'A', octave: 3, frequency: 220.0000 },
+      { name: 'E', octave: 4, frequency: 329.6276 },
+    ],
+  },
+  {
+    id: 'full-step-down',
+    name: 'Full Step Down (DGCFAD)',
+    strings: [
+      { name: 'D', octave: 2, frequency: 73.4162 },
+      { name: 'G', octave: 2, frequency: 97.9989 },
+      { name: 'C', octave: 3, frequency: 130.8128 },
+      { name: 'F', octave: 3, frequency: 174.6141 },
+      { name: 'A', octave: 3, frequency: 220.0000 },
+      { name: 'D', octave: 4, frequency: 293.6648 },
+    ],
+  },
+  {
+    id: 'open-gm',
+    name: 'Open Gm (DGDGA#D)',
+    strings: [
+      { name: 'D', octave: 2, frequency: 73.4162 },
+      { name: 'G', octave: 2, frequency: 97.9989 },
+      { name: 'D', octave: 3, frequency: 146.8324 },
+      { name: 'G', octave: 3, frequency: 195.9977 },
+      { name: 'A#', octave: 3, frequency: 233.0819 },
+      { name: 'D', octave: 4, frequency: 293.6648 },
+    ],
+  },
 ];
 
 export function midiToFrequency(midi: number, a4 = 440): number {
