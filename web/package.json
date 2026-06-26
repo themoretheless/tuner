@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "npm run build:wasm && vite",
     "build": "npm run build:wasm && vue-tsc -b && vite build",
-    "preview": "vite preview",
+    "build:tauri": "npm run build:wasm && vue-tsc -b && vite build --base ./",
     "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
+    "test": "node ./scripts/test-core.mjs",
+    "preview": "vite preview",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
-    "tauri:build": "npm run build && cd ../desktop && npm run tauri build"
+    "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
   },
   "dependencies": {
     "@tauri-apps/plugin-store": "^2.4.3",

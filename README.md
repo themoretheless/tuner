@@ -100,6 +100,7 @@ Tuner/
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
 ├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей (200 + приоритеты из TOP-500 и Round-4)
+├── RECOMMENDATIONS.md   # Приоритизированные рекомендации по рефакторингу
 └── README.md
 ```
 

@@ -1,562 +1,295 @@
-import { ref, computed, onUnmounted } from 'vue';
-import type { Note, DetectedNote } from '../utils/notes';
-import {
-  TUNINGS,
-  frequencyToNote,
-  getCents,
-  findClosestString,
-  getNoteDisplay,
-  formatFreq,
-  type Tuning,
-} from '../utils/notes';
-import { detectPitch, FrequencySmoother, computeRmsVolume, normalizeLevel, isLikelyPowerChord, downsampleForPitch, initPitchWasm, isPitchWasmReady } from '../utils/pitch';
+import { computed, ref, watch } from 'vue';
+import { useAudioInput } from './useAudioInput';
+import { useCentsHistory } from './useCentsHistory';
+import { useEarTraining } from './useEarTraining';
+import { useMetronome } from './useMetronome';
+import { useNativeAudioInput } from './useNativeAudioInput';
+import { usePitchLoop } from './usePitchLoop';
+import { useReferenceTone } from './useReferenceTone';
 import { useSettings } from './useSettings';
-
-const PREFERRED_SAMPLE_RATE = 48000;
-const FFT_SIZE = 2048;
-
-// Magic numbers extracted for clarity and maintainability
-const SMOOTHING_TIME = 0.15; // lower for crisp spectrum bars (was 0.55 which smeared them)
-const LP_FREQ = 1600;
-const REF_GAIN = 0.18;
-const RANDOM_GAIN = 0.15;
-const RANDOM_DURATION = 1500;
-
-// Extra cents beyond the user tolerance before the IN TUNE label drops, to
-// avoid flickering exactly at the boundary.
-const HYSTERESIS_MARGIN = 2;
-
-// Below this detector confidence a frame is treated as no detection, so weak
-// or noisy frames do not produce a garbage readout. Tunable.
-const CONFIDENCE_GATE = 0.5;
-
-// Initialize WASM pitch core (shared with native via pitch-core)
-initPitchWasm();
+import { useTuningState } from './useTuningState';
+import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
+import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
-  const isListening = ref(false);
-  const micPending = ref(false); // true while waiting on the getUserMedia prompt
-  const currentFrequency = ref<number | null>(null);
-  const smoothedFrequency = ref<number | null>(null);
-  const confidence = ref(0);
-  const volume = ref(0);
-  const isPowerChord = ref(false);
-  const error = ref<string | null>(null);
-
-  // Input device selection
-  const inputDevices = ref<{ deviceId: string; label: string }[]>([]);
-  const selectedInputDeviceId = ref<string | null>(null);
-  // Actual negotiated input settings (sample rate / bit depth / channels),
-  // read from the live MediaStreamTrack and AudioContext.
-  const micSettings = ref<{ sampleRate?: number; sampleSize?: number; channelCount?: number } | null>(null);
-
-  // History for cents graph (last N samples)
-  const centsHistory = ref<number[]>([]);
-  const MAX_CENTS_HISTORY = 300; // ~5 seconds at ~60fps (throttled in practice)
-
-  const selectedString = ref<Note | null>(null);
-  const referencePlaying = ref(false);
-
-  // Tunable A4 + current tuning
-  // TODO (architecture): extract to useTuningState + useAudioInput + useReferenceTone for better separation
   const settings = useSettings();
-  const a4 = settings.a4;
-  const currentTuning = ref<Tuning>(TUNINGS.find(t => t.id === settings.lastTuningId.value) || TUNINGS[0]);
-
-  let audioContext: AudioContext | null = null;
-  let stream: MediaStream | null = null;
-  let analyser: AnalyserNode | null = null;
-  let source: MediaStreamAudioSourceNode | null = null;
-  let rafId: number | null = null;
-  const smoother = new FrequencySmoother();
-  const analyserRef = ref<AnalyserNode | null>(null); // for visualizers
-  const sampleRate = ref(PREFERRED_SAMPLE_RATE);
-
-  // Preallocated buffer to avoid GC pressure every frame (perf)
-  let timeDomainBuffer: Float32Array | null = null;
-
-  // Reusable audio context for all tones (perf + avoid multiple contexts)
-  let sharedAudio: AudioContext | null = null;
-  function getSharedAudio() {
-    if (!sharedAudio) {
-      try {
-        sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate: PREFERRED_SAMPLE_RATE,
-        });
-      } catch {
-        sharedAudio = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-    }
-    return sharedAudio;
-  }
-
-  // Read the negotiated input settings from a live stream's audio track.
-  function captureMicSettings(s: MediaStream) {
-    const track = s.getAudioTracks()[0];
-    const st = track && track.getSettings ? track.getSettings() : ({} as MediaTrackSettings);
-    micSettings.value = {
-      sampleRate: st.sampleRate ?? audioContext?.sampleRate,
-      sampleSize: st.sampleSize,
-      channelCount: st.channelCount,
-    };
-  }
-
-  async function listInputDevices() {
-    try {
-      // Request permission first so labels are populated, then immediately
-      // release the probe stream so the mic does not stay active afterwards.
-      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-      captureMicSettings(probe);
-      probe.getTracks().forEach((t) => t.stop());
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      inputDevices.value = devices
-        .filter((d) => d.kind === 'audioinput')
-        .map((d) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Microphone (${d.deviceId.slice(0, 8)}...)`,
-        }));
-    } catch (e) {
-      console.warn('Could not list input devices', e);
-      inputDevices.value = [];
-    }
-  }
-
-  // Separate playback context + nodes (reused) - now using shared
-  let refOsc: OscillatorNode | null = null;
-  let refGain: GainNode | null = null;
-
-  // Hysteresis state
-  let _inTuneStable = false;
-  let chordCheckCounter = 0;
-
-  const detectedNote = computed<DetectedNote | null>(() => {
-    const f = smoothedFrequency.value;
-    if (!f) return null;
-
-    const note = frequencyToNote(f, a4.value);
-    // Chromatic mode: measure deviation from the nearest equal-tempered note
-    // rather than from a preset string.
-    if (settings.chromatic.value) {
-      return { note, cents: getCents(f, note.frequency), frequency: f };
-    }
-    const target = selectedString.value ?? findClosestString(f, strings.value, a4.value);
-    return { note, cents: getCents(f, target.frequency), frequency: f };
+  const audio = useAudioInput(settings.selectedInputDeviceId);
+  const nativeAudio = useNativeAudioInput();
+  const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
+  const pitch = usePitchLoop(audio.readFrame, detectionRange);
+  const usingNativeAudio = computed(() => settings.audioBackend.value === 'native' && nativeAudio.available.value);
+  const detectedFrequencySource = computed(() => (
+    usingNativeAudio.value ? nativeAudio.frequency.value : pitch.smoothedFrequency.value
+  ));
+  const tuning = useTuningState(detectedFrequencySource, {
+    onResetDetection: pitch.reset,
   });
+  const referenceTone = useReferenceTone(() => tuning.targetNote.value);
+  const centsHistory = useCentsHistory(tuning.cents, computed(() => !!tuning.detectedNote.value));
+  const earTraining = useEarTraining(tuning.getRandomPracticeNote, referenceTone.playTimedTone);
+  const metronome = useMetronome(
+    settings.metronomeBpm,
+    settings.metronomeBeats,
+    settings.metronomeSubdivision,
+  );
+  const practiceSummary = computed(() => summarizePractice(settings.practiceHistory.value));
 
-  const strings = computed(() => currentTuning.value.strings);
-
-  const targetNote = computed<Note>(() => {
-    const f = smoothedFrequency.value;
-    // In chromatic mode the target is whatever note is nearest, ignoring the
-    // preset strings and any manual string selection.
-    if (settings.chromatic.value) {
-      return f ? frequencyToNote(f, a4.value) : strings.value[0];
-    }
-    if (selectedString.value) return selectedString.value;
-    return f ? findClosestString(f, strings.value, a4.value) : strings.value[0];
-  });
-
-  const cents = computed(() => detectedNote.value?.cents ?? 0);
-
-  const stringsWithCents = computed(() => {
-    const f = smoothedFrequency.value;
-    if (!f) return currentTuning.value.strings.map(s => ({ ...s, cents: null as number | null }));
-    // Scale each target by the A4 calibration so per-string cents match the
-    // closest-string logic (findClosestString applies the same a4/440 ratio).
-    const ratio = a4.value / 440;
-    return currentTuning.value.strings.map(s => {
-      const c = getCents(f, s.frequency * ratio);
-      return { ...s, cents: c };
-    });
-  });
-
-  const isInTune = computed(() => {
-    // No detected note (silence / gate closed) must never read as "in tune".
-    if (!detectedNote.value) {
-      _inTuneStable = false;
-      return false;
-    }
-    // User-configurable tolerance, with a small hysteresis margin to avoid
-    // flicker at the boundary.
-    const tol = settings.inTuneTolerance.value;
-    const c = Math.abs(cents.value);
-    if (c < tol) _inTuneStable = true;
-    else if (c > tol + HYSTERESIS_MARGIN) _inTuneStable = false;
-    return _inTuneStable;
-  });
-
-  const currentNoteDisplay = computed(() => {
-    const det = detectedNote.value;
-    return det ? getNoteDisplay(det.note) : null;
-  });
-
-  // Human-readable input settings, e.g. "48000 Hz · 16-bit · mono". Parts the
-  // browser does not expose (often bit depth) are omitted.
-  const micSettingsLabel = computed(() => {
-    const s = micSettings.value;
-    if (!s) return '';
-    const parts: string[] = [];
-    if (s.sampleRate) parts.push(`${s.sampleRate} Hz`);
-    if (s.sampleSize) parts.push(`${s.sampleSize}-bit`);
-    if (s.channelCount) parts.push(s.channelCount === 1 ? 'mono' : `${s.channelCount} ch`);
-    return parts.join(' · ');
-  });
-
-  // Expose A4 for UI control
-  function setA4(newA4: number) {
-    a4.value = Math.max(420, Math.min(460, Math.round(newA4)));
-    settings.a4.value = a4.value; // sync
-    smoother.reset();
-  }
-
-  function setTuning(tuning: Tuning) {
-    currentTuning.value = tuning;
-    settings.lastTuningId.value = tuning.id;
-    selectedString.value = null; // reset manual selection on tuning change
-    smoother.reset();
-  }
-
-  // Apply shareable state from the URL (?tuning=&a4=&chromatic=). Runs after
-  // persisted settings load so a shared link reproduces the intended config.
-  function applyUrlState() {
-    if (typeof window === 'undefined') return;
-    try {
-      const p = new URLSearchParams(window.location.search);
-      const tid = p.get('tuning');
-      if (tid) {
-        const t = TUNINGS.find(x => x.id === tid);
-        if (t) setTuning(t);
-      }
-      const a4p = p.get('a4');
-      if (a4p) {
-        const n = Number(a4p);
-        if (!Number.isNaN(n)) setA4(n);
-      }
-      const chrom = p.get('chromatic');
-      if (chrom === '1' || chrom === 'true') settings.chromatic.value = true;
-    } catch {
-      /* ignore malformed URL */
-    }
-  }
-
-  // Once persisted settings have loaded (async on Tauri), reconcile the tuning
-  // selection with the restored id - this fixes the race where currentTuning
-  // was initialized synchronously before lastTuningId resolved - then let URL
-  // params take final precedence so shared links win.
-  settings.loaded.then(() => {
-    const persisted = TUNINGS.find(t => t.id === settings.lastTuningId.value);
-    if (persisted && persisted.id !== currentTuning.value.id) {
-      currentTuning.value = persisted;
-    }
-    applyUrlState();
-  });
+  watch(tuning.detectionRange, (range) => {
+    detectionRange.value = range;
+    void nativeAudio.setRange(range);
+  }, { immediate: true });
 
   async function start() {
-    error.value = null;
-    if (isListening.value) return;
-
-    await initPitchWasm(); // ensure WASM (incl. RMS) is loaded before using
-    if (!isPitchWasmReady()) {
-      error.value = 'Pitch engine failed to load (WASM). Please reload the page.';
+    if (usingNativeAudio.value) {
+      centsHistory.clear();
+      pitch.reset();
+      await nativeAudio.start(tuning.detectionRange.value);
       return;
     }
 
-    micPending.value = true;
-    try {
-      const audioConstraints: any = {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 1,
-        sampleRate: { ideal: PREFERRED_SAMPLE_RATE },
-      };
-      if (selectedInputDeviceId.value) {
-        audioConstraints.deviceId = { exact: selectedInputDeviceId.value };
-      }
-
-      stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
-      micPending.value = false;
-
-      // Try to create AudioContext at 48 kHz for better resolution
-      try {
-        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate: PREFERRED_SAMPLE_RATE,
-        });
-      } catch {
-        audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      // Some browsers create the context suspended (autoplay policy); resume it.
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume().catch(() => {});
-      }
-      document.addEventListener('visibilitychange', handleVisibility);
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = FFT_SIZE;
-      analyser.smoothingTimeConstant = SMOOTHING_TIME;
-      // Better dynamic range for guitar spectrum (makes bars pop more)
-      analyser.minDecibels = -95;
-      analyser.maxDecibels = -15;
-      analyserRef.value = analyser;
-      sampleRate.value = audioContext.sampleRate;
-      captureMicSettings(stream);
-
-      source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      isListening.value = true;
-      smoother.reset();
-      tick();
-    } catch (e: any) {
-      error.value = e?.message || 'Microphone access denied or unavailable';
-      cleanup();
-    } finally {
-      micPending.value = false;
-    }
-  }
-
-  // Resume the audio graph when returning to a previously-backgrounded tab.
-  function handleVisibility() {
-    if (document.visibilityState === 'visible' && audioContext && audioContext.state === 'suspended') {
-      audioContext.resume().catch(() => {});
+    await audio.start();
+    if (audio.isListening.value) {
+      centsHistory.clear();
+      pitch.reset();
+      pitch.start();
     }
   }
 
   function stop() {
-    cleanup();
-    isListening.value = false;
-    currentFrequency.value = null;
-    smoothedFrequency.value = null;
-    confidence.value = 0;
-    isPowerChord.value = false;
-    centsHistory.value = [];
-    volume.value = 0;
-    smoother.reset();
-    stopReferenceTone();
+    pitch.stop();
+    audio.stop();
+    void nativeAudio.stop();
+    referenceTone.stopReferenceTone();
   }
 
-  function cleanup() {
-    document.removeEventListener('visibilitychange', handleVisibility);
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    if (source) {
-      source.disconnect();
-      source = null;
-    }
-    if (analyser) {
-      analyser = null;
-      analyserRef.value = null;
-    }
-    if (audioContext) {
-      audioContext.close().catch(() => {});
-      audioContext = null;
-    }
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      stream = null;
-    }
-  }
-
-  function tick() {
-    if (!analyser || !isListening.value) return;
-
-    if (!timeDomainBuffer || timeDomainBuffer.length !== analyser.fftSize) {
-      timeDomainBuffer = new Float32Array(analyser.fftSize) as Float32Array<ArrayBuffer>;
-    }
-    analyser.getFloatTimeDomainData(timeDomainBuffer as Float32Array<ArrayBuffer>);
-
-    const rms = computeRmsVolume(timeDomainBuffer);
-    volume.value = normalizeLevel(rms);
-
-    // Downsample for expensive pitch (perf fix)
-    const pitchBuffer = timeDomainBuffer.length > 1024 ? downsampleForPitch(timeDomainBuffer, 2) : timeDomainBuffer;
-    const pitchSr = (audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE) / (pitchBuffer.length < timeDomainBuffer.length ? 2 : 1);
-
-    const result = detectPitch(pitchBuffer, pitchSr);
-    // Gate on detector confidence so weak/noisy frames do not show a reading.
-    const detected = result && result.confidence >= CONFIDENCE_GATE ? result : null;
-    const freq = detected ? detected.freq : null;
-    currentFrequency.value = freq;
-    confidence.value = detected ? detected.confidence : 0;
-
-    // Simple power chord detection (root + fifth) - not every frame for perf
-    if (++chordCheckCounter % 5 === 0) {
-      isPowerChord.value = !!freq && isLikelyPowerChord(timeDomainBuffer, audioContext?.sampleRate ?? PREFERRED_SAMPLE_RATE, freq);
-    }
-
-    // Clear immediately when detection drops. Otherwise the smoother keeps
-    // returning its last median and the readout lingers (and can read in-tune)
-    // on silence.
-    if (freq != null) {
-      smoothedFrequency.value = smoother.add(freq);
-    } else {
-      smoother.reset();
-      smoothedFrequency.value = null;
-    }
-
-    // Update cents history for graph
-    const currentCents = cents.value;
-    centsHistory.value.push(currentCents);
-    if (centsHistory.value.length > MAX_CENTS_HISTORY) {
-      centsHistory.value.shift();
-    }
-
-    rafId = requestAnimationFrame(tick);
-  }
-
-  function toggleString(note: Note) {
-    const current = selectedString.value;
-    if (current && Math.abs(current.frequency - note.frequency) < 0.01) {
-      selectedString.value = null;
-    } else {
-      selectedString.value = note;
-    }
-  }
-
-  // === Reference tone (reused context) ===
-  function playReferenceTone() {
-    stopReferenceTone();
-
-    const freq = targetNote.value.frequency;
-    if (!freq) return;
-
-    const ctx = getSharedAudio();
-    refOsc = ctx.createOscillator();
-    refGain = ctx.createGain();
-
-    refOsc.type = 'sine';
-    refOsc.frequency.value = freq;
-    refGain.gain.value = REF_GAIN;
-
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = LP_FREQ;
-
-    refOsc.connect(lp);
-    lp.connect(refGain);
-    refGain.connect(ctx.destination);
-
-    refOsc.start();
-    referencePlaying.value = true;
-  }
-
-  function playTone(freq: number, gainVal: number = RANDOM_GAIN, durationMs: number = 0) {
-    const ctx = getSharedAudio();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.value = gainVal;
-
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = LP_FREQ;
-
-    osc.connect(lp);
-    lp.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    if (durationMs > 0) {
-      setTimeout(() => {
-        try { osc.stop(); } catch {}
-      }, durationMs);
-    }
-    return osc;
-  }
-
-  function stopReferenceTone() {
-    if (refOsc) {
-      try { refOsc.stop(); } catch {}
-      refOsc = null;
-    }
-    refGain = null;
-    referencePlaying.value = false;
-  }
-
-  function toggleReferenceTone() {
-    if (referencePlaying.value) {
-      stopReferenceTone();
-    } else {
-      playReferenceTone();
-    }
-  }
-
-  // Basic practice: play random string note for ear training
   function playRandomString() {
-    const random = strings.value[Math.floor(Math.random() * strings.value.length)];
-    stopReferenceTone();
-    playTone(random.frequency, RANDOM_GAIN, RANDOM_DURATION);
+    earTraining.nextChallenge();
+  }
+
+  function setDisplayMode(mode: DisplayMode) {
+    settings.displayMode.value = mode;
+  }
+
+  function setThemeMode(mode: ThemeMode) {
+    if (mode !== 'dark' && mode !== 'light' && mode !== 'colorblind') return;
+    settings.themeMode.value = mode;
+  }
+
+  function setLayoutMode(mode: LayoutMode) {
+    if (mode !== 'default' && mode !== 'stage' && mode !== 'compact') return;
+    settings.layoutMode.value = mode;
+  }
+
+  function setLeftHanded(enabled: boolean) {
+    settings.leftHanded.value = enabled;
+  }
+
+  function setAudioBackend(backend: AudioBackend) {
+    if (backend !== 'web' && backend !== 'native') return;
+    const shouldRestart = audio.isListening.value || nativeAudio.isListening.value;
+    if (shouldRestart) stop();
+    settings.audioBackend.value = backend;
+    if (shouldRestart) void start();
   }
 
   function clearError() {
-    error.value = null;
+    audio.clearError();
+    nativeAudio.clearError();
   }
 
-  onUnmounted(() => {
-    stop();
-    stopReferenceTone();
-    if (sharedAudio) {
-      sharedAudio.close().catch(() => {});
-      sharedAudio = null;
+  async function toggleFullscreen() {
+    if (typeof document === 'undefined') return;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
     }
-  });
+    await document.documentElement.requestFullscreen();
+  }
+
+  function markEarTraining(isCorrect: boolean) {
+    earTraining.mark(isCorrect);
+    const target = earTraining.target.value;
+    const nextEntry: PracticeHistoryEntry = {
+      at: Date.now(),
+      correct: isCorrect,
+      note: target ? tuning.getNoteDisplay(target) : '',
+    };
+    settings.practiceHistory.value = [
+      ...settings.practiceHistory.value.slice(-499),
+      nextEntry,
+    ];
+  }
+
+  function clearPracticeHistory() {
+    settings.practiceHistory.value = [];
+  }
+
+  function exportPracticeStats() {
+    return JSON.stringify({
+      summary: practiceSummary.value,
+      history: settings.practiceHistory.value,
+    }, null, 2);
+  }
 
   return {
-    // state (refs)
-    isListening,
-    micPending,
-    currentFrequency,
-    smoothedFrequency,
-    confidence,
-    isPowerChord,
-    volume,
-    error,
-    selectedString,
-    referencePlaying,
-    a4,
-    currentTuning,
+    // state
+    isListening: computed(() => usingNativeAudio.value ? nativeAudio.isListening.value : audio.isListening.value),
+    currentFrequency: computed(() => usingNativeAudio.value ? nativeAudio.frequency.value : pitch.currentFrequency.value),
+    smoothedFrequency: detectedFrequencySource,
+    volume: computed(() => usingNativeAudio.value ? nativeAudio.level.value : pitch.volume.value),
+    error: computed(() => usingNativeAudio.value ? nativeAudio.error.value : audio.error.value),
+    audioBackend: settings.audioBackend,
+    inputDevices: audio.inputDevices,
+    selectedString: tuning.selectedString,
+    selectedInputDeviceId: audio.selectedInputDeviceId,
+    selectedStringIndex: tuning.selectedStringIndex,
+    referencePlaying: referenceTone.referencePlaying,
+    a4: tuning.a4,
+    activeInstrument: tuning.activeInstrument,
+    activeStringOffsets: tuning.activeStringOffsets,
+    capo: tuning.capo,
+    currentTuning: tuning.currentTuning,
+    customTunings: tuning.customTunings,
+    customInstruments: tuning.customInstruments,
+    customTemperaments: tuning.customTemperaments,
+    displayMode: settings.displayMode,
+    layoutMode: settings.layoutMode,
+    leftHanded: settings.leftHanded,
+    temperament: tuning.temperament,
+    temperamentRoot: tuning.temperamentRoot,
+    temperamentOffsets: tuning.temperamentOffsets,
+    transpose: tuning.transpose,
+    themeMode: settings.themeMode,
+    centsHistory: centsHistory.history,
+    earTrainingAccuracy: earTraining.accuracy,
+    earTrainingAttempts: earTraining.attempts,
+    earTrainingCorrect: earTraining.correct,
+    earTrainingRevealed: earTraining.revealed,
+    earTrainingStreak: earTraining.streak,
+    earTrainingTarget: earTraining.target,
+    metronomeBeat: metronome.beat,
+    metronomeBeats: settings.metronomeBeats,
+    metronomeBpm: settings.metronomeBpm,
+    metronomeRunning: metronome.isRunning,
+    metronomeSubdivision: settings.metronomeSubdivision,
+    metronomeSubdivisionStep: metronome.subdivisionStep,
+    practiceHistory: settings.practiceHistory,
+    practiceSummary,
+    sweeteningProfile: tuning.sweeteningProfile,
+    nativeAudioAvailable: nativeAudio.available,
+    usingNativeAudio,
 
     // computed
-    detectedNote,
-    targetNote,
-    cents,
-    isInTune,
-    currentNoteDisplay,
-    strings,
-    stringsWithCents,
+    detectedNote: tuning.detectedNote,
+    detectionRange,
+    targetNote: tuning.targetNote,
+    cents: tuning.cents,
+    isInTune: tuning.isInTune,
+    currentNoteDisplay: tuning.currentNoteDisplay,
+    strings: tuning.strings,
+    isChromaticMode: tuning.isChromaticMode,
 
-    // for visualizers
-    analyser: analyserRef,
-    sampleRate,
+    // visualizers / persisted UI settings
+    analyser: computed(() => usingNativeAudio.value ? null : audio.analyser.value),
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
-    showSpectrogram: settings.showSpectrogram,
-    chromatic: settings.chromatic,
-    inTuneTolerance: settings.inTuneTolerance,
-    centsHistory,
-
-    // input devices
-    inputDevices,
-    selectedInputDeviceId,
-    micSettings,
-    micSettingsLabel,
 
     // actions
     start,
     stop,
-    toggleString,
-    toggleReferenceTone,
+    toggleString: tuning.toggleString,
+    toggleReferenceTone: referenceTone.toggleReferenceTone,
     clearError,
-    setA4,
-    setTuning,
+    clearCentsHistory: centsHistory.clear,
+    refreshInputDevices: audio.refreshInputDevices,
+    setA4: tuning.setA4,
+    setAudioBackend,
+    setCapo: tuning.setCapo,
+    setDisplayMode,
+    setInputDevice: audio.setInputDevice,
+    setLayoutMode,
+    setLeftHanded,
+    setMetronomeBeats: metronome.setBeats,
+    setMetronomeBpm: metronome.setBpm,
+    setMetronomeSubdivision: metronome.setSubdivision,
+    setInstrument: tuning.setInstrument,
+    setStringOffset: tuning.setStringOffset,
+    setSweeteningProfile: tuning.setSweeteningProfile,
+    setTemperament: tuning.setTemperament,
+    setTemperamentRoot: tuning.setTemperamentRoot,
+    setThemeMode,
+    setTranspose: tuning.setTranspose,
+    setTuning: tuning.setTuning,
+    toggleFullscreen,
     playRandomString,
-    listInputDevices,
+    saveCustomTemperament: tuning.saveCustomTemperament,
+    saveCustomTuning: tuning.saveCustomTuning,
+    saveInstrumentProfile: tuning.saveInstrumentProfile,
+    deleteCustomTemperament: tuning.deleteCustomTemperament,
+    deleteCustomTuning: tuning.deleteCustomTuning,
+    deleteInstrumentProfile: tuning.deleteInstrumentProfile,
+    exportCustomTunings: tuning.exportCustomTunings,
+    exportPracticeStats,
+    importCustomTunings: tuning.importCustomTunings,
+    clearPracticeHistory,
+    markEarTraining,
+    nextEarTraining: earTraining.nextChallenge,
+    playEarTraining: earTraining.playTarget,
+    resetEarTraining: earTraining.reset,
+    revealEarTraining: earTraining.reveal,
+    tapMetronome: metronome.tapTempo,
+    toggleMetronome: metronome.toggle,
 
-    // data
-    allTunings: TUNINGS,
-    formatFreq,
-    getNoteDisplay,
+    // data / helpers
+    allTunings: tuning.allTunings,
+    instrumentOptions: tuning.instrumentOptions,
+    temperamentOptions: tuning.temperamentOptions,
+    formatFreq: tuning.formatFreq,
+    getNoteDisplay: tuning.getNoteDisplay,
   };
+}
+
+function summarizePractice(history: PracticeHistoryEntry[]) {
+  const todayKey = localDateKey(Date.now());
+  const todayEntries = history.filter((entry) => localDateKey(entry.at) === todayKey);
+  const totalCorrect = history.filter((entry) => entry.correct).length;
+  const todayCorrect = todayEntries.filter((entry) => entry.correct).length;
+
+  return {
+    totalAttempts: history.length,
+    totalAccuracy: history.length ? Math.round((totalCorrect / history.length) * 100) : 0,
+    todayAttempts: todayEntries.length,
+    todayAccuracy: todayEntries.length ? Math.round((todayCorrect / todayEntries.length) * 100) : 0,
+    dailyStreak: calculateDailyStreak(history),
+  };
+}
+
+function calculateDailyStreak(history: PracticeHistoryEntry[]) {
+  const days = new Set(history.map((entry) => dayNumber(entry.at)));
+  if (!days.size) return 0;
+
+  const today = dayNumber(Date.now());
+  let cursor = today;
+  if (!days.has(cursor) && days.has(cursor - 1)) {
+    cursor -= 1;
+  }
+
+  let streak = 0;
+  while (days.has(cursor - streak)) {
+    streak += 1;
+  }
+  return streak;
+}
+
+function dayNumber(timestamp: number) {
+  const date = new Date(timestamp);
+  return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 86_400_000);
+}
+
+function localDateKey(timestamp: number) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "pitch-core",
     "egui",
+    "desktop/src-tauri",
 ]
 
 # Common profile settings for the workspace (native + future wasm)

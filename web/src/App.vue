@@ -1,26 +1,38 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useTuner } from './composables/useTuner'
 import { useL10n } from './stores/l10n'
 import MicButton from './components/MicButton.vue'
+import InputDeviceSelector from './components/InputDeviceSelector.vue'
 import LevelMeter from './components/LevelMeter.vue'
 import NoteDisplay from './components/NoteDisplay.vue'
 import CentsGauge from './components/CentsGauge.vue'
+import CentsHistoryGraph from './components/CentsHistoryGraph.vue'
+import DisplayModeSelector from './components/DisplayModeSelector.vue'
 import FreqReadout from './components/FreqReadout.vue'
 import StringSelector from './components/StringSelector.vue'
 import TunerControls from './components/TunerControls.vue'
 import TuningSelector from './components/TuningSelector.vue'
+import TuningOptions from './components/TuningOptions.vue'
+import CustomTuningEditor from './components/CustomTuningEditor.vue'
+import CustomTuningTransfer from './components/CustomTuningTransfer.vue'
+import DisplayPreferences from './components/DisplayPreferences.vue'
+import InstrumentProfileEditor from './components/InstrumentProfileEditor.vue'
+import StringOffsetsPanel from './components/StringOffsetsPanel.vue'
+import TemperamentPanel from './components/TemperamentPanel.vue'
+import EarTrainingPanel from './components/EarTrainingPanel.vue'
+import PracticeStatsPanel from './components/PracticeStatsPanel.vue'
+import MetronomePanel from './components/MetronomePanel.vue'
 import Waveform from './components/Waveform.vue'
 import Spectrum from './components/Spectrum.vue'
-import PerStringCents from './components/PerStringCents.vue'
-import CentsHistory from './components/CentsHistory.vue'
-import Spectrogram from './components/Spectrogram.vue'
-import Fretboard from './components/Fretboard.vue'
 
 const tuner = useTuner()
 const { lang, t, toggleLang } = useL10n()
-
-
+const appClasses = computed(() => [
+  `theme-${tuner.themeMode.value}`,
+  `layout-${tuner.layoutMode.value}`,
+  { 'layout-left-handed': tuner.leftHanded.value },
+])
 
 function toggleMic() {
   if (tuner.isListening.value) tuner.stop()
@@ -28,6 +40,9 @@ function toggleMic() {
 }
 
 function handleKey(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  if (target?.closest('input, select, textarea, button, [contenteditable="true"]')) return
+
   if (e.key === ' ' || e.key.toLowerCase() === 'm') {
     e.preventDefault()
     toggleMic()
@@ -35,10 +50,10 @@ function handleKey(e: KeyboardEvent) {
   if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'p') {
     tuner.toggleReferenceTone()
   }
-  // 1-6 for strings
-  const num = parseInt(e.key)
-  if (num >= 1 && num <= 6 && tuner.strings.value[num-1]) {
-    tuner.toggleString(tuner.strings.value[num-1])
+  // 1-9 for strings
+  const num = Number.parseInt(e.key, 10)
+  if (num >= 1 && num <= 9 && tuner.strings.value[num - 1]) {
+    tuner.toggleString(tuner.strings.value[num - 1], num - 1)
   }
 }
 
@@ -52,16 +67,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200">
+  <div class="app-root min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200" :class="appClasses">
     <!-- Header -->
-    <div class="w-full max-w-[720px] flex items-center justify-between mb-6">
+    <div class="app-width w-full flex items-center justify-between mb-6">
       <div>
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-[#052e16]">
             <span class="text-2xl">♪</span>
           </div>
           <div>
-            <h1 class="text-3xl font-semibold tracking-tighter">{{ t('app.title') }}</h1>
+            <h1 class="text-3xl font-semibold">{{ t('app.title') }}</h1>
             <p class="text-xs text-slate-500 -mt-0.5">{{ t('subtitle') }}</p>
           </div>
         </div>
@@ -72,168 +87,182 @@ onUnmounted(() => {
           {{ lang === 'ru' ? 'RU' : 'EN' }}
         </button>
         <div class="px-2.5 py-1 rounded-full bg-[#11151b] border border-slate-800 text-slate-400 flex items-center gap-1.5">
-          <div class="w-1.5 h-1.5 rounded-full" :class="tuner.micPending.value ? 'bg-amber-400 animate-pulse' : (tuner.isListening.value ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600')"></div>
-          <span>{{ tuner.micPending.value ? t('requesting') : (tuner.isListening.value ? t('listening') : t('ready')) }}</span>
+          <div class="w-1.5 h-1.5 rounded-full" :class="tuner.isListening.value ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'"></div>
+          <span>{{ tuner.isListening.value ? t('listening') : t('ready') }}</span>
         </div>
         <div class="text-[10px] px-2 py-1 rounded bg-slate-800/60 text-slate-500 hidden sm:block">Vue + Tauri</div>
       </div>
     </div>
 
-    <div class="w-full max-w-[720px] space-y-6">
-      <!-- Main area with left sidebar -->
-      <div class="flex flex-col-reverse sm:flex-row gap-4">
-        <!-- Left sidebar with all settings -->
-        <div class="w-full sm:w-44 sm:flex-shrink-0 text-xs space-y-4">
-          <!-- Input device selection -->
-          <div>
-            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">INPUT</div>
-            <div class="space-y-1">
-              <div class="flex items-center gap-1">
-                <button @click="tuner.listInputDevices()" class="px-1.5 py-0.5 rounded bg-slate-800 text-[9px] hover:bg-slate-700">List</button>
-                <select
-                  v-model="tuner.selectedInputDeviceId.value"
-                  class="bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-[9px] flex-1 min-w-0"
-                  @change="if (tuner.isListening.value) { tuner.stop(); tuner.start(); }"
-                >
-                  <option :value="null">Default</option>
-                  <option v-for="d in tuner.inputDevices.value" :key="d.deviceId" :value="d.deviceId">
-                    {{ d.label }}
-                  </option>
-                </select>
-              </div>
-              <div v-if="tuner.isListening.value" class="text-emerald-400 text-[9px]">● active</div>
-              <div v-if="tuner.micSettingsLabel.value" class="text-[9px] text-slate-500 font-mono">{{ tuner.micSettingsLabel.value }}</div>
-            </div>
-          </div>
+    <div class="app-width w-full space-y-6">
+      <!-- Main Card -->
+      <div class="main-card card p-8 flex flex-col items-center gap-6">
+        <MicButton :is-listening="tuner.isListening.value" @toggle="toggleMic" />
 
-          <!-- Display settings -->
-          <div>
-            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">DISPLAY</div>
-            <div class="space-y-1">
-              <div class="flex items-center gap-1">
-                <span class="w-6 text-[9px] text-slate-500">A4</span>
-                <input
-                  type="number"
-                  class="w-12 bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-right font-mono text-[9px]"
-                  :value="tuner.a4.value"
-                  @input="tuner.setA4(Number(($event.target as HTMLInputElement).value))"
-                  min="420"
-                  max="460"
-                  step="1"
-                />
-                <span class="text-slate-500 text-[9px]">Hz</span>
-              </div>
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" v-model="tuner.showWaveform.value" class="accent-emerald-500 scale-75" />
-                <span class="text-[10px]">Waveform</span>
-              </label>
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500 scale-75" />
-                <span class="text-[10px]">Spectrum</span>
-              </label>
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500 scale-75" />
-                <span class="text-[10px]">Spectrogram</span>
-              </label>
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" v-model="tuner.chromatic.value" class="accent-emerald-500 scale-75" />
-                <span class="text-[10px]">{{ t('chromatic') }}</span>
-              </label>
-              <div class="flex items-center gap-1">
-                <span class="text-[9px] text-slate-500">{{ t('tolerance') }}</span>
-                <input
-                  type="number"
-                  class="w-10 bg-[#1f2937] border border-slate-700 rounded px-1 py-0.5 text-right font-mono text-[9px]"
-                  v-model.number="tuner.inTuneTolerance.value"
-                  min="1"
-                  max="25"
-                  step="1"
-                />
-                <span class="text-slate-500 text-[9px]">¢</span>
-              </div>
-            </div>
-          </div>
+        <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
-          <!-- Tuning -->
-          <div>
-            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">TUNING</div>
-            <TuningSelector
-              :tunings="tuner.allTunings"
-              :current="tuner.currentTuning.value"
-              @change="tuner.setTuning"
+        <Waveform v-if="tuner.showWaveform.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Spectrum v-if="tuner.showSpectrum.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+
+        <!-- A4 + visual toggles (placed near the visualizers) -->
+        <div class="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 mt-1">
+          <div class="flex items-center gap-2">
+            <span>{{ t('a4.label') }}</span>
+            <input
+              type="number"
+              class="w-16 bg-[#1f2937] border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-sm"
+              :value="tuner.a4.value"
+              @input="tuner.setA4(Number(($event.target as HTMLInputElement).value))"
+              min="420"
+              max="460"
+              step="1"
             />
+            <span class="text-slate-500">Hz</span>
           </div>
-
-          <!-- Strings (not relevant in chromatic mode) -->
-          <div v-if="!tuner.chromatic.value">
-            <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">STRINGS</div>
-            <StringSelector
-              :strings="tuner.strings.value"
-              :selected="tuner.selectedString.value"
-              :get-note-display="tuner.getNoteDisplay"
-              :format-freq="tuner.formatFreq"
-              @toggle="tuner.toggleString"
-            />
-          </div>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" v-model="tuner.showWaveform.value" class="accent-emerald-500" />
+            <span>{{ t('waveform') }}</span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
+            <span>{{ t('spectrum') }}</span>
+          </label>
+          <label v-if="tuner.nativeAudioAvailable.value" class="flex items-center gap-2">
+            <span>{{ t('audio.backend') }}</span>
+            <select
+              class="bg-[#1f2937] border border-slate-700 rounded px-2 py-1 text-sm"
+              :value="tuner.audioBackend.value"
+              @change="tuner.setAudioBackend(($event.target as HTMLSelectElement).value as 'web' | 'native')"
+            >
+              <option value="web">{{ t('audio.backend.web') }}</option>
+              <option value="native">{{ t('audio.backend.native') }}</option>
+            </select>
+          </label>
+          <InputDeviceSelector
+            v-if="!tuner.usingNativeAudio.value"
+            :devices="tuner.inputDevices.value"
+            :selected-device-id="tuner.selectedInputDeviceId.value"
+            @refresh="tuner.refreshInputDevices"
+            @select="tuner.setInputDevice"
+          />
         </div>
 
-        <!-- Right main content -->
-        <div class="flex-1 flex flex-col items-center gap-4 min-w-0">
-          <MicButton :is-listening="tuner.isListening.value" @toggle="toggleMic" />
+        <!-- Error -->
+        <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-lg border border-red-900">
+          {{ tuner.error.value }}
+          <button @click="tuner.clearError()" class="ml-2 underline">{{ t('dismiss') }}</button>
+        </div>
 
-          <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
+        <NoteDisplay
+          :display="tuner.currentNoteDisplay.value"
+          :is-detected="!!tuner.detectedNote.value"
+          :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
+          :target-freq="tuner.targetNote.value.frequency"
+          :format-freq="tuner.formatFreq"
+        />
 
-          <!-- Viz only take space and render when actually listening -->
-          <Waveform v-if="tuner.showWaveform.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-          <Spectrogram v-if="tuner.showSpectrogram.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-          <Spectrum v-if="tuner.showSpectrum.value && tuner.isListening.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" :current-freq="tuner.currentFrequency.value" :sample-rate="tuner.sampleRate.value" />
+        <CentsGauge
+          :cents="tuner.cents.value"
+          :mode="tuner.displayMode.value"
+          :is-in-tune="tuner.isInTune.value"
+          :is-detected="!!tuner.detectedNote.value"
+        />
 
-          <!-- Error -->
-          <div v-if="tuner.error.value" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-xl border border-red-900 w-full">
-            {{ tuner.error.value }}
-            <button @click="tuner.clearError()" class="ml-2 underline">dismiss</button>
-          </div>
+        <DisplayModeSelector
+          :mode="tuner.displayMode.value"
+          @change="tuner.setDisplayMode"
+        />
 
-          <NoteDisplay
-            :display="tuner.currentNoteDisplay.value"
-            :is-detected="!!tuner.detectedNote.value"
-            :target-name="tuner.getNoteDisplay(tuner.targetNote.value)"
-            :target-freq="tuner.targetNote.value.frequency"
-            :format-freq="tuner.formatFreq"
-            :confidence="tuner.confidence.value"
-            :is-power-chord="tuner.isPowerChord.value"
-          />
+        <DisplayPreferences
+          :layout-mode="tuner.layoutMode.value"
+          :left-handed="tuner.leftHanded.value"
+          :theme-mode="tuner.themeMode.value"
+          @fullscreen="tuner.toggleFullscreen"
+          @layout-change="tuner.setLayoutMode"
+          @left-handed-change="tuner.setLeftHanded"
+          @theme-change="tuner.setThemeMode"
+        />
 
-          <CentsGauge :cents="tuner.cents.value" :is-in-tune="tuner.isInTune.value" />
+        <CentsHistoryGraph :points="tuner.centsHistory.value" />
 
-          <CentsHistory
-            v-if="tuner.isListening.value"
-            :history="tuner.centsHistory.value"
-            :is-listening="tuner.isListening.value"
-          />
+        <FreqReadout
+          :detected="tuner.smoothedFrequency.value"
+          :target="tuner.targetNote.value.frequency"
+          :format-freq="tuner.formatFreq"
+        />
+      </div>
 
-          <FreqReadout
-            :detected="tuner.smoothedFrequency.value"
-            :target="tuner.targetNote.value.frequency"
-            :format-freq="tuner.formatFreq"
-          />
+      <div class="card p-6 space-y-4">
+        <TuningOptions
+          :active-instrument="tuner.activeInstrument.value"
+          :capo="tuner.capo.value"
+          :instruments="tuner.instrumentOptions.value"
+          :temperament="tuner.temperament.value"
+          :temperaments="tuner.temperamentOptions.value"
+          :transpose="tuner.transpose.value"
+          @instrument-change="tuner.setInstrument"
+          @capo-change="tuner.setCapo"
+          @temperament-change="tuner.setTemperament"
+          @transpose-change="tuner.setTranspose"
+        />
 
-          <PerStringCents
-            v-if="tuner.isListening.value && !tuner.chromatic.value"
-            :strings-with-cents="tuner.stringsWithCents.value"
-            :strings="tuner.strings.value"
-            :selected-string="tuner.selectedString.value"
-            @select="tuner.toggleString"
-          />
+        <TemperamentPanel
+          :custom-temperaments="tuner.customTemperaments.value"
+          :offsets="tuner.temperamentOffsets.value"
+          :root="tuner.temperamentRoot.value"
+          :temperament="tuner.temperament.value"
+          :temperaments="tuner.temperamentOptions.value"
+          @delete="tuner.deleteCustomTemperament"
+          @root-change="tuner.setTemperamentRoot"
+          @save="tuner.saveCustomTemperament"
+        />
 
-          <Fretboard
-            v-if="tuner.isListening.value && !tuner.chromatic.value"
-            :strings="tuner.strings.value"
-            :target-freq="tuner.targetNote.value.frequency"
-            :selected-string="tuner.selectedString.value"
-            @select="tuner.toggleString"
+        <div class="flex min-w-0 items-center justify-between">
+          <TuningSelector
+            :tunings="tuner.allTunings.value"
+            :current="tuner.currentTuning.value"
+            @change="tuner.setTuning"
           />
         </div>
+
+        <StringSelector
+          v-if="tuner.strings.value.length"
+          :strings="tuner.strings.value"
+          :selected="tuner.selectedString.value"
+          :selected-index="tuner.selectedStringIndex.value"
+          :left-handed="tuner.leftHanded.value"
+          :get-note-display="tuner.getNoteDisplay"
+          :format-freq="tuner.formatFreq"
+          @toggle="tuner.toggleString"
+        />
+        <div v-else class="rounded-lg border border-slate-800 bg-[#0f1319] px-4 py-3 text-sm text-slate-400">
+          {{ t('chromatic') }}
+        </div>
+
+        <CustomTuningEditor
+          :current="tuner.currentTuning.value"
+          :strings="tuner.strings.value"
+          @save="tuner.saveCustomTuning"
+          @delete="tuner.deleteCustomTuning"
+        />
+        <StringOffsetsPanel
+          v-if="tuner.strings.value.length"
+          :get-note-display="tuner.getNoteDisplay"
+          :offsets="tuner.activeStringOffsets.value"
+          :profile="tuner.sweeteningProfile.value"
+          :strings="tuner.strings.value"
+          @offset-change="tuner.setStringOffset"
+          @profile-change="tuner.setSweeteningProfile"
+        />
+        <CustomTuningTransfer
+          :tunings="tuner.customTunings.value"
+          @import="tuner.importCustomTunings"
+        />
+        <InstrumentProfileEditor
+          :custom-instruments="tuner.customInstruments.value"
+          @delete="tuner.deleteInstrumentProfile"
+          @save="tuner.saveInstrumentProfile"
+        />
       </div>
 
       <TunerControls
@@ -244,9 +273,41 @@ onUnmounted(() => {
         @toggle-ref="tuner.toggleReferenceTone"
       />
 
-      <button @click="tuner.playRandomString()" class="btn btn-ghost mx-auto block">
-        {{ t('random.note') }}
-      </button>
+      <EarTrainingPanel
+        :accuracy="tuner.earTrainingAccuracy.value"
+        :attempts="tuner.earTrainingAttempts.value"
+        :correct="tuner.earTrainingCorrect.value"
+        :get-note-display="tuner.getNoteDisplay"
+        :revealed="tuner.earTrainingRevealed.value"
+        :streak="tuner.earTrainingStreak.value"
+        :target="tuner.earTrainingTarget.value"
+        @mark="tuner.markEarTraining"
+        @next="tuner.nextEarTraining"
+        @play="tuner.playEarTraining"
+        @reset="tuner.resetEarTraining"
+        @reveal="tuner.revealEarTraining"
+      />
+
+      <PracticeStatsPanel
+        :export-stats="tuner.exportPracticeStats"
+        :history="tuner.practiceHistory.value"
+        :summary="tuner.practiceSummary.value"
+        @clear="tuner.clearPracticeHistory"
+      />
+
+      <MetronomePanel
+        :beat="tuner.metronomeBeat.value"
+        :beats="tuner.metronomeBeats.value"
+        :bpm="tuner.metronomeBpm.value"
+        :is-running="tuner.metronomeRunning.value"
+        :subdivision="tuner.metronomeSubdivision.value"
+        :subdivision-step="tuner.metronomeSubdivisionStep.value"
+        @beats-change="tuner.setMetronomeBeats"
+        @bpm-change="tuner.setMetronomeBpm"
+        @subdivision-change="tuner.setMetronomeSubdivision"
+        @tap="tuner.tapMetronome"
+        @toggle="tuner.toggleMetronome"
+      />
 
       <div class="text-center text-[11px] text-slate-500 max-w-sm mx-auto">
         {{ t('quiet.room') }} {{ t('keyboard.hint') }}
