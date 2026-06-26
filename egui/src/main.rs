@@ -21,6 +21,10 @@ use pitch_core::{
     get_tunings, Tuning, TunerEngine, TunerUpdate,
 };
 
+// Consistent sample rate for audio processing and viz calculations.
+// Matches the wasm feed path (48000) and preferred in web.
+const PREFERRED_SAMPLE_RATE: f32 = 48000.0;
+
 #[cfg(target_arch = "wasm32")]
 static WEB_ENGINE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<TunerEngine>>> = std::sync::OnceLock::new();
 
@@ -262,8 +266,10 @@ impl eframe::App for App {
                         });
 
                     if self.audio.selected_input_device != prev_dev && self.listen {
-                        self.toggle_mic(ctx);
-                        self.toggle_mic(ctx);
+                        // Hack: double-toggle to restart the cpal stream with new device.
+                        // This is a smell (see recommendation.md). Should have explicit restart_mic().
+                        self.toggle_mic(ctx); // stop current
+                        self.toggle_mic(ctx); // start with new device
                     }
 
                     if ui.button("↻").clicked() {
@@ -316,7 +322,8 @@ impl eframe::App for App {
 
                         // Harmonics
                         if let Some(f) = s.freq {
-                            let sr = 44100.0;
+                            // Use consistent sample rate (was hardcoded 44100, mismatched wasm feed at 48000)
+                            let sr = PREFERRED_SAMPLE_RATE;
                             for harm in 2..=5 {
                                 let hf = f * harm as f32;
                                 let bin = ((hf / (sr / 2048.0)) as usize).min(max_bins - 1);
@@ -553,7 +560,7 @@ pub fn feed_audio_samples(samples: &[f32]) {
         return;
     }
     let window = &samples[0..2048];
-    let sr = 48000.0;
+    let sr = PREFERRED_SAMPLE_RATE;
 
     let update = {
         if let Some(eng) = WEB_ENGINE.get() {

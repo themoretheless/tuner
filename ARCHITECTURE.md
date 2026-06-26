@@ -10,16 +10,22 @@ The project has evolved through many iterations (Vue web, Tauri, pure egui nativ
 Strengths:
 - Good move to shared `pitch-core` for YIN/MPM + spectrum.
 - TunerEngine exists as a step toward better separation.
+- Domain layer partially extracted.
 - Multiple platforms (web + egui + Tauri) working.
 
 Weaknesses (high coupling, low modularity):
-- `web/src/composables/useTuner.ts` is a god object: audio input, device management, pitch state, smoothing, reference tones, history, UI state, persistence sync, URL state — everything in one file (~550 lines).
-- Visualizers (`Spectrum.vue`, `Waveform.vue`, etc.) are tightly coupled to Web Audio `AnalyserNode`. They call `getByteFrequencyData` directly.
-- `pitch-core/src/lib.rs` is a single huge file mixing domain types, DSP algorithms, engine, smoothing, and WASM bindings.
-- `egui/src/main.rs` still has god-like `App` + inline painter code for viz + audio manager logic.
+- `web/src/composables/useTuner.ts` is a god object: audio input, device management, pitch state, smoothing, reference tones, history, UI state, persistence sync, URL state — everything in one file (~450+ lines).
+- Visualizers (`Spectrum.vue`, `Waveform.vue`, etc.) are still tightly coupled to Web Audio `AnalyserNode`. They call `get*Data` directly (see recommendation.md).
+- `pitch-core/src/lib.rs` remains large and mixed despite domain.rs extraction.
+- `egui/src/main.rs` still has god-like `App` + heavy Mutex use + inline painter logic.
 - No clear boundaries: audio I/O, DSP, domain math, session state, and presentation are mixed.
-- Hard to test in isolation, hard to add new inputs (file, MIDI), new outputs, or new viz.
-- Duplication and cfg hell between native and web paths.
+- Hard to test in isolation.
+- Duplication between TS note math and Rust domain.
+- Many items from the original critique are only partially addressed.
+
+See the full list of problems in [recommendation.md](recommendation.md) (original Top 50 + 200 additional issues from expanded audit, plus notes on small fixes already applied like sample rate consistency).
+
+The list is kept in sync across docs. High priority problems directly contradict the layered architecture described here.
 
 ## 10 Different Critics — From-Scratch Design Perspectives
 
@@ -515,3 +521,22 @@ The following categorized list (200 items) was created to be implementation-conc
 - Всегда проверяем: уменьшает ли изменение зацепленность между audio / dsp / state / presentation?
 
 Любая новая работа должна отвечать: "Does this make future high-value backlog items easier to implement cleanly?"
+
+## Current Top Problems (Synchronized)
+
+The detailed **Top 50 things done poorly or incorrectly** (as of the latest main merge) live in [recommendation.md](recommendation.md).
+
+Key highlights that directly block the target architecture:
+- Visualizers still use AnalyserNode (items 1, 9)
+- God objects and missing traits (2, 3, 6, 12)
+- Duplication of domain math (13-16)
+- Realtime safety and Mutex problems in egui (4, 5)
+- Weak testing and no equivalence harness (29-36)
+
+When closing any of these 50, update recommendation.md + this file + README.md.
+
+Recommended reading order:
+1. recommendation.md (the problems)
+2. This file (target layered design)
+3. The 200 actionable proposals earlier in this document
+4. Original raw backlogs (for context)

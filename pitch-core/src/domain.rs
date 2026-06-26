@@ -196,7 +196,7 @@ pub fn get_cents(frequency: f32, target_frequency: f32) -> f32 {
 
 pub fn find_closest_string(frequency: f32, strings: &[Note], a4: f32) -> Note {
     if frequency <= 0.0 || strings.is_empty() {
-        return strings.get(0).cloned().unwrap_or(Note { name: "E", octave: 2, frequency: 82.41 });
+        return strings.get(0).cloned().unwrap_or(Note { name: "E", octave: 2, frequency: 82.4069 });
     }
     let ratio = a4 / 440.0;
     let mut closest = strings[0].clone();
