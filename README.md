@@ -90,6 +90,7 @@ Tuner/
 ├── desktop/src-tauri/   # Rust commands, native audio backend
 ├── egui/                # Pure native Rust app
 ├── ARCHITECTURE.md      # Deep refactor plan and module boundaries
+├── RECOMMENDATIONS.md   # Prioritized recommendations from the architecture review
 └── README.md
 ```
 
@@ -155,7 +156,7 @@ https://themoretheless.github.io/tuner/
 
 ## Deep Refactor Blueprint
 
-Этот раздел - краткий план глубокого рефакторинга. Полный документ с 10 критиками, целевой архитектурой, dependency rules, module contracts и migration roadmap лежит в `ARCHITECTURE.md`.
+Этот раздел - краткий план глубокого рефакторинга. Полный документ с 10 критиками, целевой архитектурой, dependency rules, module contracts и migration roadmap лежит в `ARCHITECTURE.md`. Практический список рекомендаций и порядок следующих коммитов лежит в `RECOMMENDATIONS.md`.
 
 Главный принцип: UI не должен знать, какой audio backend активен; доменная музыка не должна знать про Vue, Tauri, localStorage или cpal; storage не должен знать про компоненты; orchestration должен быть тонким и тестируемым.
 
