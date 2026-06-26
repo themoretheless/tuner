@@ -172,6 +172,7 @@ Prioritization key: P0 (blocks correctness or main thread), P1 (architecture vio
     **Recommendation:** Treat the "Target Architecture" section of ARCHITECTURE.md as the spec. Every change should move closer to it.
 
 ## How to Use This List
+- **Execution order is in [PLAN.md](PLAN.md)** - milestones M0-M8 cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - Pick the highest impact items first (1-5, 13, 21, 29).
 - Every fix should reduce coupling.
 - Update this file, ARCHITECTURE.md and README.md when an item is resolved.

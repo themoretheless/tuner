@@ -153,6 +153,10 @@ Platform shells (very thin):
 
 ## Proposed Phased Refactoring Plan
 
+> **Sequenced execution order** (dependency-ordered milestones M0-M8 mapping these phases to
+> specific recommendation.md problems, with verification and definition of done) lives in
+> [PLAN.md](PLAN.md). The phases below are the conceptual grouping; PLAN.md is the order to do them in.
+
 ### Phase 0 — Foundations (low risk, high impact)
 - Define `DetectionFrame`, `SpectrumFrame` etc. as the single source of truth (in tuner-types or domain).
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
