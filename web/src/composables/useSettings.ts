@@ -88,8 +88,9 @@ export function useSettings() {
     save();
   }, { deep: true });
 
-  // Load async, but initial values are fine for first render
-  load();
+  // Load async, but initial values are fine for first render. Expose the
+  // promise so consumers can react once persisted values have been restored.
+  const loaded = load();
 
   return {
     a4,
@@ -99,6 +100,7 @@ export function useSettings() {
     showSpectrogram,
     chromatic,
     inTuneTolerance,
+    loaded,
     load,
     save,
   };

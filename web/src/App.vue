@@ -102,6 +102,7 @@ onUnmounted(() => {
                 </select>
               </div>
               <div v-if="tuner.isListening.value" class="text-emerald-400 text-[9px]">● active</div>
+              <div v-if="tuner.micSettingsLabel.value" class="text-[9px] text-slate-500 font-mono">{{ tuner.micSettingsLabel.value }}</div>
             </div>
           </div>
 
@@ -163,8 +164,8 @@ onUnmounted(() => {
             />
           </div>
 
-          <!-- Strings -->
-          <div>
+          <!-- Strings (not relevant in chromatic mode) -->
+          <div v-if="!tuner.chromatic.value">
             <div class="text-slate-400 mb-1 text-[10px] font-medium tracking-wider">STRINGS</div>
             <StringSelector
               :strings="tuner.strings.value"
@@ -218,7 +219,7 @@ onUnmounted(() => {
           />
 
           <PerStringCents
-            v-if="tuner.isListening.value"
+            v-if="tuner.isListening.value && !tuner.chromatic.value"
             :strings-with-cents="tuner.stringsWithCents.value"
             :strings="tuner.strings.value"
             :selected-string="tuner.selectedString.value"
@@ -226,7 +227,7 @@ onUnmounted(() => {
           />
 
           <Fretboard
-            v-if="tuner.isListening.value"
+            v-if="tuner.isListening.value && !tuner.chromatic.value"
             :strings="tuner.strings.value"
             :target-freq="tuner.targetNote.value.frequency"
             :selected-string="tuner.selectedString.value"

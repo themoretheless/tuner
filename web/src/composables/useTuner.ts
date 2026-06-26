@@ -46,6 +46,9 @@ export function useTuner() {
   // Input device selection
   const inputDevices = ref<{ deviceId: string; label: string }[]>([]);
   const selectedInputDeviceId = ref<string | null>(null);
+  // Actual negotiated input settings (sample rate / bit depth / channels),
+  // read from the live MediaStreamTrack and AudioContext.
+  const micSettings = ref<{ sampleRate?: number; sampleSize?: number; channelCount?: number } | null>(null);
 
   // History for cents graph (last N samples)
   const centsHistory = ref<number[]>([]);
@@ -87,11 +90,23 @@ export function useTuner() {
     return sharedAudio;
   }
 
+  // Read the negotiated input settings from a live stream's audio track.
+  function captureMicSettings(s: MediaStream) {
+    const track = s.getAudioTracks()[0];
+    const st = track && track.getSettings ? track.getSettings() : ({} as MediaTrackSettings);
+    micSettings.value = {
+      sampleRate: st.sampleRate ?? audioContext?.sampleRate,
+      sampleSize: st.sampleSize,
+      channelCount: st.channelCount,
+    };
+  }
+
   async function listInputDevices() {
     try {
       // Request permission first so labels are populated, then immediately
       // release the probe stream so the mic does not stay active afterwards.
       const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      captureMicSettings(probe);
       probe.getTracks().forEach((t) => t.stop());
       const devices = await navigator.mediaDevices.enumerateDevices();
       inputDevices.value = devices
@@ -175,6 +190,18 @@ export function useTuner() {
     return det ? getNoteDisplay(det.note) : null;
   });
 
+  // Human-readable input settings, e.g. "48000 Hz · 16-bit · mono". Parts the
+  // browser does not expose (often bit depth) are omitted.
+  const micSettingsLabel = computed(() => {
+    const s = micSettings.value;
+    if (!s) return '';
+    const parts: string[] = [];
+    if (s.sampleRate) parts.push(`${s.sampleRate} Hz`);
+    if (s.sampleSize) parts.push(`${s.sampleSize}-bit`);
+    if (s.channelCount) parts.push(s.channelCount === 1 ? 'mono' : `${s.channelCount} ch`);
+    return parts.join(' · ');
+  });
+
   // Expose A4 for UI control
   function setA4(newA4: number) {
     a4.value = Math.max(420, Math.min(460, Math.round(newA4)));
@@ -211,7 +238,18 @@ export function useTuner() {
       /* ignore malformed URL */
     }
   }
-  applyUrlState();
+
+  // Once persisted settings have loaded (async on Tauri), reconcile the tuning
+  // selection with the restored id - this fixes the race where currentTuning
+  // was initialized synchronously before lastTuningId resolved - then let URL
+  // params take final precedence so shared links win.
+  settings.loaded.then(() => {
+    const persisted = TUNINGS.find(t => t.id === settings.lastTuningId.value);
+    if (persisted && persisted.id !== currentTuning.value.id) {
+      currentTuning.value = persisted;
+    }
+    applyUrlState();
+  });
 
   async function start() {
     error.value = null;
@@ -260,6 +298,7 @@ export function useTuner() {
       analyser.maxDecibels = -15;
       analyserRef.value = analyser;
       sampleRate.value = audioContext.sampleRate;
+      captureMicSettings(stream);
 
       source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
@@ -501,6 +540,8 @@ export function useTuner() {
     // input devices
     inputDevices,
     selectedInputDeviceId,
+    micSettings,
+    micSettingsLabel,
 
     // actions
     start,
