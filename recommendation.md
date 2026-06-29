@@ -305,6 +305,7 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 183. No source maps or proper error boundaries in production web build.
 
 ## How to Use This List
+- **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - Pick the highest impact items first: 1-5, 12, 14-16, 23-27, 31-32 and 45.
 - Every fix should reduce coupling.
 - Update this file, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
