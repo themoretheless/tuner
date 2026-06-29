@@ -1,180 +1,177 @@
 # Recommendations & Top 50 Problems
 
-**Current state audit (June 2026, post-integration into main)**
+**Current state audit (2026-06-29, synced with current `main`)**
 
-This document lists the **top 50 things that are done poorly or incorrectly** right now in the guitar tuner codebase. It is based on direct code inspection (useTuner.ts, pitch-core, egui/main.rs, visualizers, duplication between TS/Rust, audio paths, etc.).
+This is the canonical **Top 50 things that are done poorly or incorrectly** in the current worktree. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (295 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
 
-The list is synchronized with:
-- [ARCHITECTURE.md](ARCHITECTURE.md) (see "Current Problems" section)
-- [README.md](README.md) (see "Technical Debt" section)
+Synced documents:
+- [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
+- [README.md](README.md) summarizes the same debt for users and contributors.
+- [RECOMMENDATIONS.md](RECOMMENDATIONS.md) turns this debt into ordered refactor steps.
 
-Many items directly contradict the goals stated in ARCHITECTURE.md (loose coupling, data-driven viz, clean layers).
-
-Prioritization key: P0 (blocks correctness or main thread), P1 (architecture violation), P2 (perf/DX/quality), P3 (nice-to-fix).
+Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
 ## Top 50 Problems (What Was Done Poorly or Incorrectly)
 
-### Architecture & Coupling (1-12)
-1. **Visualizers still receive live AnalyserNode** — Spectrum.vue, Waveform.vue, Spectrogram.vue all accept `analyser: AnalyserNode | null` and call `getByteFrequencyData` / `getFloatTimeDomainData` directly. Violates the core "plain data only" rule from ARCHITECTURE.md.
-   **Recommendation:** Drive every visualizer exclusively from `DetectionFrame` / `WaveformFrame` / `SpectrumFrame` produced by TunerEngine. Remove analyser props completely.
+### Architecture & Coupling (1-14)
+1. **P0: Visualizers still receive live `AnalyserNode`.** `Waveform.vue`, `Spectrum.vue` and `Spectrogram.vue` accept `analyser: AnalyserNode | null` and call `getFloatTimeDomainData` / `getByteFrequencyData` directly. This violates the architecture rule that visualizers must render plain data frames only.
+   **Recommendation:** Replace analyser props with `WaveformFrame`, `SpectrumFrame` and `SpectrogramFrame` produced by a session/viz data layer.
 
-2. **useTuner.ts remains a god-object** (~450-550 LOC). It owns mic capture, device selection, AudioContext, Analyser, raf loop, smoothing, reference tones, URL state, persistence sync, history, and exposes everything.
-   **Recommendation:** Split into `useAudioInput`, `useTunerSession`, `useReferenceTone`, `useVizData` as repeatedly planned.
+2. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
+   **Recommendation:** Turn it into a thin composition root and move lifecycle/workflow logic into controllers.
 
-3. **pitch-core/lib.rs is still mostly monolithic**. Even after moving domain.rs, it mixes TunerEngine, multiple detector impls, spectrum, power-chord detection, smoothing, WASM exports, and cfg in one file.
-   **Recommendation:** Finish the split: `dsp/yin.rs`, `dsp/mpm.rs`, `engine.rs`, `smoothing.rs`, `spectrum.rs`. Expose clean traits.
+3. **P0: No `TunerSessionController` / explicit session state machine.** Start, stop, backend switching, native fallback and range updates are still plain functions and watchers.
+   **Recommendation:** Add `idle | starting | listening | stopping | error` state and make start/stop/restart serialized.
 
-4. **Heavy Mutex usage in egui audio and UI paths**. State and TunerEngine are wrapped in Arc<Mutex<...>> and locked from update() and audio callbacks.
-   **Recommendation:** Move processing off the realtime callback. Use lock-free ring buffers or channels. Address the original P1 backlog items.
+4. **P0: No clean audio port abstraction.** Web audio, Tauri native audio and egui cpal paths expose different concepts and are selected with ad hoc conditionals.
+   **Recommendation:** Introduce `AudioInputPort` and `ToneGenerator` ports, with web, Tauri, egui and mock adapters.
 
-5. **DSP not reliably off the cpal realtime thread** (native). Processing and viz updates happen under locks in the audio callback path.
-   **Recommendation:** Feed samples into a non-realtime engine (as planned in TOP-500 P1).
+5. **P0: `pitch-core/src/lib.rs` remains monolithic.** Domain was partially extracted, but engine, YIN, MPM, smoothing, spectrum, power-chord detection, WASM exports and tests still share one large file.
+   **Recommendation:** Split into `domain`, `dsp/yin`, `dsp/mpm`, `engine`, `spectrum`, `smoothing`, `wasm`.
 
-6. **No clean AudioInput trait / abstraction**. Web uses getUserMedia + Analyser, egui uses cpal, web WASM feed is manual `feed_audio_samples`. Huge platform leakage.
-   **Recommendation:** Implement the AudioInput + ToneGenerator traits from the architecture plan.
+6. **P0: `egui/src/main.rs` is still a god file.** `App::update` handles repaint policy, input, painting, history mutation, device UI, stream toggles and reference tone wiring.
+   **Recommendation:** Extract widgets/painters/managers, then make egui consume the same session/data contracts as web.
 
-7. **TunerEngine is not a pure session orchestrator**. It owns FFT planner, buffers, smoothing, and is mutated from multiple places.
-   **Recommendation:** Make engine take config + implement a clear `process(&[f32]) -> TunerUpdate` with minimal internal state.
+7. **P1: `useTuningState.ts` is a second god-object.** It combines instrument registry selection, chromatic mode, temperament math, custom tuning CRUD, export/import, profile handling and display helpers.
+   **Recommendation:** Split pure music/domain functions from workflow controllers and UI view models.
 
-8. **No high-level data contracts for viz**. Components receive either AnalyserNode or raw state; no `DetectionFrame` / `VizFrame` types shared.
-   **Recommendation:** Define the frame structs in pitch-core (or small types crate) and use them everywhere.
+8. **P1: `useSettings.ts` is a global mutable settings singleton.** It owns persistence, schema normalization, refs, watches and save throttling in one module.
+   **Recommendation:** Add a versioned profile schema and storage ports, then make settings a loaded config value.
 
-9. **App.vue + useTuner still leak engine internals** (showWaveform, analyser, currentFrequency, etc. are all exposed as a bag).
-   **Recommendation:** Return structured, minimal view models for different parts of UI.
+9. **P1: `App.vue` is an overloaded feature shell.** It imports almost every panel and wires tuner, settings, practice, metronome, custom tunings, temperaments and display controls on one screen.
+   **Recommendation:** Split into feature screens/slices: tuner, library, practice, settings.
 
-10. **Persistence, settings, and session state are tangled**. useSettings, currentTuning in useTuner, URL reconciliation, and async loaded races.
-    **Recommendation:** One source of truth for config, separate from live session.
+10. **P1: No single `DetectionFrame` / `TunerFrame` contract.** Web, Tauri native and egui all move different partial data shapes around.
+    **Recommendation:** Define canonical frame types and use them across all consumers.
 
-11. **No dependency inversion for the engine**. Web and egui both know too much about how detection happens.
-    **Recommendation:** Depend on traits or high-level `TunerProcessor` interface.
+11. **P1: Engine internals leak into UI shape.** The UI receives `analyser`, raw frequencies, selected strings, backend flags and many refs as one broad API.
+    **Recommendation:** Return small view-model slices and commands for each feature.
 
-12. **God-like egui App struct + update method**. Still contains keyboard, painting, history pushing, engine locking, audio manager, and viz all together.
-    **Recommendation:** Continue extracting (VizManager was a start). Use data-driven painters that only receive frames.
+12. **P1: Persistence, URL/app state and live session state are tangled.** Settings are watched and saved while live audio and tuning selection mutate.
+    **Recommendation:** Separate persisted profile, transient session and derived presentation state.
 
-### Duplication & Inconsistency (13-20)
-13. **Tuning tables duplicated** — web/src/utils/notes.ts has its own `TUNINGS` + `GUITAR_STRINGS_STANDARD` (with `id` field) vs pitch-core/src/domain.rs (no id, slightly different structure).
-    **Recommendation:** Make Rust the source of truth. Generate or export JS constants from WASM/domain at build time.
+13. **P1: Tauri native audio bypasses `pitch-core`.** `desktop/src-tauri/src/native_audio.rs` has its own YIN detector and level normalization instead of using shared core/engine.
+    **Recommendation:** Reuse `pitch-core` or a shared detector module from Tauri native audio.
 
-14. **Note math and cents logic duplicated** (frequency_to_note, get_cents, find_closest_string). JS fallbacks + Rust versions can diverge.
-    **Recommendation:** Always call through WASM for core math in web when available. Add CI equivalence test.
+14. **P1: `TunerEngine` is not just an engine boundary.** It owns smoothing, FFT planner, buffers, note formatting strings and spectrum production regardless of consumer needs.
+    **Recommendation:** Split detector/analyzer/smoother and let session request only needed outputs.
 
-15. **Smoothing implementations duplicated** (FrequencySmoother in TS, Smoother + WasmSmoother in Rust, plus EMA/median remnants).
-    **Recommendation:** Unify smoothing logic inside pitch-core and expose a single good implementation.
+### Duplication & Drift (15-24)
+15. **P0: Tuning and instrument truth is duplicated.** `web/src/utils/notes.ts` has a rich registry with ids, instruments, temperaments and custom features; `pitch-core/src/domain.rs` has a smaller independent list.
+    **Recommendation:** Use one registry source or add parity/codegen tests that fail on drift.
 
-16. **RMS / normalize / downsample have JS fallbacks** in pitch.ts even though WASM is the intended path.
-    **Recommendation:** Remove JS fallbacks for core DSP or make them only for dev. Enforce WASM.
+16. **P0: Note math and cents logic exist in both TS and Rust.** `frequency_to_note`, `get_cents`, closest string selection and display formatting can diverge silently.
+    **Recommendation:** Add numeric equivalence tests and converge on one source of truth.
 
-17. **Hardcoded constants scattered** (2048 FFT, 44100 sr in egui harmonics, 0.12 YIN threshold, 48000 preferred, various gains).
-    **Recommendation:** Central Config struct in domain or engine. One place.
+17. **P1: Pitch detection exists in too many places.** Web TS (`utils/pitch.ts` + worker), pitch-core Rust and Tauri native Rust all implement overlapping YIN/range/level behavior.
+    **Recommendation:** Make `pitch-core` the detector implementation and keep TS/Tauri as adapters.
 
-18. **Spectrum buffer sizes and bin logic** duplicated and inconsistent between web (Analyser) and Rust (rustfft 2048 -> 512?).
-    **Recommendation:** Compute spectrum once in TunerEngine and return normalized data.
+18. **P1: Smoothing and confidence behavior are duplicated.** TS `FrequencySmoother`, Rust `Smoother`, native frame confidence and UI smoothing do not share a spec.
+    **Recommendation:** Define one smoothing/filtering contract and test it with fixtures.
 
-19. **Power chord and confidence logic** implemented in multiple places (isLikelyPowerChord, JS version, native).
-    **Recommendation:** Single impl in pitch-core.
+19. **P1: Power-chord and harmonic heuristics are not unified.** Core, web and UI paths can disagree on power-chord indication.
+    **Recommendation:** Return power/harmonic flags from shared core with stable tests.
 
-20. **Different note display / string selection logic** between platforms.
-    **Recommendation:** Move more presentation helpers into shared core or pure functions.
+20. **P1: Spectrum/waveform drawing code is duplicated across Vue and egui.** Both platforms reinvent data scaling, history limits, colors and harmonic markers.
+    **Recommendation:** Share data transforms and keep painters platform-specific but dumb.
 
-### Performance & Real-time (21-28)
-21. **Main-thread raf loop doing detection + viz work** at 60fps in web.
-    **Recommendation:** Use AudioWorklet + off-main detection.
+21. **P2: Magic constants are scattered.** Buffer sizes, YIN threshold, RMS gates, history lengths, tolerance cents, gains and sample-rate assumptions live in many files.
+    **Recommendation:** Move them into typed config structs/constants with docs.
 
-22. **Unconditional history pushing and spectrogram recording** every egui update frame.
-    **Recommendation:** Only when listening + throttle to 30fps or on change.
+22. **P2: Storage keys and profile shape are not centralized.** localStorage, Tauri Store and egui storage use unrelated flat keys.
+    **Recommendation:** Add `UserProfileV1` and migrations.
 
-23. **Canvas resize and draw every frame** in multiple components (even if the branch tried to fix DPR).
-    **Recommendation:** Use ResizeObserver + requestIdle or proper dirty checks.
+23. **P2: Error handling language and shape differ per platform.** Web returns user-facing strings, Tauri emits strings, egui prints `eprintln!`.
+    **Recommendation:** Introduce typed error categories and platform-specific presentation.
 
-24. **YIN still O(n²) without aggressive downsampling or string-prior bounds** in hot path by default.
-    **Recommendation:** Apply 22050 decimate + per-string tau limits when string selected (already in backlog).
+24. **P2: Old and new recommendation files can drift.** `recommendation.md` is the problem audit, while `RECOMMENDATIONS.md` is the action plan; without explicit links they look like duplicates.
+    **Recommendation:** Keep `recommendation.md` canonical for problems and `RECOMMENDATIONS.md` canonical for the ordered refactor plan.
 
-25. **Multiple AudioContext creations** risk (shared one exists but not always used perfectly).
-    **Recommendation:** Enforce single shared context everywhere.
+### Performance & Realtime Safety (25-34)
+25. **P0: egui cpal callback locks and allocates.** It locks the engine/state, drains/grows Vecs and calls `request_repaint` from the audio callback path.
+    **Recommendation:** Move DSP off the realtime callback using a ring buffer/channel and process on a non-realtime thread.
 
-26. **No rate limiting or decimation of viz data** sent to components.
-    **Recommendation:** Engine can emit at full rate; consumers subsample.
+26. **P0: Tauri native cpal callback also does heavy work.** It extends/drains buffers, locks range, allocates YIN arrays and emits Tauri events from the input callback.
+    **Recommendation:** Keep callback minimal: push samples into a bounded queue and process elsewhere.
 
-27. **Spectrogram and full spectrum computed/pushed even when hidden** in some paths.
-    **Recommendation:** Gate behind flags inside the engine or session.
+27. **P0: `detect_pitch_yin_internal` allocates `diff` and `yin` on every call.** This is expensive in a hot path and contradicts the preallocation goal.
+    **Recommendation:** Store YIN buffers in detector state and reuse them.
 
-28. **Per-frame allocations** still present (Vecs for spectrum, history clones in egui).
-    **Recommendation:** Preallocated ring buffers and reuse.
+28. **P1: `TunerEngine::process` always computes spectrum and allocates `Vec<f32>`.** Even consumers that only need pitch pay FFT/spectrum cost.
+    **Recommendation:** Make analyzer outputs optional and preallocate spectrum output.
 
-### Testing & Quality (29-36)
-29. **Very few real tests**. Only basic synthetic tests in pitch-core (440Hz sine, simple power chord). No guitar signal fixtures.
-    **Recommendation:** Add recorded or synthetic guitar WAV fixtures + property tests.
+29. **P1: Web pitch loop still depends on `requestAnimationFrame`.** Detection cadence is throttled to ~33ms, but the loop itself is a paint loop and copies buffers to a worker.
+    **Recommendation:** Use AudioWorklet or a dedicated audio worker-style pipeline independent of paint.
 
-30. **No equivalence / golden master tests** between Rust and web paths.
-    **Recommendation:** WASM/native harness + committed fixtures as planned in backlog.
+30. **P1: Multiple visualizer RAF loops exist.** Waveform, spectrum and spectrogram each maintain their own draw loop and resizing.
+    **Recommendation:** Centralize viz scheduling or drive all canvases from a shared `useVizData`/clock.
 
-31. **No E2E or Playwright tests** using fake mic / synthetic audio.
-    **Recommendation:** Implement the fake-WAV pipeline tests.
+31. **P1: Canvas resize happens inside every draw.** `resizeCanvas()` is called on each frame in the visualizers.
+    **Recommendation:** Use `ResizeObserver` and resize only when dimensions/DPR change.
 
-32. **No benchmarks** for YIN/MPM on representative buffers.
-    **Recommendation:** criterion in pitch-core.
+32. **P1: `Spectrogram.vue` allocates a new `Uint8Array` every frame.** It also shifts history arrays in the draw loop.
+    **Recommendation:** Reuse buffers and use a ring buffer.
 
-33. **No snapshot or insta tests** for DetectionResult shape.
-    **Recommendation:** Add for key scenarios.
+33. **P2: egui requests repaint unconditionally.** `ctx.request_repaint()` runs every update even when idle.
+    **Recommendation:** Repaint on audio frames, animations or user input; sleep when idle.
 
-34. **Manual testing required for most audio behavior**.
-    **Recommendation:** Synthetic signal injector in dev mode.
+34. **P2: Native egui input path only builds an `f32` input stream.** It does not handle all cpal sample formats like the Tauri native path does.
+    **Recommendation:** Add typed sample-format handling or reuse the Tauri/native audio service code.
 
-35. **Limited CI coverage** for cross-platform numeric results and WASM.
-    **Recommendation:** Matrix that runs equivalence.
+### Testing & Verification (35-42)
+35. **P0: No Rust/TS equivalence harness.** The project can drift between `notes.ts`, `pitch.ts`, `domain.rs`, `pitch-core`, Tauri native and egui without CI catching it.
+    **Recommendation:** Add shared fixtures and assert frequency/note/cents parity.
 
-36. **No fuzz or property-based testing** on frequencyToNote roundtrips or edge frequencies.
-    **Recommendation:** Add proptest / quickcheck.
+36. **P0: No fake-mic E2E test.** There is no Playwright flow that feeds synthetic audio and asserts the UI detects the expected note.
+    **Recommendation:** Add mocked `getUserMedia` / fake WAV pipeline tests.
 
-### Web / Vue Specific (37-42)
-37. **Still heavy reliance on Web Audio Analyser for both detection support and viz**.
-    **Recommendation:** Move detection fully to WASM, viz to data.
+37. **P1: Core tests are still narrow.** `web/scripts/test-core.mjs` tests useful synthetic notes, but not noisy guitar-like plucks, inharmonicity, silence runs, invalid imports or backend switching.
+    **Recommendation:** Expand fixtures and split test suites by domain/pitch/settings/profile.
 
-38. **Global side-effect WASM init** at module load time.
-    **Recommendation:** Explicit async init with proper loading state.
+38. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
+    **Recommendation:** Add `criterion` benches for representative buffer sizes and notes.
 
-39. **Complicated settings restore + URL state dance** with races.
-    **Recommendation:** Simplify with a proper state machine.
+39. **P1: No property tests for note math.** Round-trip behavior across A4, transpose, capo and temperaments is not fuzzed.
+    **Recommendation:** Add proptest/quickcheck and TS-side generated cases.
 
-40. **No proper Service Worker** for real offline PWA (only manifest).
-    **Recommendation:** Implement as high priority P2.
+40. **P2: No visual regression tests for main states.** Gauge, stage/compact mode, colorblind mode and canvas states are not screenshot-tested.
+    **Recommendation:** Add Playwright screenshots for idle/listening/in-tune/error states.
 
-41. **Component props bloat** — many components receive large bags from useTuner.
-    **Recommendation:** Narrow props.
+41. **P2: Build CI does not prove offline/privacy claims.** PWA/offline/local-only claims are not backed by a zero-network or cache test.
+    **Recommendation:** Add CI checks for network fetches and built asset cacheability.
 
-42. **Magic numbers and strings** still in templates and composables.
-    **Recommendation:** Extract to constants + l10n where appropriate.
+42. **P2: No long-running stability test.** There is no soak test for memory growth, stream restart, worker failure or repeated start/stop.
+    **Recommendation:** Add scripted stability tests around lifecycle and audio mocks.
 
-### Rust / Native Specific (43-46)
-43. **Hardcoded 44100.0** for harmonic overlay bin calculation in egui.
-    **Recommendation:** Use actual sample rate from engine or stream config.
+### Product, UX, Build & Documentation (43-50)
+43. **P1: Web PWA is manifest-only.** README says PWA, but there is no full Service Worker/offline cache strategy.
+    **Recommendation:** Implement real offline PWA or document it honestly as install metadata only.
 
-44. **Audio stream restart and device change logic** is fragile and scattered in AudioManager.
-    **Recommendation:** Robust restart with proper error propagation.
+44. **P1: Full profile import/export is missing.** Custom tuning transfer exists, but user instruments, temperaments, settings, metronome and practice history do not have one versioned backup.
+    **Recommendation:** Add profile schema, migrations and full roundtrip tests.
 
-45. **WASM and native use different smoother and feed mechanisms**.
-    **Recommendation:** Unify via core.
+45. **P1: Accessibility is incomplete.** Some live readout is improved, but canvases, color-only states, keyboard flow, focus rings and screen-reader text are not systematically verified.
+    **Recommendation:** Add an accessibility checklist and test stage/compact/colorblind modes.
 
-46. **egui still has incomplete web audio random tone** (TODO in code).
-    **Recommendation:** Implement or share the reference tone generator.
+46. **P2: README still contained historical contradictions.** It mixed old first-review notes, future claims and current architecture status.
+    **Recommendation:** Keep README short and point deep debt to this file and ARCHITECTURE.md.
 
-### DX, Build, Deployment, Product (47-50)
-47. **No clear public API documentation** for pitch-core (rustdoc + examples missing for most fns).
-    **Recommendation:** Add docs + "how to use from web/egui".
+47. **P2: WASM packaging is ad hoc.** `build:wasm` can try to install `wasm-pack` during the build and writes into `web/public/wasm`.
+    **Recommendation:** Pin tool versions and make WASM artifacts reproducible/versioned.
 
-48. **Build and WASM packaging** is ad-hoc (vite public/wasm, old deleted files).
-    **Recommendation:** Proper build script + versioned artifacts.
+48. **P2: Release hardening is incomplete.** Code-signing, notarization, CSP, checksums and audit gates are listed as plans rather than enforced release steps.
+    **Recommendation:** Add release gates incrementally.
 
-49. **Weak observability** — silent failures in audio/WASM, no health strip.
-    **Recommendation:** Add the "Test my mic" wizard + pipeline health indicators.
+49. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
+    **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-50. **Architecture plan is only partially executed**. Domain split started, but most of the layered design (traits, data contracts, audio abstraction) is not in place.
-    **Recommendation:** Treat the "Target Architecture" section of ARCHITECTURE.md as the spec. Every change should move closer to it.
+50. **P0: The architecture plan is only partially executed.** Domain extraction and composable splits started, but the key boundaries (ports, frames, session, shared registry, realtime-safe audio) are not in place.
+    **Recommendation:** Treat [ARCHITECTURE.md](ARCHITECTURE.md) as the target spec and [RECOMMENDATIONS.md](RECOMMENDATIONS.md) as the ordered execution plan.
 
 ## How to Use This List
-- Pick the highest impact items first (1-5, 13, 21, 29).
+- Pick the highest impact items first: 1-6, 13, 15-17, 25-29, 35-36 and 50.
 - Every fix should reduce coupling.
-- Update this file, ARCHITECTURE.md and README.md when an item is resolved.
+- Update this file, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
 
 **Next audit:** after significant layer work or in 2-3 months.
@@ -185,9 +182,9 @@ Prioritization key: P0 (blocks correctness or main thread), P1 (architecture vio
 - Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
 These were safe, low-risk fixes addressing items from the Top 50.
 
-## Additional 200 Problems Discovered in Expanded Audit (51-250)
+## Additional Expanded Audit Notes (51-250)
 
-The original Top 50 was a starting point. Deeper inspection (full files for egui painting, useTuner internals, pitch-core internals, Vue canvas duplication, cpal streams, WASM bindings, settings races, lack of abstraction, etc.) revealed many more. Grouped for readability. All are real or strongly evidenced by code.
+The canonical, current Top 50 is the section above. The notes below are a broader secondary backlog from a previous expanded audit. They are useful for mining issues, but the Top 50 above wins if there is any wording drift.
 
 ### More Architecture & Coupling Issues (51-80)
 51. TunerEngine recomputes full spectrum on every process call regardless of whether any consumer needs it.
@@ -416,4 +413,3 @@ The original Top 50 was a starting point. Deeper inspection (full files for egui
 - High impact ones remain the god objects, coupling of viz to audio APIs, duplication of domain, realtime safety.
 
 Update this file when fixing. Link from issues.
-

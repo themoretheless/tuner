@@ -14,7 +14,8 @@ Strengths:
 - Multiple platforms (web + egui + Tauri) working.
 
 Weaknesses (high coupling, low modularity):
-- `web/src/composables/useTuner.ts` is a god object: audio input, device management, pitch state, smoothing, reference tones, history, UI state, persistence sync, URL state — everything in one file (~450+ lines).
+- `web/src/composables/useTuner.ts` is smaller than before, but still acts as a composition god-object: settings, web audio, native audio, pitch loop, tuning state, reference tones, practice, metronome and display state are all wired through one broad return object (~295 lines).
+- `web/src/composables/useTuningState.ts` and `useSettings.ts` are now the bigger coupling surfaces for music workflow and persistence.
 - Visualizers (`Spectrum.vue`, `Waveform.vue`, etc.) are still tightly coupled to Web Audio `AnalyserNode`. They call `get*Data` directly (see recommendation.md).
 - `pitch-core/src/lib.rs` remains large and mixed despite domain.rs extraction.
 - `egui/src/main.rs` still has god-like `App` + heavy Mutex use + inline painter logic.
@@ -23,7 +24,7 @@ Weaknesses (high coupling, low modularity):
 - Duplication between TS note math and Rust domain.
 - Many items from the original critique are only partially addressed.
 
-See the full list of problems in [recommendation.md](recommendation.md) (original Top 50 + 200 additional issues from expanded audit, plus notes on small fixes already applied like sample rate consistency).
+See the canonical current Top 50 in [recommendation.md](recommendation.md). The same file also keeps older expanded audit notes for issue mining.
 
 The list is kept in sync across docs. High priority problems directly contradict the layered architecture described here.
 
@@ -527,13 +528,14 @@ The following categorized list (200 items) was created to be implementation-conc
 The detailed **Top 50 things done poorly or incorrectly** (as of the latest main merge) live in [recommendation.md](recommendation.md).
 
 Key highlights that directly block the target architecture:
-- Visualizers still use AnalyserNode (items 1, 9)
-- God objects and missing traits (2, 3, 6, 12)
-- Duplication of domain math (13-16)
-- Realtime safety and Mutex problems in egui (4, 5)
-- Weak testing and no equivalence harness (29-36)
+- Visualizers still use `AnalyserNode` instead of data frames (item 1)
+- Missing session/audio-port/frame contracts (items 3, 4, 10)
+- God objects and oversized coupling surfaces (items 2, 5-9)
+- Duplication of domain, pitch and registry logic (items 13, 15-19)
+- Realtime safety problems in egui and Tauri native audio (items 25-28)
+- Weak parity, fake-mic and benchmark coverage (items 35-42)
 
-When closing any of these 50, update recommendation.md + this file + README.md.
+When closing any of these 50, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
 
 Recommended reading order:
 1. recommendation.md (the problems)

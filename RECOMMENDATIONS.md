@@ -2,26 +2,32 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
+Problem source: [recommendation.md](recommendation.md) is the canonical current Top-50 problem audit. This file is the ordered execution plan for fixing those problems.
+
 ## Executive Summary
 
 Главная рекомендация: не начинать с большого переезда в workspace. Сначала сделать границы реальными внутри текущего проекта, покрыть их тестами, а уже потом физически переносить код.
 
-Порядок:
+Порядок, синхронизированный с Top-50:
 
 1. Зафиксировать текущее поведение тестами.
-2. Вынести pure core: pitch, music, practice summary.
-3. Ввести порты: audio, storage, profile transfer.
-4. Разрезать `useTuner` на application controllers.
-5. Разрезать UI на feature screens.
-6. Ввести versioned full profile import/export.
-7. Синхронизировать web/Tauri/egui через общий registry/parity tests.
-8. Только после этого думать о workspace migration.
+2. Ввести shared frame contracts (`DetectionFrame`, `WaveformFrame`, `SpectrumFrame`).
+3. Ввести порты: audio, tone, storage, profile transfer.
+4. Вынести realtime work из cpal callbacks и preallocate hot DSP buffers.
+5. Разрезать `useTuner`, `useTuningState`, `useSettings` на application controllers.
+6. Вынести pure core: pitch, music, practice summary.
+7. Ввести versioned full profile import/export.
+8. Синхронизировать web/Tauri/egui через общий registry/parity tests.
+9. Разрезать UI на feature screens.
+10. Только после этого думать о workspace migration.
 
 ## Recommendation Matrix
 
 | Priority | Recommendation | Main Risk Closed | Expected Impact |
 | --- | --- | --- | --- |
 | P0 | Freeze behavior with tests | Refactor regressions | Можно безопасно резать модули |
+| P0 | Define shared frame contracts | AnalyserNode/UI coupling | Viz и session получают plain data |
+| P0 | Move native audio work off callbacks | Realtime safety | egui/Tauri audio перестаёт блокироваться |
 | P0 | Extract practice summary module | Быстрый win, меньше `useTuner` | Первый безопасный срез controller logic |
 | P0 | Split `core/pitch` | Performance logic coupling | Чистый pitch API и conformance base |
 | P0 | Split `core/music` | Domain god-file | Чистая музыкальная модель |
@@ -455,16 +461,16 @@ First add fixtures and parity. Then decide:
 
 ## Recommended Next 8 Commits
 
-1. `Add practice summary tests`
-2. `Extract practice summary helpers`
-3. `Split pitch range and smoothing modules`
-4. `Split pitch detector module`
-5. `Split music note math and registry data`
-6. `Add audio input port contract`
-7. `Move tuner lifecycle into session controller`
+1. `Add shared frame type contract tests`
+2. `Remove analyser props from one visualizer`
+3. `Add audio input port contract`
+4. `Move tuner lifecycle into session controller`
+5. `Move native callback work behind queue`
+6. `Add Rust/TS preset and note parity tests`
+7. `Split pitch range and smoothing modules`
 8. `Add versioned user profile schema`
 
-This sequence gives fast safety, reduces `useTuner`, and builds real boundaries before any workspace movement.
+This sequence attacks the current Top-50 P0/P1 items first: data contracts, audio-port boundaries, realtime safety and parity. Practice extraction is still useful, but it is no longer the first architectural blocker.
 
 ## What Not To Do Next
 
@@ -476,6 +482,9 @@ This sequence gives fast safety, reduces `useTuner`, and builds real boundaries 
 
 ## Success Metrics
 
+- Visualizer components have no `AnalyserNode` props.
+- Shared `DetectionFrame` / viz frame contracts exist.
+- egui and Tauri native callbacks do not lock engine state or allocate detector buffers.
 - `useTuner.ts` under 100 lines.
 - `notes.ts` becomes compatibility export only.
 - `pitch.ts` becomes compatibility export only.
