@@ -1,8 +1,8 @@
-# Recommendations & Top 50 Problems
+# Recommendations & Top 200 Problems
 
 **Current state audit (2026-06-29, synced with current `main`)**
 
-This is the canonical **Top 50 things that are done poorly or incorrectly** in the current worktree. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (295 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
+This is the canonical **Top 200 things that are done poorly or incorrectly** in the current worktree. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (295 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -11,7 +11,7 @@ Synced documents:
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
-## Top 50 Problems (What Was Done Poorly or Incorrectly)
+## Top 200 Problems (What Was Done Poorly or Incorrectly)
 
 ### Architecture & Coupling (1-14)
 1. **P0: Visualizers still receive live `AnalyserNode`.** `Waveform.vue`, `Spectrum.vue` and `Spectrogram.vue` accept `analyser: AnalyserNode | null` and call `getFloatTimeDomainData` / `getByteFrequencyData` directly. This violates the architecture rule that visualizers must render plain data frames only.
@@ -168,25 +168,8 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 50. **P0: The architecture plan is only partially executed.** Domain extraction and composable splits started, but the key boundaries (ports, frames, session, shared registry, realtime-safe audio) are not in place.
     **Recommendation:** Treat [ARCHITECTURE.md](ARCHITECTURE.md) as the target spec and [RECOMMENDATIONS.md](RECOMMENDATIONS.md) as the ordered execution plan.
 
-## How to Use This List
-- Pick the highest impact items first: 1-6, 13, 15-17, 25-29, 35-36 and 50.
-- Every fix should reduce coupling.
-- Update this file, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
-- Turn items into GitHub issues with links back here.
-
-**Next audit:** after significant layer work or in 2-3 months.
-
-## Fixes Applied (Small but Real)
-- Fixed inconsistent sample rate (44100 hardcoded in egui spectrum harmonics vs 48000 in feed). Introduced PREFERRED_SAMPLE_RATE const and updated calculations.
-- Documented the double-toggle mic restart hack in device change (egui) as a known smell.
-- Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
-These were safe, low-risk fixes addressing items from the Top 50.
-
-## Additional Expanded Audit Notes (51-250)
-
-The canonical, current Top 50 is the section above. The notes below are a broader secondary backlog from a previous expanded audit. They are useful for mining issues, but the Top 50 above wins if there is any wording drift.
-
 ### More Architecture & Coupling Issues (51-80)
+
 51. TunerEngine recomputes full spectrum on every process call regardless of whether any consumer needs it.
 52. egui State struct mixes raw detection data with UI history (cents_history is pushed in App update).
 53. No clear "Session" concept separating live detection from persistent settings.
@@ -348,68 +331,24 @@ The canonical, current Top 50 is the section above. The notes below are a broade
 199. Dev server port is pinned for Tauri – brittle for other devs.
 200. No source maps or proper error boundaries in production web build.
 
-### Rust / Native / egui / Tauri Specific (201-220)
-201. cpal stream is built with closure that captures engine by clone every time.
-202. No use of cpal's error callback for proper stream recovery.
-203. egui save() only saves a few strings; many settings (chromatic, tolerance, show*) lost.
-204. Native random tone uses fixed 0.18 gain without sharing the ref tone generator.
-205. Mutex clones happen on every device list refresh and toggle.
-206. Audio callback buffer drain logic is manual ring of 4096.
-207. WebAssembly specific code has separate toggle_mic that does almost nothing.
-208. No proper egui integration for high DPI beyond default.
-209. Tauri Info.plist and entitlements may be incomplete for mic on mac.
-210. No signed release pipeline exercised in the current state.
-211. egui App has many fields that should be in separate managers.
-212. Stream config is converted every mic start.
-213. No handling for sample rate from actual cpal config in viz (still uses const).
-214. panic on eframe start in main.
-215. Desktop Tauri lib.rs uses expect on run.
-216. Different icon handling between tauri and egui builds.
-217. No use of eframe's persist feature fully.
-218. Audio input on Linux may have different backend issues not tested.
-219. Realtime safety: the callback does allocations and locks.
-220. No cross-compilation friendly setup documented for releases.
+## How to Use This List
+- Pick the highest impact items first: 1-6, 13, 15-17, 25-29, 35-36 and 50.
+- Every fix should reduce coupling.
+- Update this file, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
+- Turn items into GitHub issues with links back here.
 
-### Algorithm, DSP & Detection Weaknesses (221-240)
-221. YIN threshold 0.12 is magic and not tuned per instrument or noise level.
-222. No handling for inharmonicity in current core (wound strings detune partials).
-223. Octave errors still possible without the HPS or subharmonic guard from backlog.
-224. Power chord detection is heuristic and may false positive on clean notes.
-225. Smoother in core resets on a4 or tuning change but may leave stale values.
-226. Downsampling factor is not adaptive.
-227. No DC removal or highpass at runtime (only test).
-228. Confidence from detectors not fused with RMS or other signal quality.
-229. Buffer window is fixed; no variable window based on freq.
-230. MPM and YIN internals have duplicated cleaning code?
-231. No vibrato or drift detection for "stable" readout.
-232. Synthetic tests don't cover real guitar pluck transient.
-233. No support for alternate temperaments or stretch tuning.
-234. Frequency to note uses 12-TET only, no microtonal.
-235. RMS and level are post downsample sometimes.
-236. No adaptive noise gate based on recent silence.
-237. Cents calculation for chromatic vs string target can differ in edge cases.
-238. Lack of median or better filter on raw detector output.
-239. The 30Hz-400Hz guitar range is assumed everywhere.
-240. No multi-pitch or poly detection beyond power chord flag.
+**Next audit:** after significant layer work or in 2-3 months.
 
-### Documentation, DX, Maintainability & Other (241-250 + extras to reach 200 additional)
-241. ARCHITECTURE.md describes ideal layers that are not yet reflected in code structure.
-242. recommendation.md and backlogs exist but no process to triage them into issues.
-243. Few comments explaining why certain constants or algorithms were chosen.
-244. No CONTRIBUTING or "how to add a new tuning preset" guide.
-245. Version.json is present but not used for PWA update check.
-246. Icons are still placeholders in some places.
-247. No performance budget or bundle size check in build.
-248. Accessibility: color only for in-tune in many places.
-249. Privacy claim ("100% local") is not enforced by any CI check.
-250. Overall the codebase has accumulated many small technical debts from iterative evolution without enough refactoring pauses.
+## Fixes Applied (Small but Real)
+- Fixed inconsistent sample rate (44100 hardcoded in egui spectrum harmonics vs 48000 in feed). Introduced PREFERRED_SAMPLE_RATE const and updated calculations.
+- Documented the double-toggle mic restart hack in device change (egui) as a known smell.
+- Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
+These were safe, low-risk fixes addressing items from the Top 200.
 
-(Additional issues beyond 250 can be derived similarly from deeper profiling, more component reads, and user reports.)
-
-## Summary of Expanded Problems
-- Total documented problems now significantly over 200.
+## Summary
+- The canonical audit now contains exactly 200 problems.
 - Many are direct violations of the architecture vision.
-- A number are low-hanging (hardcoded values, comments, small cleanups) – some already fixed in this pass.
-- High impact ones remain the god objects, coupling of viz to audio APIs, duplication of domain, realtime safety.
+- A number are low-hanging: hardcoded values, duplicate canvas plumbing, missing constants, stale README/docs.
+- Highest impact remains: god objects, visualizer/audio coupling, duplicated domain/pitch logic, realtime safety, and missing parity tests.
 
 Update this file when fixing. Link from issues.

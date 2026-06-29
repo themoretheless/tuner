@@ -66,7 +66,7 @@ Tuner/
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
 ├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей (200 + приоритеты из TOP-500 и Round-4)
-├── recommendation.md    # Канонический Top-50 проблем и expanded audit notes
+├── recommendation.md    # Канонический Top-200 проблем
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
 └── README.md
 ```
@@ -284,7 +284,7 @@ npx tauri icon ./icon.png
 
 ## Технический долг и что сделано плохо
 
-Полный **Топ-50** того, что сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md).
+Полный **Топ-200** того, что сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md).
 
 Ключевые проблемы на сегодня (выборка):
 - Визуализаторы всё ещё зависят от AnalyserNode вместо plain data (архитектурное нарушение).
@@ -297,6 +297,6 @@ npx tauri icon ./icon.png
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Полный список Top-50 + expanded audit notes — в [recommendation.md](recommendation.md).
+Полный список Top-200 — в [recommendation.md](recommendation.md).
 
 Когда фиксим — обновляем [recommendation.md](recommendation.md), [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
