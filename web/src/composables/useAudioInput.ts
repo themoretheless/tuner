@@ -13,6 +13,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
   const error = ref<string | null>(null);
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
+  const sampleRate = ref(DEFAULT_SAMPLE_RATE);
 
   let audioContext: AudioContext | null = null;
   let stream: MediaStream | null = null;
@@ -53,6 +54,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
       });
 
       audioContext = createAudioContext();
+      sampleRate.value = audioContext.sampleRate;
       const nextAnalyser = audioContext.createAnalyser();
       nextAnalyser.fftSize = fftSize;
       nextAnalyser.smoothingTimeConstant = 0.55;
@@ -78,6 +80,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
       audioContext.close().catch(() => {});
       audioContext = null;
     }
+    sampleRate.value = DEFAULT_SAMPLE_RATE;
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
@@ -134,6 +137,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     isListening,
     readFrame,
     refreshInputDevices,
+    sampleRate,
     selectedInputDeviceId,
     setInputDevice,
     start,

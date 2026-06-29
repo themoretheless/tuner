@@ -8,6 +8,7 @@ import { usePitchLoop } from './usePitchLoop';
 import { useReferenceTone } from './useReferenceTone';
 import { useSettings } from './useSettings';
 import { useTuningState } from './useTuningState';
+import { useVisualizationFrames } from './useVisualizationFrames';
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
@@ -33,6 +34,16 @@ export function useTuner() {
     settings.metronomeSubdivision,
   );
   const practiceSummary = computed(() => summarizePractice(settings.practiceHistory.value));
+  const shouldCaptureVisualizationFrames = computed(() => (
+    !usingNativeAudio.value &&
+    audio.isListening.value &&
+    (settings.showWaveform.value || settings.showSpectrum.value || settings.showSpectrogram.value)
+  ));
+  const visualization = useVisualizationFrames(
+    audio.analyser,
+    audio.sampleRate,
+    shouldCaptureVisualizationFrames,
+  );
 
   watch(tuning.detectionRange, (range) => {
     detectionRange.value = range;
@@ -190,7 +201,9 @@ export function useTuner() {
     isChromaticMode: tuning.isChromaticMode,
 
     // visualizers / persisted UI settings
-    analyser: computed(() => usingNativeAudio.value ? null : audio.analyser.value),
+    spectrumFrame: visualization.spectrumFrame,
+    waveformFrame: visualization.waveformFrame,
+    showSpectrogram: settings.showSpectrogram,
     showWaveform: settings.showWaveform,
     showSpectrum: settings.showSpectrum,
 

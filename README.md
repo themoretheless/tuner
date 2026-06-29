@@ -24,9 +24,9 @@
 Канонический список того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md).
 
 Главные проблемы:
-- визуализаторы всё ещё получают `AnalyserNode`, а не plain data frames;
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком крупные и связные;
 - нет единого `AudioInputPort`, `TunerSessionController` и общего `DetectionFrame`;
+- web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
 - TS/Rust таблицы строев, note math и pitch paths могут расходиться;
 - egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
 - тесты не доказывают parity между web/Tauri/egui/pitch-core и нет fake-mic E2E;
@@ -271,7 +271,7 @@ npx tauri icon ./icon.png
 - Полный структурированный список из 200 конкретных реализуемых предложений по категориям (Performance, DSP, Architecture, Web, egui, Canvas/Viz, Features, Testing и др.).
 
 Ключевые направления:
-- Завершить слои и убрать coupling (AnalyserNode из viz, god-объекты, дубли math).
+- Завершить слои и убрать coupling (god-объекты, session/audio boundaries, дубли math).
 - Весь DSP в pitch-core + реальные оптимизации (decimate, fusion, prealloc, off-main-thread).
 - Canvas/DPR + data-driven визуализации (прямо по текущей ветке canvas-dpr-and-dsp-fixes).
 - DX и качество (тесты, harness-ы, snapshot-ы, единый источник tuning tables).
@@ -284,14 +284,13 @@ npx tauri icon ./icon.png
 
 ## Технический долг и что сделано плохо
 
-Полный backlog того, что ещё сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md). Сейчас там 188 нерешённых пунктов после удаления уже исправленного и неактуального.
+Полный backlog того, что ещё сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md). Сейчас там 183 нерешённых пункта после удаления уже исправленного и неактуального.
 
 Ключевые проблемы на сегодня (выборка):
-- Визуализаторы всё ещё зависят от AnalyserNode вместо plain data (архитектурное нарушение).
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
+- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, `DetectionFrame` / `TunerFrame`.
 - Дублирование таблиц строев, pitch paths и математики нот между TS, Rust core и Tauri native.
 - Mutex'ы, аллокации и обработка DSP в realtime callback path.
-- Нет общего `AudioInputPort`, `TunerSessionController` и `DetectionFrame`.
 - Слабые тесты, нет equivalence harness между путями.
 - Много hardcoded значений и дублированного кода отрисовки канвасов.
 

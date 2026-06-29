@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 
 const props = defineProps<{
-  analyser: AnalyserNode | null
+  frame: SpectrumFrame | null
   isListening: boolean
   currentFreq?: number | null
-  sampleRate?: number
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
-let raf = 0
 let ctx: CanvasRenderingContext2D | null = null
-const dataArray = ref<Uint8Array | null>(null)
 
 // Logical (CSS px) size we draw in. Actual backing store = this * dpr
 const displayW = ref(400)
@@ -52,25 +50,32 @@ function resizeCanvas() {
   displayH.value = cssH
 }
 
-function draw() {
-  if (!props.analyser || !ctx || !canvas.value) return
+function clearCanvas() {
+  if (!ctx || !canvas.value) return
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.fillStyle = '#11151b'
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
+}
+
+function drawFrame() {
+  if (!ctx || !canvas.value) return
 
   // Keep size in sync (handles container width changes from sidebar etc.)
   resizeCanvas()
+  if (!props.isListening || !props.frame) {
+    clearCanvas()
+    return
+  }
 
   const w = displayW.value
   const h = displayH.value
-
-  const binCount = props.analyser.frequencyBinCount
-  if (!dataArray.value || dataArray.value.length !== binCount) {
-    dataArray.value = new Uint8Array(binCount)
-  }
-  props.analyser.getByteFrequencyData(dataArray.value as any)
+  const data = props.frame.bins
+  const binCount = data.length
 
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
 
-  const sr = props.sampleRate || 48000
+  const sr = props.frame.sampleRate || 48000
   const nyquist = sr / 2
 
   // Logarithmic frequency range good for guitar (50Hz-6kHz covers fundamentals + early harmonics)
@@ -88,7 +93,7 @@ function draw() {
     const freq = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, t)
     let bin = Math.floor((freq / nyquist) * binCount)
     bin = Math.max(0, Math.min(binCount - 1, bin))
-    if (dataArray.value[bin] > maxV) maxV = dataArray.value[bin]
+    if (data[bin] > maxV) maxV = data[bin]
   }
   if (maxV < 1) maxV = 1
 
@@ -100,8 +105,8 @@ function draw() {
 
     // Take max of a couple neighboring bins at high freq for stability
     const vRaw = Math.max(
-      dataArray.value[bin] || 0,
-      dataArray.value[Math.min(binCount - 1, bin + 1)] || 0
+      data[bin] || 0,
+      data[Math.min(binCount - 1, bin + 1)] || 0
     )
     const v = vRaw / maxV
     const barH = Math.max(1, v * h)
@@ -138,42 +143,34 @@ function draw() {
       }
     }
   }
-
-  raf = requestAnimationFrame(draw)
 }
 
 function startDraw() {
-  if (raf) cancelAnimationFrame(raf)
-  if (props.isListening && props.analyser) {
-    raf = requestAnimationFrame(draw)
-  }
+  drawFrame()
 }
 
 function stopDraw() {
-  cancelAnimationFrame(raf)
-  if (ctx && canvas.value) {
-    // Use logical size for clear
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.fillStyle = '#11151b'
-    ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-  }
+  clearCanvas()
+}
+
+function handleResize() {
+  drawFrame()
 }
 
 onMounted(() => {
   if (canvas.value) {
     ctx = canvas.value.getContext('2d', { alpha: true })
     resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
+    window.addEventListener('resize', handleResize)
   }
-  watch(() => [props.isListening, props.analyser], () => {
-    if (props.isListening) startDraw()
+  watch(() => [props.isListening, props.frame?.sequence, props.currentFreq], () => {
+    if (props.isListening && props.frame) startDraw()
     else stopDraw()
   }, { immediate: true })
 })
 
 onUnmounted(() => {
-  cancelAnimationFrame(raf)
-  window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 

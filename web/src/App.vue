@@ -25,6 +25,7 @@ import PracticeStatsPanel from './components/PracticeStatsPanel.vue'
 import MetronomePanel from './components/MetronomePanel.vue'
 import Waveform from './components/Waveform.vue'
 import Spectrum from './components/Spectrum.vue'
+import Spectrogram from './components/Spectrogram.vue'
 
 const tuner = useTuner()
 const { lang, t, toggleLang } = useL10n()
@@ -101,8 +102,22 @@ onUnmounted(() => {
 
         <LevelMeter :level="tuner.volume.value" :active="tuner.isListening.value" />
 
-        <Waveform v-if="tuner.showWaveform.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
-        <Spectrum v-if="tuner.showSpectrum.value && !tuner.usingNativeAudio.value" :analyser="tuner.analyser.value" :is-listening="tuner.isListening.value" />
+        <Waveform
+          v-if="tuner.showWaveform.value && !tuner.usingNativeAudio.value"
+          :frame="tuner.waveformFrame.value"
+          :is-listening="tuner.isListening.value"
+        />
+        <Spectrum
+          v-if="tuner.showSpectrum.value && !tuner.usingNativeAudio.value"
+          :frame="tuner.spectrumFrame.value"
+          :is-listening="tuner.isListening.value"
+          :current-freq="tuner.smoothedFrequency.value"
+        />
+        <Spectrogram
+          v-if="tuner.showSpectrogram.value && !tuner.usingNativeAudio.value"
+          :frame="tuner.spectrumFrame.value"
+          :is-listening="tuner.isListening.value"
+        />
 
         <!-- A4 + visual toggles (placed near the visualizers) -->
         <div class="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 mt-1">
@@ -126,6 +141,10 @@ onUnmounted(() => {
           <label class="flex items-center gap-1 cursor-pointer">
             <input type="checkbox" v-model="tuner.showSpectrum.value" class="accent-emerald-500" />
             <span>{{ t('spectrum') }}</span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" v-model="tuner.showSpectrogram.value" class="accent-emerald-500" />
+            <span>{{ t('spectrogram') }}</span>
           </label>
           <label v-if="tuner.nativeAudioAvailable.value" class="flex items-center gap-2">
             <span>{{ t('audio.backend') }}</span>

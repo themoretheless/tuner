@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 
 const props = defineProps<{
-  analyser: AnalyserNode | null
+  frame: SpectrumFrame | null
   isListening: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 let ctx: CanvasRenderingContext2D | null = null
-let raf = 0
 
-// History of frequency data (ring buffer)
 const history: Uint8Array[] = []
 const MAX_HISTORY = 150 // time steps
+let historyCount = 0
+let lastSequence = 0
+let writeIndex = 0
 
 // Logical CSS sizes (ctx is scaled by dpr)
 const displayW = ref(400)
@@ -49,37 +51,69 @@ function resizeCanvas() {
   displayH.value = cssH
 }
 
-function draw() {
-  if (!props.analyser || !ctx || !canvas.value) return
+function clearCanvas() {
+  if (!ctx || !canvas.value) return
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.fillStyle = '#11151b'
+  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
+}
+
+function resetHistory() {
+  history.length = 0
+  historyCount = 0
+  lastSequence = 0
+  writeIndex = 0
+}
+
+function ensureHistoryBuffers(binCount: number) {
+  if (history.length && history[0].length === binCount) return
+  resetHistory()
+  for (let i = 0; i < MAX_HISTORY; i++) {
+    history.push(new Uint8Array(binCount))
+  }
+}
+
+function addFrame(frame: SpectrumFrame) {
+  if (frame.sequence === lastSequence) return
+  ensureHistoryBuffers(frame.bins.length)
+  history[writeIndex].set(frame.bins)
+  writeIndex = (writeIndex + 1) % MAX_HISTORY
+  historyCount = Math.min(MAX_HISTORY, historyCount + 1)
+  lastSequence = frame.sequence
+}
+
+function getHistoryFrame(index: number) {
+  const start = historyCount === MAX_HISTORY ? writeIndex : 0
+  return history[(start + index) % MAX_HISTORY]
+}
+
+function drawFrame() {
+  if (!ctx || !canvas.value) return
 
   resizeCanvas()
+  if (!props.isListening || !props.frame) {
+    clearCanvas()
+    return
+  }
 
   const w = displayW.value
   const h = displayH.value
-
-  // Get current freq data
-  const binCount = props.analyser.frequencyBinCount
-  const freqData = new Uint8Array(binCount)
-  props.analyser.getByteFrequencyData(freqData)
-
-  // Add to history
-  history.push(freqData)
-  if (history.length > MAX_HISTORY) history.shift()
+  const binCount = props.frame.bins.length
+  addFrame(props.frame)
 
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
 
-  if (history.length < 2) {
-    raf = requestAnimationFrame(draw)
+  if (historyCount < 2) {
     return
   }
 
-  const timeSteps = history.length
+  const timeSteps = historyCount
   const timeStepW = w / timeSteps
   const freqBins = Math.min(128, binCount) // limit for perf
 
   for (let t = 0; t < timeSteps; t++) {
-    const data = history[t]
+    const data = getHistoryFrame(t)
     const x = t * timeStepW
     for (let f = 0; f < freqBins; f++) {
       const val = data[f] / 255
@@ -100,43 +134,35 @@ function draw() {
       ctx.fillRect(x, y, timeStepW + 0.5, barH + 0.5)
     }
   }
-
-  raf = requestAnimationFrame(draw)
 }
 
 function startDraw() {
-  if (raf) cancelAnimationFrame(raf)
-  if (props.isListening && props.analyser) {
-    // Clear history on start
-    history.length = 0
-    raf = requestAnimationFrame(draw)
-  }
+  drawFrame()
 }
 
 function stopDraw() {
-  cancelAnimationFrame(raf)
-  if (ctx && canvas.value) {
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
-    ctx.fillStyle = '#11151b'
-    ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
-  }
+  resetHistory()
+  clearCanvas()
+}
+
+function handleResize() {
+  drawFrame()
 }
 
 onMounted(() => {
   if (canvas.value) {
     ctx = canvas.value.getContext('2d', { alpha: true })
     resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
+    window.addEventListener('resize', handleResize)
   }
-  watch(() => [props.isListening, props.analyser], () => {
-    if (props.isListening) startDraw()
+  watch(() => [props.isListening, props.frame?.sequence], () => {
+    if (props.isListening && props.frame) startDraw()
     else stopDraw()
   }, { immediate: true })
 })
 
 onUnmounted(() => {
-  cancelAnimationFrame(raf)
-  window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 

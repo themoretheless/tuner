@@ -14,9 +14,9 @@ Strengths:
 - Multiple platforms (web + egui + Tauri) working.
 
 Weaknesses (high coupling, low modularity):
-- `web/src/composables/useTuner.ts` is smaller than before, but still acts as a composition god-object: settings, web audio, native audio, pitch loop, tuning state, reference tones, practice, metronome and display state are all wired through one broad return object (~295 lines).
+- `web/src/composables/useTuner.ts` is smaller than before, but still acts as a composition god-object: settings, web audio, native audio, pitch loop, tuning state, reference tones, practice, metronome and display state are all wired through one broad return object (~308 lines).
 - `web/src/composables/useTuningState.ts` and `useSettings.ts` are now the bigger coupling surfaces for music workflow and persistence.
-- Visualizers (`Spectrum.vue`, `Waveform.vue`, etc.) are still tightly coupled to Web Audio `AnalyserNode`. They call `get*Data` directly (see recommendation.md).
+- Web visualizers now receive plain visualization frames, but session/native frame contracts are still incomplete across platforms.
 - `pitch-core/src/lib.rs` remains large and mixed despite domain.rs extraction.
 - `egui/src/main.rs` still has god-like `App` + heavy Mutex use + inline painter logic.
 - No clear boundaries: audio I/O, DSP, domain math, session state, and presentation are mixed.
@@ -179,7 +179,7 @@ Platform shells (very thin):
   - `useTunerSession.ts`
   - `useReferenceTone.ts`
   - `useVizData.ts`
-- Change all visualizer props from `analyser: AnalyserNode` to data props.
+- Keep visualizers on data props and move the remaining session/native outputs to typed frames.
 
 ### Phase 4 — Unify egui + Reduce Platform Differences
 - Make egui use the same `TunerSession` / traits.
@@ -342,7 +342,7 @@ The following categorized list (200 items) was created to be implementation-conc
 42. Introduce `trait PitchDetector { fn detect(&[f32], sr: f32) -> Option<Detection>; }`.
 43. Extract `AudioInput` trait + WebAudioInput / CpalAudioInput / MockAudioInput.
 44. Extract `ToneGenerator` trait; unify reference + ear-training tone behind it.
-45. Make all visualizers accept only plain data (DetectionFrame, SpectrumFrame, WaveformFrame); delete AnalyserNode from props.
+45. Keep all visualizers on plain data (DetectionFrame, SpectrumFrame, WaveformFrame) and extend the same contract to native/session outputs.
 46. Split useTuner.ts into: useAudioInput, useTunerSession, useReferenceTone, useVizData.
 47. Move note/frequency math duplication: make TS a thin client of WASM domain exports or generate from Rust.
 48. Define single `DetectionFrame` struct in pitch-core and use identically in Vue and egui.
@@ -525,15 +525,14 @@ The following categorized list (200 items) was created to be implementation-conc
 
 ## Current Top Problems (Synchronized)
 
-The detailed open-problems backlog (188 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
+The detailed open-problems backlog (183 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
 
 Key highlights that directly block the target architecture:
-- Visualizers still use `AnalyserNode` instead of data frames (item 1)
-- Missing session/audio-port/frame contracts (items 3, 4, 10)
-- God objects and oversized coupling surfaces (items 2, 5-9)
-- Duplication of domain, pitch and registry logic (items 13, 15-19)
-- Realtime safety problems in egui and Tauri native audio (items 24-27)
-- Weak parity, fake-mic and benchmark coverage (items 34-41)
+- Missing session/audio-port/frame contracts (items 2, 3, 9)
+- God objects and oversized coupling surfaces (items 1, 4-8)
+- Duplication of domain, pitch and registry logic (items 12, 14-18)
+- Realtime safety problems in egui and Tauri native audio (items 23-26)
+- Weak parity, fake-mic and benchmark coverage (items 31-38)
 
 When closing any of these open problems, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
 

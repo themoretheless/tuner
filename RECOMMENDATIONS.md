@@ -26,7 +26,7 @@ Problem source: [recommendation.md](recommendation.md) is the canonical current 
 | Priority | Recommendation | Main Risk Closed | Expected Impact |
 | --- | --- | --- | --- |
 | P0 | Freeze behavior with tests | Refactor regressions | Можно безопасно резать модули |
-| P0 | Define shared frame contracts | AnalyserNode/UI coupling | Viz и session получают plain data |
+| P0 | Extend shared frame contracts | Session/backend frame drift | Viz уже получает plain data; session/native должны догнать |
 | P0 | Move native audio work off callbacks | Realtime safety | egui/Tauri audio перестаёт блокироваться |
 | P0 | Extract practice summary module | Быстрый win, меньше `useTuner` | Первый безопасный срез controller logic |
 | P0 | Split `core/pitch` | Performance logic coupling | Чистый pitch API и conformance base |
@@ -482,7 +482,7 @@ This sequence attacks the current P0/P1 open items first: data contracts, audio-
 
 ## Success Metrics
 
-- Visualizer components have no `AnalyserNode` props.
+- Visualizer components keep receiving only plain frame props.
 - Shared `DetectionFrame` / viz frame contracts exist.
 - egui and Tauri native callbacks do not lock engine state or allocate detector buffers.
 - `useTuner.ts` under 100 lines.
