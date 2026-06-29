@@ -529,7 +529,7 @@ The following categorized list (200 items) was created to be implementation-conc
 
 ## Current Top Problems (Synchronized)
 
-The detailed open-problems backlog (183 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
+The detailed open-problems backlog (182 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
 
 Key highlights that directly block the target architecture:
 - Missing session/audio-port/frame contracts (items 2, 3, 9)

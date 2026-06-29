@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - WHAT is wrong (183 numbered open problems, P0-P3). Cited below as `R#`.
+- [recommendation.md](recommendation.md) - WHAT is wrong (182 numbered open problems, P0-P3). Cited below as `R#`.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
 
@@ -96,7 +96,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
-**Targets:** R36-R44, R175-R183.
+**Targets:** R36-R44, R175-R182.
 - Real Service Worker + offline cache (currently manifest only).
 - a11y: aria-live on note/cents; colorblind + forced-colors palettes; non-color-only in-tune cue.
 - Observability: "Test my mic" wizard + pipeline health strip + silent/clipping/DC/hum watchdog.

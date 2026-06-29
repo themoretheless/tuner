@@ -2,7 +2,7 @@
 
 **Current state audit (2026-06-29, synced with current `main`)**
 
-This is the canonical **open problems backlog** for the current worktree. It currently contains **183 unresolved items** after removing issues that are already fixed or no longer true. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (308 LOC), `useVisualizationFrames.ts` (87 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
+This is the canonical **open problems backlog** for the current worktree. It currently contains **182 unresolved items** after removing issues that are already fixed or no longer true. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (308 LOC), `useVisualizationFrames.ts` (87 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -11,7 +11,7 @@ Synced documents:
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
-## Open Problems (183 unresolved)
+## Open Problems (182 unresolved)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
@@ -299,10 +299,9 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 177. PWA manifest is present but no offline caching strategy implemented.
 178. No proper handling for mic permission prompt UI states beyond pending flag.
 179. LocalStorage via useSettings has no versioning or corruption handling.
-180. Many .value accesses in templates can be optimized.
-181. No tree-shaking verification for the large pitch wasm bundle.
-182. Dev server port is pinned for Tauri – brittle for other devs.
-183. No source maps or proper error boundaries in production web build.
+180. No tree-shaking verification for the large pitch wasm bundle.
+181. Dev server port is pinned for Tauri – brittle for other devs.
+182. No source maps or proper error boundaries in production web build.
 
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
@@ -318,10 +317,11 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 - Documented the double-toggle mic restart hack in device change (egui) as a known smell.
 - Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
 - Decoupled web visualizers from `AnalyserNode` by routing waveform/spectrum/spectrogram renderers through plain visualization frames.
+- Removed `tuner.*.value` noise from `App.vue` by exposing the shell view-model through Vue ref unwrapping.
 These fixes were removed from the numbered backlog above so the list tracks only open work.
 
 ## Summary
-- The canonical audit now contains 183 unresolved problems after removing completed or invalid entries.
+- The canonical audit now contains 182 unresolved problems after removing completed or invalid entries.
 - Many are direct violations of the architecture vision.
 - A number are low-hanging: hardcoded values, duplicate canvas plumbing, missing constants, stale README/docs.
 - Highest impact remains: god objects, missing session/audio-port contracts, duplicated domain/pitch logic, realtime safety, and missing parity tests.
