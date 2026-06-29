@@ -24,7 +24,7 @@ Weaknesses (high coupling, low modularity):
 - Duplication between TS note math and Rust domain.
 - Many items from the original critique are only partially addressed.
 
-See the canonical current Top 200 in [recommendation.md](recommendation.md).
+See the canonical current open-problems backlog in [recommendation.md](recommendation.md).
 
 The list is kept in sync across docs. High priority problems directly contradict the layered architecture described here.
 
@@ -525,17 +525,17 @@ The following categorized list (200 items) was created to be implementation-conc
 
 ## Current Top Problems (Synchronized)
 
-The detailed **Top 200 things done poorly or incorrectly** (as of the latest main merge) live in [recommendation.md](recommendation.md).
+The detailed open-problems backlog (188 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
 
 Key highlights that directly block the target architecture:
 - Visualizers still use `AnalyserNode` instead of data frames (item 1)
 - Missing session/audio-port/frame contracts (items 3, 4, 10)
 - God objects and oversized coupling surfaces (items 2, 5-9)
 - Duplication of domain, pitch and registry logic (items 13, 15-19)
-- Realtime safety problems in egui and Tauri native audio (items 25-28)
-- Weak parity, fake-mic and benchmark coverage (items 35-42)
+- Realtime safety problems in egui and Tauri native audio (items 24-27)
+- Weak parity, fake-mic and benchmark coverage (items 34-41)
 
-When closing any of these 200, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
+When closing any of these open problems, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
 
 Recommended reading order:
 1. recommendation.md (the problems)

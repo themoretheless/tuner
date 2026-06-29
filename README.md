@@ -65,8 +65,8 @@ Tuner/
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
-├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей (200 + приоритеты из TOP-500 и Round-4)
-├── recommendation.md    # Канонический Top-200 проблем
+├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей и приоритеты
+├── recommendation.md    # Канонический backlog открытых проблем
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
 └── README.md
 ```
@@ -280,11 +280,11 @@ npx tauri icon ./icon.png
 
 См. раздел **"Integrated Ideas..."** в ARCHITECTURE.md. 
 
-Работаем так: берём 5–8 самых высоких по приоритету (сверху из backlog + из 200), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Полные сырые списки остаются в отдельных файлах только для архива.
+Работаем так: берём 5–8 самых высоких по приоритету (сверху из backlog), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Полные сырые списки остаются в отдельных файлах только для архива.
 
 ## Технический долг и что сделано плохо
 
-Полный **Топ-200** того, что сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md).
+Полный backlog того, что ещё сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md). Сейчас там 188 нерешённых пунктов после удаления уже исправленного и неактуального.
 
 Ключевые проблемы на сегодня (выборка):
 - Визуализаторы всё ещё зависят от AnalyserNode вместо plain data (архитектурное нарушение).
@@ -297,6 +297,6 @@ npx tauri icon ./icon.png
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Полный список Top-200 — в [recommendation.md](recommendation.md).
+Полный список открытых проблем — в [recommendation.md](recommendation.md).
 
 Когда фиксим — обновляем [recommendation.md](recommendation.md), [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [RECOMMENDATIONS.md](RECOMMENDATIONS.md).

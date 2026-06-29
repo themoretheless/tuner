@@ -2,13 +2,13 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem source: [recommendation.md](recommendation.md) is the canonical current Top-200 problem audit. This file is the ordered execution plan for fixing those problems.
+Problem source: [recommendation.md](recommendation.md) is the canonical current open-problems backlog. This file is the ordered execution plan for fixing those problems.
 
 ## Executive Summary
 
 Главная рекомендация: не начинать с большого переезда в workspace. Сначала сделать границы реальными внутри текущего проекта, покрыть их тестами, а уже потом физически переносить код.
 
-Порядок, синхронизированный с Top-200:
+Порядок, синхронизированный с открытым backlog:
 
 1. Зафиксировать текущее поведение тестами.
 2. Ввести shared frame contracts (`DetectionFrame`, `WaveformFrame`, `SpectrumFrame`).
@@ -470,7 +470,7 @@ First add fixtures and parity. Then decide:
 7. `Split pitch range and smoothing modules`
 8. `Add versioned user profile schema`
 
-This sequence attacks the current Top-200 P0/P1 items first: data contracts, audio-port boundaries, realtime safety and parity. Practice extraction is still useful, but it is no longer the first architectural blocker.
+This sequence attacks the current P0/P1 open items first: data contracts, audio-port boundaries, realtime safety and parity. Practice extraction is still useful, but it is no longer the first architectural blocker.
 
 ## What Not To Do Next
 
