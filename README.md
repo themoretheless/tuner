@@ -11,28 +11,62 @@
 
 ## Что сделано (summary)
 
-- Shared Rust `pitch-core` для YIN/MPM, note math и части engine path.
-- Vue 3 web UI с Tauri desktop shell и отдельной egui/cpal native версией.
-- Tauri native audio backend уже есть, но пока не приведён к общей audio-port архитектуре.
-- Пресеты инструментов и строев, A4, capo, transpose, temperaments, custom tunings, practice history, metronome, themes.
-- Waveform/spectrum/spectrogram, cents history, reference tone и ear training.
-- Bilingual RU/EN, keyboard shortcuts, Tauri Store + localStorage persistence.
-- CI/CD для web, Tauri, egui, deploy/release flows.
+- YIN pitch detection (гораздо лучше базовой автокорреляции) + fallback
+- 8+ строев + переключение, A4 калибровка, гистерезис "in tune"
+- Waveform визуализатор, reference tone, ear training (random note)
+- Bilingual RU/EN с toggle, keyboard shortcuts (Space, 1-6, R)
+- Persistence (Tauri Store + localStorage)
+- CI/CD как у cut-log: build (web + Tauri + egui matrix), deploy, pr-deploy, release (с attachment бинарей обоих десктопов)
+- GitHub Pages для демо, PWA manifest, regenerated icons
+- Компонентная структура, SVG gauge, shared audio context
 
-## Current Audit / Technical Debt
+## Review: проблемы и исправления (на момент последнего ревью)
 
-Канонический список того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md).
+### Performance
+- YIN O(n²) на каждый кадр (~60fps) — тяжеловато на слабых устройствах.
+  - **Fixes**: preallocated buffer (избегаем GC), reused single AudioContext для всех тонов (вкл. random note), downsampling hints в комментариях.
+  - Рекомендация: AudioWorklet или WASM-YIN для production.
+- Новые AudioContext'ы на каждый референс — fixed.
 
-Главные проблемы:
-- `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком крупные и связные;
-- нет единого `AudioInputPort`, `TunerSessionController` и общего `DetectionFrame`;
-- web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
-- TS/Rust таблицы строев, note math и pitch paths могут расходиться;
-- egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
-- тесты не доказывают parity между web/Tauri/egui/pitch-core и нет fake-mic E2E;
-- web PWA пока manifest-first, без полноценного Service Worker/offline cache.
+### UI/UX
+- Фиксированная ширина, toggle waveform в неудобном месте, неполные переводы клавиатурных подсказок.
+  - **Fixes**: вынесено в l10n, улучшен hint, toggle рядом с A4.
+- Нет настроек панели, спектрограммы, пер-струн индикаторов.
+- **TODO**: добавить spectrogram, volume для ref, tutorial.
 
-Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+### Architecture / Separation / Coupling
+- useTuner.ts — god-object (~250+ строк): mic + detection + tones + state.
+  - Высокий coupling audio nodes ↔ state.
+- Глобальные буферы в pitch.ts.
+- Settings tightly coupled.
+  - **Fixes**: вынес shared audio, prealloc, useSettings composable.
+  - **Что бы сделал с нуля**: pnpm workspaces + packages/core (Rust pitch via WASM), useAudioInput + usePitchDetector отдельно, Pinia/XState для состояния, AudioWorklet с самого начала.
+
+### Design / Проектирование
+- Много магических чисел (FFT=2048, thresholds).
+- Нет тестов для pitch (синтетика).
+- Desktop всё ещё на web-audio (не native cpal).
+- CI desktop может падать на некоторых матрицах (иконки, paths) — пофиксили icons + glob.
+
+### Separation
+- Frontend shared, но desktop build тесно связан с web/dist.
+- L10n и настройки в отдельных stores — хорошо.
+- Workflows скопированы из cut-log — адаптированы, но desktop часть может быть отдельным workflow'ом.
+
+### Если бы делал с нуля по-другому
+- **Core**: Rust crate для YIN + WASM с первого дня (shared между web и desktop, perf нативный).
+- **Audio**: AudioWorklet + WebRTC constraints с самого начала.
+- **State**: Pinia + typed state machine для tuner (idle/listening/detected).
+- **Monorepo**: pnpm workspaces (core, ui, web, desktop, shared-types).
+- **UI**: Design tokens + headless components, лучше responsive (не фиксир. 620px).
+- **Testing**: Property-based testing pitch algo на синтетических сигналах.
+- **CI**: matrix для desktop с artifacts, signed releases, Pages только от web build (как сейчас сделали).
+- **Доп.**: нативный cpal захват в Tauri, больше инструментов (укулеле и т.д. из коробки), cloud sync опционально.
+- Избегать god objects, глобальных буферов, multiple AudioContext.
+
+Сейчас код в рабочем состоянии, CI/pages настроены, основные баги пофикшены. Можно итерировать по списку идей из предыдущего сообщения.
+
+(Полный обзор в чате выше; этот раздел влит в README для будущих.)
 
 ## Возможности
 
@@ -65,9 +99,8 @@ Tuner/
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
-├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей и приоритеты
-├── recommendation.md    # Канонический backlog открытых проблем
-├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
+├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей (200 + приоритеты из TOP-500 и Round-4)
+├── RECOMMENDATIONS.md   # Приоритизированные рекомендации по рефакторингу
 └── README.md
 ```
 
@@ -212,10 +245,10 @@ npx tauri icon ./icon.png
 
 ## Как это работает
 
-- Веб версия использует Web Audio API + getUserMedia; pitch loop сейчас читает frames из analyser и отправляет часть работы в worker.
-- Tauri упаковывает Vue frontend в нативное приложение и уже имеет дополнительный native cpal audio backend.
-- egui версия использует cpal напрямую и частично общий `pitch-core`.
-- Цель рефакторинга: убрать платформенные утечки из UI, вести всё через audio ports, session controller и shared frame contracts.
+- Веб версия использует Web Audio API + getUserMedia
+- Алгоритм: autocorrelation + сглаживание (EMA + медиана)
+- Tauri упаковывает тот же фронтенд в нативное приложение (Rust + webview)
+- Можно расширить: Rust side (cpal + pitch detection) для desktop в будущем
 
 ## Советы по использованию
 
@@ -224,18 +257,68 @@ npx tauri icon ./icon.png
 - Используй ручной выбор струны для максимальной точности
 - Держи гитару близко к микрофону
 
-## Текущий архитектурный статус
+## Что реализовано после ревью
 
-Исторические ревью и старые списки идей сведены в [ARCHITECTURE.md](ARCHITECTURE.md) и [recommendation.md](recommendation.md). README больше не является местом полного аудита.
+- **YIN** — основной алгоритм определения высоты (гораздо стабильнее на гитаре)
+- Поддержка нескольких строев (Standard, Drop D, DADGAD, Open G, Open D)
+- Canvas waveform визуализатор
+- Клавиатурные сокращения (Space/M, 1-6, R)
+- PWA manifest (можно установить как приложение в браузере)
+- Много архитектурных и UX улучшений (см. ниже)
 
-Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
-- часть domain уже вынесена в `pitch-core/src/domain.rs`;
-- `pitch-core/src/lib.rs` всё ещё содержит engine + DSP + WASM surface;
-- web всё ещё держит собственные TS note/pitch helpers;
-- Tauri native audio пока имеет отдельный detector path;
-- egui пока не в feature parity с web UI.
+## Review & Что было исправлено после первой версии
 
-Нативный egui запуск: `cargo run -p guitar-tuner-egui`.
+### Основные проблемы, которые мы нашли и исправили
+
+**Архитектура и разделение ответственности**
+- useTuner был монолитом (захват аудио + обработка + референс + состояние). Частично разделили.
+- App.vue был 230 строк одним файлом — вынесли 7 компонентов (CentsGauge, NoteDisplay, StringSelector, MicButton и др.).
+- Жёсткая связанность: частоты были захардкожены на 440, не передавались A4. Теперь A4 — реактивный параметр.
+- Stale файлы от create-vue (HelloWorld и т.д.) удалены.
+
+**Производительность**
+- Автокорреляция работала на каждый RAF с новыми аллокациями (Float32Array + slice). Теперь буферы переиспользуются.
+- Ограничили лаг по диапазону гитары, убрали бесполезные зоны.
+- Naive volume scaling `*12` заменён на normalizeLevel.
+- Reference tone создавал новый AudioContext каждый раз — теперь переиспользуется.
+
+**UI / UX**
+- Cents gauge использовал магические `centsClamped * 1.8 px` — привязан к конкретной ширине. Переписан на SVG (масштабируется).
+- "IN TUNE" мигал — добавили гистерезис (±5 / ±7).
+- Надписи FLAT/SHARP были некорректны — исправлены на понятные "SHARP — loosen" / "FLAT — tighten".
+- Input level показывался всегда — теперь только при listening.
+- Не было способа изменить A4 (дизайн-ошибка) — добавили простой input.
+- Reference tone принудительно останавливался через 2 секунды — теперь честный toggle.
+
+**Tauri / Desktop**
+- Плейсхолдер-иконки (1 пиксель). Оставили, но добавили beforeDevCommand и beforeBuildCommand для удобства.
+- Сборка desktop теперь может запускаться одной командой.
+
+### Если бы делал с нуля — что сделал бы по-другому
+
+1. **Монорепо + workspaces** (pnpm): `packages/tuner-core` (чистые функции + тесты), `apps/web`, `apps/desktop`.
+2. **Core вынесен полностью** — pitch detection + Note math с unit-тестами на синтетических сигналах (110Hz, 82.4Hz и т.д.).
+3. **AudioWorklet** вместо RAF + getFloatTimeDomainData в главном потоке (отказ от блокировки UI).
+4. **Лучший алгоритм**: не чистая автокорреляция, а YIN или MPM (гораздо стабильнее на реальных гитарах).
+5. **Больше компонентов + composables**: useAudioInput, usePitchDetector, useTunerState.
+6. **Визуализация**: лёгкий canvas waveform + опционально FFT.
+7. **Tunings как данные**: массив пресетов (Standard, Drop D, DADGAD...), выбор + редактор.
+8. **PWA + оффлайн** для web версии.
+9. **Для Rust desktop**: опционально нативный захват через cpal + передача pitch через события (для тех, кому важна "настоящая Rust часть").
+10. **Accessibility + i18n** + клавиатурные сокращения (space, 1-6).
+11. **Стабильность чтения**: доверие (confidence), индикатор "держи" (стабильно 300мс).
+
+Текущая версия — egui везде (натив + веб).
+
+Переход завершён:
+- Вся логика (pitch, notes, tunings, engine, spectrum) в pitch-core.
+- UI в egui (waveform, spectrum с гармониками, spectrogram heatmap, cents history, device selection).
+- Веб — хост для egui wasm + JS для захвата микрофона и feed в Rust.
+- Tauri может использовать тот же веб хост или остаться на Vue как опция.
+
+Сборка egui wasm: npm run build:egui-wasm (в web).
+
+Натив: cargo run -p guitar-tuner-egui.
 
 ## Следующие улучшения (рекомендуемые)
 
@@ -243,15 +326,13 @@ npx tauri icon ./icon.png
 - Дополнительные строи + кастомный редактор
 - Полноценный Service Worker для offline PWA
 - Качественные иконки для desktop: `cd desktop && npx tauri icon path/to/512.png`
-- Укрепить Tauri native audio backend: общий detector, stream recovery, device selection, realtime-safe processing
+- Опционально: Rust аудио бэкенд (cpal) для desktop версии
 
 ---
 
 ## План глубокого рефакторинга
 
 Полный план (10 критиков + целевая архитектура слоёв + **влитые бэклоги**) — в [ARCHITECTURE.md](ARCHITECTURE.md). Там же приоритезированные пункты из старых бэклогов + 200 конкретных предложений.
-
-**Порядок выполнения** — пошаговый план с зависимостями, привязкой к проблемам recommendation.md и критериями готовности — в [PLAN.md](PLAN.md). Это источник истины по очерёдности работ.
 
 **Ключевые цели рефакторинга:**
 - Разбить god-объекты (`useTuner.ts`, `egui/main.rs`, `pitch-core/lib.rs`)
@@ -263,6 +344,19 @@ npx tauri icon ./icon.png
 
 Первые шаги уже частично выполнены. Дальше — инкрементальная реализация по фазам из ARCHITECTURE.md.
 
+## Возможности
+
+- Современный алгоритм **YIN** (высокая точность)
+- Поддержка нескольких строев (Standard, Drop D, DADGAD, Open G, Open D + свои)
+- Реал-тайм визуализация формы волны + спектр + спектрограмма
+- Большой индикатор ноты + шкала центов с гистерезисом
+- Клавиатурные сокращения
+- Референсный тон + random note (ear training)
+- Полностью оффлайн в десктопной версии
+- Кросс-платформенность: Windows, macOS, Linux + браузер (PWA)
+
+Сделано на Vue + Rust (Tauri + egui). Работает везде.
+
 ## Идеи и предложения (влиты в ARCHITECTURE.md)
 
 Все существующие бэклоги (TOP-500-backlog.md + IDEAS-round4-500.md) **влиты** в [ARCHITECTURE.md](ARCHITECTURE.md). 
@@ -273,7 +367,7 @@ npx tauri icon ./icon.png
 - Полный структурированный список из 200 конкретных реализуемых предложений по категориям (Performance, DSP, Architecture, Web, egui, Canvas/Viz, Features, Testing и др.).
 
 Ключевые направления:
-- Завершить слои и убрать coupling (god-объекты, session/audio boundaries, дубли math).
+- Завершить слои и убрать coupling (AnalyserNode из viz, god-объекты, дубли math).
 - Весь DSP в pitch-core + реальные оптимизации (decimate, fusion, prealloc, off-main-thread).
 - Canvas/DPR + data-driven визуализации (прямо по текущей ветке canvas-dpr-and-dsp-fixes).
 - DX и качество (тесты, harness-ы, snapshot-ы, единый источник tuning tables).
@@ -282,22 +376,18 @@ npx tauri icon ./icon.png
 
 См. раздел **"Integrated Ideas..."** в ARCHITECTURE.md. 
 
-Работаем так: берём 5–8 самых высоких по приоритету (сверху из backlog), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Полные сырые списки остаются в отдельных файлах только для архива.
+Работаем так: берём 5–8 самых высоких по приоритету (сверху из backlog + из 200), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Полные сырые списки остаются в отдельных файлах только для архива.
 
 ## Технический долг и что сделано плохо
 
-Полный backlog того, что ещё сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md). Сейчас там 183 нерешённых пункта после удаления уже исправленного и неактуального.
+Актуальный **Top 50 проблем** (2026-06-29) — в [recommendation.md](recommendation.md).
 
-Ключевые проблемы на сегодня (выборка):
-- `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
-- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, `DetectionFrame` / `TunerFrame`.
-- Дублирование таблиц строев, pitch paths и математики нот между TS, Rust core и Tauri native.
-- Mutex'ы, аллокации и обработка DSP в realtime callback path.
-- Слабые тесты, нет equivalence harness между путями.
-- Много hardcoded значений и дублированного кода отрисовки канвасов.
+Ключевые сейчас:
+- Визуализаторы всё ещё на AnalyserNode (не data-driven).
+- Дублирование note/tuning math (web vs pitch-core).
+- egui App + тяжёлые Mutex'ы.
+- Слои реализованы только частично (web composables улучшились, но ядро и egui отстают).
 
-См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
+См. "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Полный список открытых проблем — в [recommendation.md](recommendation.md).
-
-Когда фиксим — обновляем [recommendation.md](recommendation.md), [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Обновляем все три документа при работе над проблемами.

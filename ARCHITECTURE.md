@@ -1,6 +1,6 @@
 # Guitar Tuner - Architecture & Deep Refactoring Plan
 
-**Date:** 2026-06  
+**Date:** 2026-06-29  
 **Perspective:** Designing from scratch with heavy focus on **modularity**, **code decomposition**, and **loose coupling**.
 
 ## Current State Assessment (Honest Critique)
@@ -14,9 +14,8 @@ Strengths:
 - Multiple platforms (web + egui + Tauri) working.
 
 Weaknesses (high coupling, low modularity):
-- `web/src/composables/useTuner.ts` is smaller than before, but still acts as a composition god-object: settings, web audio, native audio, pitch loop, tuning state, reference tones, practice, metronome and display state are all wired through one broad return object (~308 lines).
-- `web/src/composables/useTuningState.ts` and `useSettings.ts` are now the bigger coupling surfaces for music workflow and persistence.
-- Web visualizers now receive plain visualization frames, but session/native frame contracts are still incomplete across platforms.
+- `web/src/composables/useTuner.ts` is a god object: audio input, device management, pitch state, smoothing, reference tones, history, UI state, persistence sync, URL state — everything in one file (~450+ lines).
+- Visualizers (`Spectrum.vue`, `Waveform.vue`, etc.) are still tightly coupled to Web Audio `AnalyserNode`. They call `get*Data` directly (see recommendation.md).
 - `pitch-core/src/lib.rs` remains large and mixed despite domain.rs extraction.
 - `egui/src/main.rs` still has god-like `App` + heavy Mutex use + inline painter logic.
 - No clear boundaries: audio I/O, DSP, domain math, session state, and presentation are mixed.
@@ -24,9 +23,15 @@ Weaknesses (high coupling, low modularity):
 - Duplication between TS note math and Rust domain.
 - Many items from the original critique are only partially addressed.
 
-See the canonical current open-problems backlog in [recommendation.md](recommendation.md).
+See the current **Top 50 Problems** (2026-06-29) in [recommendation.md](recommendation.md).
 
-The list is kept in sync across docs. High priority problems directly contradict the layered architecture described here.
+Key persistent issues:
+- Viz still coupled to AnalyserNode (web).
+- Domain math duplicated between web and pitch-core.
+- egui App + Mutex usage not modernized.
+- Architecture layers only partially implemented despite good web composable split progress.
+
+The docs are kept in sync.
 
 ## 10 Different Critics — From-Scratch Design Perspectives
 
@@ -154,10 +159,6 @@ Platform shells (very thin):
 
 ## Proposed Phased Refactoring Plan
 
-> **Sequenced execution order** (dependency-ordered milestones M0-M8 mapping these phases to
-> specific recommendation.md problems, with verification and definition of done) lives in
-> [PLAN.md](PLAN.md). The phases below are the conceptual grouping; PLAN.md is the order to do them in.
-
 ### Phase 0 — Foundations (low risk, high impact)
 - Define `DetectionFrame`, `SpectrumFrame` etc. as the single source of truth (in tuner-types or domain).
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
@@ -183,7 +184,7 @@ Platform shells (very thin):
   - `useTunerSession.ts`
   - `useReferenceTone.ts`
   - `useVizData.ts`
-- Keep visualizers on data props and move the remaining session/native outputs to typed frames.
+- Change all visualizer props from `analyser: AnalyserNode` to data props.
 
 ### Phase 4 — Unify egui + Reduce Platform Differences
 - Make egui use the same `TunerSession` / traits.
@@ -346,7 +347,7 @@ The following categorized list (200 items) was created to be implementation-conc
 42. Introduce `trait PitchDetector { fn detect(&[f32], sr: f32) -> Option<Detection>; }`.
 43. Extract `AudioInput` trait + WebAudioInput / CpalAudioInput / MockAudioInput.
 44. Extract `ToneGenerator` trait; unify reference + ear-training tone behind it.
-45. Keep all visualizers on plain data (DetectionFrame, SpectrumFrame, WaveformFrame) and extend the same contract to native/session outputs.
+45. Make all visualizers accept only plain data (DetectionFrame, SpectrumFrame, WaveformFrame); delete AnalyserNode from props.
 46. Split useTuner.ts into: useAudioInput, useTunerSession, useReferenceTone, useVizData.
 47. Move note/frequency math duplication: make TS a thin client of WASM domain exports or generate from Rust.
 48. Define single `DetectionFrame` struct in pitch-core and use identically in Vue and egui.
@@ -529,16 +530,16 @@ The following categorized list (200 items) was created to be implementation-conc
 
 ## Current Top Problems (Synchronized)
 
-The detailed open-problems backlog (183 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
+The detailed **Top 50 things done poorly or incorrectly** (as of the latest main merge) live in [recommendation.md](recommendation.md).
 
 Key highlights that directly block the target architecture:
-- Missing session/audio-port/frame contracts (items 2, 3, 9)
-- God objects and oversized coupling surfaces (items 1, 4-8)
-- Duplication of domain, pitch and registry logic (items 12, 14-18)
-- Realtime safety problems in egui and Tauri native audio (items 23-26)
-- Weak parity, fake-mic and benchmark coverage (items 31-38)
+- Visualizers still use AnalyserNode (items 1, 9)
+- God objects and missing traits (2, 3, 6, 12)
+- Duplication of domain math (13-16)
+- Realtime safety and Mutex problems in egui (4, 5)
+- Weak testing and no equivalence harness (29-36)
 
-When closing any of these open problems, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
+When closing any of these 50, update recommendation.md + this file + README.md.
 
 Recommended reading order:
 1. recommendation.md (the problems)
