@@ -52,7 +52,12 @@ pub fn start_native_audio(
 ) -> Result<(), String> {
     set_range(&state, range);
 
-    if state.stop_signal.lock().map_err(|_| "Native audio state lock failed")?.is_some() {
+    if state
+        .stop_signal
+        .lock()
+        .map_err(|_| "Native audio state lock failed")?
+        .is_some()
+    {
         return Ok(());
     }
 
@@ -66,7 +71,10 @@ pub fn start_native_audio(
 
     match ready_rx.recv_timeout(Duration::from_secs(2)) {
         Ok(Ok(())) => {
-            *state.stop_signal.lock().map_err(|_| "Native audio state lock failed")? = Some(stop_tx);
+            *state
+                .stop_signal
+                .lock()
+                .map_err(|_| "Native audio state lock failed")? = Some(stop_tx);
             Ok(())
         }
         Ok(Err(error)) => Err(error),
@@ -115,17 +123,39 @@ fn create_input_stream(
     let sample_rate = config.sample_rate.0 as f32;
 
     match sample_format {
-        SampleFormat::I8 => build_typed_input_stream::<i8>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::I16 => build_typed_input_stream::<i16>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::I32 => build_typed_input_stream::<i32>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::I64 => build_typed_input_stream::<i64>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::U8 => build_typed_input_stream::<u8>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::U16 => build_typed_input_stream::<u16>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::U32 => build_typed_input_stream::<u32>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::U64 => build_typed_input_stream::<u64>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::F32 => build_typed_input_stream::<f32>(&device, &config, sample_rate, app, shared_range),
-        SampleFormat::F64 => build_typed_input_stream::<f64>(&device, &config, sample_rate, app, shared_range),
-        sample_format => Err(format!("Unsupported microphone sample format: {sample_format}")),
+        SampleFormat::I8 => {
+            build_typed_input_stream::<i8>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::I16 => {
+            build_typed_input_stream::<i16>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::I32 => {
+            build_typed_input_stream::<i32>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::I64 => {
+            build_typed_input_stream::<i64>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::U8 => {
+            build_typed_input_stream::<u8>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::U16 => {
+            build_typed_input_stream::<u16>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::U32 => {
+            build_typed_input_stream::<u32>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::U64 => {
+            build_typed_input_stream::<u64>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::F32 => {
+            build_typed_input_stream::<f32>(&device, &config, sample_rate, app, shared_range)
+        }
+        SampleFormat::F64 => {
+            build_typed_input_stream::<f64>(&device, &config, sample_rate, app, shared_range)
+        }
+        sample_format => Err(format!(
+            "Unsupported microphone sample format: {sample_format}"
+        )),
     }
 }
 
@@ -142,14 +172,17 @@ where
 {
     let mut buffer = Vec::<f32>::with_capacity(PITCH_WINDOW_SIZE * 2);
     let mut last_emit = Instant::now() - Duration::from_millis(33);
-    device.build_input_stream(
-            &config,
+    device
+        .build_input_stream(
+            config,
             move |data: &[T], _| {
                 buffer.extend(data.iter().map(|sample| f32::from_sample(*sample)));
                 if buffer.len() > PITCH_WINDOW_SIZE * 2 {
                     buffer.drain(..buffer.len() - PITCH_WINDOW_SIZE);
                 }
-                if buffer.len() < PITCH_WINDOW_SIZE || last_emit.elapsed() < Duration::from_millis(33) {
+                if buffer.len() < PITCH_WINDOW_SIZE
+                    || last_emit.elapsed() < Duration::from_millis(33)
+                {
                     return;
                 }
 
@@ -157,7 +190,12 @@ where
                 let window = &buffer[buffer.len() - PITCH_WINDOW_SIZE..];
                 let level = normalize_level(window);
                 let range = shared_range.lock().map(|range| *range).unwrap_or_default();
-                let frequency = detect_pitch_yin(window, sample_rate, range.min_frequency, range.max_frequency);
+                let frequency = detect_pitch_yin(
+                    window,
+                    sample_rate,
+                    range.min_frequency,
+                    range.max_frequency,
+                );
                 let _ = app.emit(EVENT_NAME, NativeAudioFrame { frequency, level });
             },
             |error| eprintln!("native audio input error: {error}"),
@@ -168,7 +206,12 @@ where
 
 #[tauri::command]
 pub fn stop_native_audio(state: State<'_, NativeAudioState>) -> Result<(), String> {
-    if let Some(stop) = state.stop_signal.lock().map_err(|_| "Native audio state lock failed")?.take() {
+    if let Some(stop) = state
+        .stop_signal
+        .lock()
+        .map_err(|_| "Native audio state lock failed")?
+        .take()
+    {
         let _ = stop.send(());
     }
     Ok(())
@@ -194,11 +237,17 @@ fn set_range(state: &State<'_, NativeAudioState>, range: NativeAudioRange) {
 }
 
 fn normalize_level(buffer: &[f32]) -> f32 {
-    let rms = (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt();
+    let rms =
+        (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt();
     (rms * 18.0).clamp(0.0, 1.0)
 }
 
-fn detect_pitch_yin(buffer: &[f32], sample_rate: f32, min_frequency: f32, max_frequency: f32) -> Option<f32> {
+fn detect_pitch_yin(
+    buffer: &[f32],
+    sample_rate: f32,
+    min_frequency: f32,
+    max_frequency: f32,
+) -> Option<f32> {
     let size = buffer.len();
     let half = size / 2;
     if half < 64 {
@@ -206,7 +255,9 @@ fn detect_pitch_yin(buffer: &[f32], sample_rate: f32, min_frequency: f32, max_fr
     }
 
     let rms = (buffer.iter().map(|sample| sample * sample).sum::<f32>() / size as f32).sqrt();
-    let max_abs = buffer.iter().fold(0.0_f32, |max, sample| max.max(sample.abs()));
+    let max_abs = buffer
+        .iter()
+        .fold(0.0_f32, |max, sample| max.max(sample.abs()));
     if rms < 0.0025 || max_abs < 0.012 {
         return None;
     }
@@ -256,9 +307,9 @@ fn detect_pitch_yin(buffer: &[f32], sample_rate: f32, min_frequency: f32, max_fr
         None => {
             let mut min_value = f32::INFINITY;
             let mut best = min_tau;
-            for tau in min_tau..max_tau {
-                if yin[tau] < min_value {
-                    min_value = yin[tau];
+            for (tau, &value) in yin.iter().enumerate().take(max_tau).skip(min_tau) {
+                if value < min_value {
+                    min_value = value;
                     best = tau;
                 }
             }

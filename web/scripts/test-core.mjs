@@ -20,12 +20,33 @@ async function bundleModule(source, outfile) {
   return import(pathToFileURL(output).href);
 }
 
-function sineBuffer(frequency, sampleRate = 44100, size = 4096) {
+function sineBuffer(frequency, sampleRate = 44100, size = 4096, gain = 0.4) {
   const buffer = new Float32Array(size);
   for (let i = 0; i < buffer.length; i += 1) {
-    buffer[i] = Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 0.4;
+    buffer[i] = Math.sin((2 * Math.PI * frequency * i) / sampleRate) * gain;
   }
   return buffer;
+}
+
+function noisySineBuffer(frequency, sampleRate = 44100, size = 4096) {
+  const buffer = sineBuffer(frequency, sampleRate, size, 0.35);
+  let seed = 0x12345678;
+  for (let i = 0; i < buffer.length; i += 1) {
+    seed = (1664525 * seed + 1013904223) >>> 0;
+    const noise = (seed / 0xffffffff - 0.5) * 0.04;
+    buffer[i] += noise;
+  }
+  return buffer;
+}
+
+function assertDetectedPitch(pitch, buffer, sampleRate, expected, tolerance, range, label) {
+  const detected = pitch.detectPitch(buffer, sampleRate, pitch.computeSignalStats(buffer), range);
+  assert.ok(detected != null, `${label} should be detected`);
+  assert.ok(
+    Math.abs(detected - expected) < tolerance,
+    `${label}: expected ~${expected}Hz, got ${detected}`,
+  );
+  return detected;
 }
 
 try {
@@ -69,32 +90,52 @@ try {
 
   const sampleRate = 44100;
   const buffer = sineBuffer(110, sampleRate, 4096);
-  const stats = pitch.computeSignalStats(buffer);
-  const detected = pitch.detectPitch(buffer, sampleRate, stats);
-  assert.ok(detected != null, 'pitch should be detected');
-  assert.ok(Math.abs(detected - 110) < 1.5, `expected ~110Hz, got ${detected}`);
+  assertDetectedPitch(pitch, buffer, sampleRate, 110, 1.5, undefined, 'A2 sine');
+
+  const silence = new Float32Array(4096);
+  const silenceStats = pitch.computeSignalStats(silence);
+  assert.equal(silenceStats.rms, 0);
+  assert.equal(silenceStats.maxAbs, 0);
+  assert.equal(pitch.detectPitch(silence, sampleRate, silenceStats), null);
+
+  const noisyBuffer = noisySineBuffer(110, sampleRate, 4096);
+  assertDetectedPitch(pitch, noisyBuffer, sampleRate, 110, 2.0, undefined, 'noisy A2 sine');
+
+  assert.deepEqual(
+    pitch.normalizePitchDetectionRange({ minFrequency: 100, maxFrequency: 110 }),
+    pitch.DEFAULT_PITCH_DETECTION_RANGE,
+  );
 
   const b0Frequency = notes.noteWithA4({ name: 'B', octave: 0 }).frequency;
   const b0Buffer = sineBuffer(b0Frequency, sampleRate, 4096);
-  const b0Detected = pitch.detectPitch(
+  assertDetectedPitch(
+    pitch,
     b0Buffer,
     sampleRate,
-    pitch.computeSignalStats(b0Buffer),
+    b0Frequency,
+    0.8,
     { minFrequency: 20, maxFrequency: 80 },
+    'low bass B0',
   );
-  assert.ok(b0Detected != null, 'low bass B0 should be detected');
-  assert.ok(Math.abs(b0Detected - b0Frequency) < 0.8, `expected ~${b0Frequency}Hz, got ${b0Detected}`);
 
   const e5Frequency = notes.noteWithA4({ name: 'E', octave: 5 }).frequency;
   const e5Buffer = sineBuffer(e5Frequency, sampleRate, 4096);
-  const e5Detected = pitch.detectPitch(
+  assertDetectedPitch(
+    pitch,
     e5Buffer,
     sampleRate,
-    pitch.computeSignalStats(e5Buffer),
+    e5Frequency,
+    2.5,
     { minFrequency: 180, maxFrequency: 1000 },
+    'high mandolin/violin E5',
   );
-  assert.ok(e5Detected != null, 'high mandolin/violin E5 should be detected');
-  assert.ok(Math.abs(e5Detected - e5Frequency) < 2.5, `expected ~${e5Frequency}Hz, got ${e5Detected}`);
+
+  const smoother = new pitch.FrequencySmoother();
+  assert.equal(smoother.add(null), null);
+  assert.equal(smoother.add(110), 110);
+  assert.ok(smoother.add(112) > 110);
+  smoother.reset();
+  assert.equal(smoother.add(null), null);
 
   process.stdout.write('core tests passed\n');
 } finally {

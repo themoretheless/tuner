@@ -8,7 +8,8 @@
     "build": "npm run build:wasm && vue-tsc -b && vite build",
     "build:tauri": "npm run build:wasm && vue-tsc -b && vite build --base ./",
     "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
-    "test": "node ./scripts/test-core.mjs",
+    "test": "vitest run",
+    "test:core:legacy": "node ./scripts/test-core.mjs",
     "preview": "vite preview",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
     "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
@@ -28,6 +29,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
+    "vitest": "^4.1.9",
     "vue-tsc": "^3.2.8"
   }
 }

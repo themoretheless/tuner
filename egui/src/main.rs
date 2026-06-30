@@ -10,31 +10,30 @@ use wasm_bindgen::prelude::*;
 
 use std::sync::{Arc, Mutex};
 
-use pitch_core::{
-    normalize_level,
-    get_tunings, Tuning, TunerEngine, TunerUpdate,
-};
+use pitch_core::{get_tunings, normalize_level, TunerEngine, TunerUpdate, Tuning};
 
 // Consistent sample rate for audio processing and viz calculations.
 // Matches the wasm feed path (48000) and preferred in web.
 const PREFERRED_SAMPLE_RATE: f32 = 48000.0;
 
 #[cfg(target_arch = "wasm32")]
-static WEB_ENGINE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<TunerEngine>>> = std::sync::OnceLock::new();
+static WEB_ENGINE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<TunerEngine>>> =
+    std::sync::OnceLock::new();
 
 #[cfg(target_arch = "wasm32")]
-static WEB_STATE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<State>>> = std::sync::OnceLock::new();
+static WEB_STATE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<State>>> =
+    std::sync::OnceLock::new();
 
 // Use shared Smoother from pitch-core
 // (native Rust, no WASM)
 
 #[derive(Clone, Default)]
-struct State { 
-    freq: Option<f32>, 
-    note: Option<String>, 
+struct State {
+    freq: Option<f32>,
+    note: Option<String>,
     cents: f32,
-    spectrum: Vec<f32>,  // magnitude spectrum, normalized 0..1
-    level: f32, // input level 0..1
+    spectrum: Vec<f32>, // magnitude spectrum, normalized 0..1
+    level: f32,         // input level 0..1
     confidence: f32,
     is_power: bool,
     waveform: Vec<f32>,
@@ -42,6 +41,7 @@ struct State {
 
 /// Extracted from god App to handle all audio input/output concerns.
 /// Owns device enumeration, stream management (native cpal), and feeding samples (wasm).
+#[derive(Default)]
 struct AudioManager {
     input_devices: Vec<String>,
     selected_input_device: Option<String>,
@@ -50,19 +50,6 @@ struct AudioManager {
     inp: Option<Stream>,
     #[cfg(not(target_arch = "wasm32"))]
     out: Option<Stream>,
-}
-
-impl Default for AudioManager {
-    fn default() -> Self {
-        Self {
-            input_devices: vec![],
-            selected_input_device: None,
-            #[cfg(not(target_arch = "wasm32"))]
-            inp: None,
-            #[cfg(not(target_arch = "wasm32"))]
-            out: None,
-        }
-    }
 }
 
 impl AudioManager {
@@ -100,20 +87,11 @@ struct App {
 }
 
 /// Extracted viz data manager to further de-god the App.
+#[derive(Default)]
 struct VizManager {
     cents_history: Vec<f32>,
     spectrogram_history: std::collections::VecDeque<Vec<f32>>,
     show_spectrogram: bool,
-}
-
-impl Default for VizManager {
-    fn default() -> Self {
-        Self {
-            cents_history: vec![],
-            spectrogram_history: std::collections::VecDeque::new(),
-            show_spectrogram: false,
-        }
-    }
 }
 
 impl VizManager {
@@ -127,10 +105,13 @@ impl Default for App {
     fn default() -> Self {
         Self {
             st: Arc::new(Mutex::new(State::default())),
-            tunings: get_tunings(), t_idx:0, a4:440.0,
-            listen:false, ref_on:false,
+            tunings: get_tunings(),
+            t_idx: 0,
+            a4: 440.0,
+            listen: false,
+            ref_on: false,
             engine: Arc::new(Mutex::new(TunerEngine::new(440.0))),
-            spec:false,
+            spec: false,
             audio: AudioManager::default(),
             viz: VizManager::default(),
         }
@@ -168,17 +149,30 @@ impl eframe::App for App {
                 ui.heading("Guitar Tuner — egui Native");
                 let ns = s.note.unwrap_or("—".into());
                 ui.label(egui::RichText::new(ns).size(78.0).strong());
-                if let Some(f) = s.freq { ui.label(format!("{:.1} Hz", f)); }
-                ui.label(format!("{:.1} ¢  conf {:.0}%", s.cents, s.confidence * 100.0));
-                if s.is_power { ui.label(egui::RichText::new("power chord").small()); }
+                if let Some(f) = s.freq {
+                    ui.label(format!("{:.1} Hz", f));
+                }
+                ui.label(format!(
+                    "{:.1} ¢  conf {:.0}%",
+                    s.cents,
+                    s.confidence * 100.0
+                ));
+                if s.is_power {
+                    ui.label(egui::RichText::new("power chord").small());
+                }
 
                 // input level
-                ui.add(egui::ProgressBar::new(s.level).text("Input level").desired_width(200.0));
+                ui.add(
+                    egui::ProgressBar::new(s.level)
+                        .text("Input level")
+                        .desired_width(200.0),
+                );
 
                 // Basic waveform (port in progress)
                 if !s.waveform.is_empty() {
                     ui.add_space(4.0);
-                    let w = 430.0; let h = 30.0;
+                    let w = 430.0;
+                    let h = 30.0;
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
                     let painter = ui.painter();
                     painter.rect_filled(rect, 2.0, egui::Color32::from_gray(30));
@@ -187,14 +181,31 @@ impl eframe::App for App {
                         let x = rect.min.x + (i as f32 / n) * w;
                         let y = rect.center().y - v * (h / 2.0) * 2.0;
                         let y = y.clamp(rect.min.y, rect.max.y);
-                        painter.circle_filled(egui::pos2(x, y), 0.5, egui::Color32::from_rgb(100, 200, 150));
+                        painter.circle_filled(
+                            egui::pos2(x, y),
+                            0.5,
+                            egui::Color32::from_rgb(100, 200, 150),
+                        );
                     }
                 }
 
-                let w=430.0; let r=ui.allocate_exact_size(egui::vec2(w,18.0),egui::Sense::hover()).0;
-                let p=ui.painter(); p.rect_filled(r,4.0,egui::Color32::from_gray(48));
-                let cx=r.center().x; let px=(cx + s.cents/50.0*w*0.5).clamp(r.min.x,r.max.x);
-                p.circle_filled(egui::pos2(px,r.center().y),7.0, if s.cents.abs()<5.0 {egui::Color32::GREEN} else {egui::Color32::RED});
+                let w = 430.0;
+                let r = ui
+                    .allocate_exact_size(egui::vec2(w, 18.0), egui::Sense::hover())
+                    .0;
+                let p = ui.painter();
+                p.rect_filled(r, 4.0, egui::Color32::from_gray(48));
+                let cx = r.center().x;
+                let px = (cx + s.cents / 50.0 * w * 0.5).clamp(r.min.x, r.max.x);
+                p.circle_filled(
+                    egui::pos2(px, r.center().y),
+                    7.0,
+                    if s.cents.abs() < 5.0 {
+                        egui::Color32::GREEN
+                    } else {
+                        egui::Color32::RED
+                    },
+                );
 
                 // (cents history plot coming in viz port)
                 if !self.viz.cents_history.is_empty() {
@@ -215,12 +226,15 @@ impl eframe::App for App {
                 }
 
                 ui.add_space(10.0);
-                egui::ComboBox::from_label("Tuning").selected_text(self.tunings[self.t_idx].name)
-                    .show_ui(ui, |ui|{
-                        for (i,t) in self.tunings.iter().enumerate() {
+                egui::ComboBox::from_label("Tuning")
+                    .selected_text(self.tunings[self.t_idx].name)
+                    .show_ui(ui, |ui| {
+                        for (i, t) in self.tunings.iter().enumerate() {
                             if ui.selectable_value(&mut self.t_idx, i, t.name).clicked() {
                                 let t = self.tunings[self.t_idx].clone();
-                                if let Ok(mut e) = self.engine.lock() { e.set_tuning(t); }
+                                if let Ok(mut e) = self.engine.lock() {
+                                    e.set_tuning(t);
+                                }
                             }
                         }
                     });
@@ -230,18 +244,33 @@ impl eframe::App for App {
                     for s in &mut tuning.strings {
                         ui.horizontal(|ui| {
                             ui.label(format!("{} {}", s.name, s.octave));
-                            if ui.add(egui::Slider::new(&mut s.frequency, 40.0..=400.0).text("Hz")).changed() {
-                                if let Ok(mut e) = self.engine.lock() { e.reset(); }
+                            if ui
+                                .add(egui::Slider::new(&mut s.frequency, 40.0..=400.0).text("Hz"))
+                                .changed()
+                            {
+                                if let Ok(mut e) = self.engine.lock() {
+                                    e.reset();
+                                }
                             }
                         });
                     }
                 });
 
-                if ui.button(if self.ref_on {"■ Stop Ref"} else {"▶ Play Ref"}).clicked() { self.toggle_ref(); }
+                if ui
+                    .button(if self.ref_on {
+                        "■ Stop Ref"
+                    } else {
+                        "▶ Play Ref"
+                    })
+                    .clicked()
+                {
+                    self.toggle_ref();
+                }
                 // Input device selection (delegated to AudioManager)
                 ui.horizontal(|ui| {
                     ui.label("Input:");
-                    if self.audio.input_devices.is_empty() && ui.button("Detect devices").clicked() {
+                    if self.audio.input_devices.is_empty() && ui.button("Detect devices").clicked()
+                    {
                         self.audio.refresh();
                     }
 
@@ -249,13 +278,24 @@ impl eframe::App for App {
 
                     egui::ComboBox::from_id_source("input_device")
                         .selected_text(
-                            self.audio.selected_input_device.clone().unwrap_or_else(|| "Default".to_string())
+                            self.audio
+                                .selected_input_device
+                                .clone()
+                                .unwrap_or_else(|| "Default".to_string()),
                         )
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.audio.selected_input_device, None, "Default (system)");
+                            ui.selectable_value(
+                                &mut self.audio.selected_input_device,
+                                None,
+                                "Default (system)",
+                            );
                             for name in &self.audio.input_devices {
                                 let n = name.clone();
-                                ui.selectable_value(&mut self.audio.selected_input_device, Some(n), name);
+                                ui.selectable_value(
+                                    &mut self.audio.selected_input_device,
+                                    Some(n),
+                                    name,
+                                );
                             }
                         });
 
@@ -271,10 +311,19 @@ impl eframe::App for App {
                     }
                 });
 
-                if ui.button(if self.listen {"Stop Mic"} else {"Start Mic"}).clicked() { self.toggle_mic(ctx); }
+                if ui
+                    .button(if self.listen { "Stop Mic" } else { "Start Mic" })
+                    .clicked()
+                {
+                    self.toggle_mic(ctx);
+                }
 
                 if self.listen {
-                    let dev_name = self.audio.selected_input_device.clone().unwrap_or_else(|| "default".to_string());
+                    let dev_name = self
+                        .audio
+                        .selected_input_device
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string());
                     ui.small(format!("Mic: {}", dev_name));
                 }
                 if ui.button("Play Random String (ear training)").clicked() {
@@ -292,7 +341,8 @@ impl eframe::App for App {
                         let bar_width = 3.0; // integer-ish for crisp bars
                         let max_h = 80.0;
                         let total_w = max_bins as f32 * bar_width;
-                        let (rect, _) = ui.allocate_exact_size(egui::vec2(total_w, max_h), egui::Sense::hover());
+                        let (rect, _) = ui
+                            .allocate_exact_size(egui::vec2(total_w, max_h), egui::Sense::hover());
                         let painter = ui.painter();
                         painter.rect_filled(rect, 2.0, egui::Color32::from_gray(30));
                         for (i, &mag) in spec.iter().enumerate().take(max_bins) {
@@ -303,14 +353,22 @@ impl eframe::App for App {
                                 egui::pos2(x, rect.max.y - h),
                                 egui::pos2(x + bw, rect.max.y),
                             );
-                            painter.rect_filled(bar_rect, 0.0, egui::Color32::from_rgb(80, 200, 120));
+                            painter.rect_filled(
+                                bar_rect,
+                                0.0,
+                                egui::Color32::from_rgb(80, 200, 120),
+                            );
                             // subtle top highlight (no fat extrusion that blurs)
                             if h > 3.0 {
                                 let top_rect = egui::Rect::from_min_max(
                                     egui::pos2(x, rect.max.y - h),
                                     egui::pos2(x + bw, rect.max.y - h + 1.5),
                                 );
-                                painter.rect_filled(top_rect, 0.0, egui::Color32::from_rgb(134, 239, 172));
+                                painter.rect_filled(
+                                    top_rect,
+                                    0.0,
+                                    egui::Color32::from_rgb(134, 239, 172),
+                                );
                             }
                         }
 
@@ -325,7 +383,10 @@ impl eframe::App for App {
                                 painter.vline(
                                     x,
                                     rect.y_range(),
-                                    egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(255, 220, 80)),
+                                    egui::Stroke::new(
+                                        1.0_f32,
+                                        egui::Color32::from_rgb(255, 220, 80),
+                                    ),
                                 );
                             }
                         }
@@ -341,7 +402,8 @@ impl eframe::App for App {
                         let freq_bins = 80; // limit for perf
                         let w = 430.0;
                         let h = 70.0;
-                        let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
                         let painter = ui.painter();
                         painter.rect_filled(rect, 2.0, egui::Color32::from_gray(15));
                         let step_w = w / time_steps as f32;
@@ -373,11 +435,16 @@ impl eframe::App for App {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label("A4:");
-                    if ui.add(egui::Slider::new(&mut self.a4, 420.0..=460.0).text("Hz")).changed() {
-                        if let Ok(mut e) = self.engine.lock() { e.set_a4(self.a4); }
+                    if ui
+                        .add(egui::Slider::new(&mut self.a4, 420.0..=460.0).text("Hz"))
+                        .changed()
+                    {
+                        if let Ok(mut e) = self.engine.lock() {
+                            e.set_a4(self.a4);
+                        }
                     }
                 });
-                ui.label(format!("YIN + smoothing + cpal output"));
+                ui.label("YIN + smoothing + cpal output");
             });
         });
     }
@@ -386,7 +453,10 @@ impl eframe::App for App {
         storage.set_string("a4", self.a4.to_string());
         storage.set_string("t_idx", self.t_idx.to_string());
         storage.set_string("spec", self.spec.to_string());
-        storage.set_string("input_device", self.audio.selected_input_device.clone().unwrap_or_default());
+        storage.set_string(
+            "input_device",
+            self.audio.selected_input_device.clone().unwrap_or_default(),
+        );
         storage.set_string("show_spectrogram", self.viz.show_spectrogram.to_string());
     }
 }
@@ -401,11 +471,13 @@ impl App {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn toggle_mic(&mut self, ctx:&egui::Context) {
+    fn toggle_mic(&mut self, ctx: &egui::Context) {
         if self.listen {
             self.audio.inp = None;
             self.listen = false;
-            if let Ok(mut e) = self.engine.lock() { e.reset(); }
+            if let Ok(mut e) = self.engine.lock() {
+                e.reset();
+            }
             self.viz.clear();
             return;
         }
@@ -414,9 +486,10 @@ impl App {
             self.audio.refresh();
         }
 
-        let st=self.st.clone(); let ctx2=ctx.clone();
+        let st = self.st.clone();
+        let ctx2 = ctx.clone();
         let engine_for_cb = self.engine.clone();
-        let h=cpal::default_host();
+        let h = cpal::default_host();
 
         let selected = self.audio.selected_input_device.as_ref().and_then(|name| {
             h.input_devices().ok().and_then(|mut devs| {
@@ -425,79 +498,127 @@ impl App {
         });
         let d = match selected.or_else(|| h.default_input_device()) {
             Some(d) => d,
-            None => { eprintln!("[mic] no input device available"); self.listen = false; return; }
+            None => {
+                eprintln!("[mic] no input device available");
+                self.listen = false;
+                return;
+            }
         };
 
         let cf: StreamConfig = match d.default_input_config() {
             Ok(c) => c.into(),
-            Err(e) => { eprintln!("[mic] no input config: {}", e); self.listen = false; return; }
+            Err(e) => {
+                eprintln!("[mic] no input config: {}", e);
+                self.listen = false;
+                return;
+            }
         };
         let sr = cf.sample_rate.0 as f32;
-        let mut b:Vec<f32>=vec![];
-        let stream = match d.build_input_stream(&cf, move |d:&[f32],_|{
-            b.extend_from_slice(d); if b.len()>4096 { b.drain(..b.len()-2048); }
-            if b.len()>=2048 {
-                let window = &b[b.len()-2048..];
-
-                // Drive through shared engine
-                let update = {
-                    if let Ok(mut eng) = engine_for_cb.lock() {
-                        eng.process(window, sr)
-                    } else {
-                        TunerUpdate::default()
-                    }
-                };
-
-                // Single lock + single repaint per frame (was 3x lock, 3x repaint).
-                // Reuse the waveform Vec capacity instead of reallocating each callback.
-                if let Ok(mut g)=st.lock() {
-                    g.freq = update.freq;
-                    g.cents = update.cents;
-                    g.confidence = update.confidence;
-                    g.is_power = update.is_power;
-                    g.level = normalize_level(update.rms);
-                    g.note = Some(update.note);
-                    g.waveform.clear();
-                    g.waveform.extend_from_slice(window);
-                    if !update.spectrum.is_empty() {
-                        g.spectrum = update.spectrum;
-                    }
+        let mut b: Vec<f32> = vec![];
+        let stream = match d.build_input_stream(
+            &cf,
+            move |d: &[f32], _| {
+                b.extend_from_slice(d);
+                if b.len() > 4096 {
+                    b.drain(..b.len() - 2048);
                 }
-                ctx2.request_repaint();
-            }
-        }, |e|eprintln!("{}",e), None) {
+                if b.len() >= 2048 {
+                    let window = &b[b.len() - 2048..];
+
+                    // Drive through shared engine
+                    let update = {
+                        if let Ok(mut eng) = engine_for_cb.lock() {
+                            eng.process(window, sr)
+                        } else {
+                            TunerUpdate::default()
+                        }
+                    };
+
+                    // Single lock + single repaint per frame (was 3x lock, 3x repaint).
+                    // Reuse the waveform Vec capacity instead of reallocating each callback.
+                    if let Ok(mut g) = st.lock() {
+                        g.freq = update.freq;
+                        g.cents = update.cents;
+                        g.confidence = update.confidence;
+                        g.is_power = update.is_power;
+                        g.level = normalize_level(update.rms);
+                        g.note = Some(update.note);
+                        g.waveform.clear();
+                        g.waveform.extend_from_slice(window);
+                        if !update.spectrum.is_empty() {
+                            g.spectrum = update.spectrum;
+                        }
+                    }
+                    ctx2.request_repaint();
+                }
+            },
+            |e| eprintln!("{}", e),
+            None,
+        ) {
             Ok(s) => s,
-            Err(e) => { eprintln!("[mic] build input stream failed: {}", e); self.listen = false; return; }
+            Err(e) => {
+                eprintln!("[mic] build input stream failed: {}", e);
+                self.listen = false;
+                return;
+            }
         };
         if let Err(e) = stream.play() {
-            eprintln!("[mic] stream play failed: {}", e); self.listen = false; return;
+            eprintln!("[mic] stream play failed: {}", e);
+            self.listen = false;
+            return;
         }
-        self.audio.inp = Some(stream); self.listen = true;
+        self.audio.inp = Some(stream);
+        self.listen = true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn toggle_ref(&mut self) {
-        if self.ref_on { self.audio.out=None; self.ref_on=false; return; }
+        if self.ref_on {
+            self.audio.out = None;
+            self.ref_on = false;
+            return;
+        }
         let f = self.tunings[self.t_idx].strings[0].frequency;
-        let h=cpal::default_host();
+        let h = cpal::default_host();
         let d = match h.default_output_device() {
             Some(d) => d,
-            None => { eprintln!("[ref] no output device"); return; }
+            None => {
+                eprintln!("[ref] no output device");
+                return;
+            }
         };
-        let cf:StreamConfig = match d.default_output_config() {
+        let cf: StreamConfig = match d.default_output_config() {
             Ok(c) => c.into(),
-            Err(e) => { eprintln!("[ref] no output config: {}", e); return; }
+            Err(e) => {
+                eprintln!("[ref] no output config: {}", e);
+                return;
+            }
         };
-        let sr=cf.sample_rate.0 as f32;
-        let mut ph=0.0f32;
-        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
-            for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None) {
+        let sr = cf.sample_rate.0 as f32;
+        let mut ph = 0.0f32;
+        let s = match d.build_output_stream(
+            &cf,
+            move |data: &mut [f32], _| {
+                for s in data {
+                    *s = (2.0 * std::f32::consts::PI * f * ph / sr).sin() * 0.18;
+                    ph = (ph + 1.0) % sr;
+                }
+            },
+            |e| eprintln!("{}", e),
+            None,
+        ) {
             Ok(s) => s,
-            Err(e) => { eprintln!("[ref] build output stream failed: {}", e); return; }
+            Err(e) => {
+                eprintln!("[ref] build output stream failed: {}", e);
+                return;
+            }
         };
-        if let Err(e) = s.play() { eprintln!("[ref] play failed: {}", e); return; }
-        self.audio.out=Some(s); self.ref_on=true;
+        if let Err(e) = s.play() {
+            eprintln!("[ref] play failed: {}", e);
+            return;
+        }
+        self.audio.out = Some(s);
+        self.ref_on = true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -511,29 +632,49 @@ impl App {
         let f = strings[idx].frequency;
         // stop previous
         self.audio.out = None;
-        let h=cpal::default_host();
+        let h = cpal::default_host();
         let d = match h.default_output_device() {
             Some(d) => d,
-            None => { eprintln!("[random] no output device"); return; }
+            None => {
+                eprintln!("[random] no output device");
+                return;
+            }
         };
-        let cf:StreamConfig = match d.default_output_config() {
+        let cf: StreamConfig = match d.default_output_config() {
             Ok(c) => c.into(),
-            Err(e) => { eprintln!("[random] no output config: {}", e); return; }
+            Err(e) => {
+                eprintln!("[random] no output config: {}", e);
+                return;
+            }
         };
-        let sr=cf.sample_rate.0 as f32;
-        let mut ph=0.0f32;
-        let s = match d.build_output_stream(&cf, move |data:&mut [f32],_| {
-            for s in data { *s = (2.0*std::f32::consts::PI*f*ph/sr).sin()*0.18; ph=(ph+1.0)%sr; }
-        }, |e|eprintln!("{}",e), None) {
+        let sr = cf.sample_rate.0 as f32;
+        let mut ph = 0.0f32;
+        let s = match d.build_output_stream(
+            &cf,
+            move |data: &mut [f32], _| {
+                for s in data {
+                    *s = (2.0 * std::f32::consts::PI * f * ph / sr).sin() * 0.18;
+                    ph = (ph + 1.0) % sr;
+                }
+            },
+            |e| eprintln!("{}", e),
+            None,
+        ) {
             Ok(s) => s,
-            Err(e) => { eprintln!("[random] build output stream failed: {}", e); return; }
+            Err(e) => {
+                eprintln!("[random] build output stream failed: {}", e);
+                return;
+            }
         };
-        if let Err(e) = s.play() { eprintln!("[random] play failed: {}", e); return; }
+        if let Err(e) = s.play() {
+            eprintln!("[random] play failed: {}", e);
+            return;
+        }
         // Keep the stream alive in self.audio.out so the tone actually sounds;
         // it stops when the next tone replaces it or when `out` is cleared.
         // (Previously an immediate out.take() dropped the stream the same frame,
         // so the ear-training tone never played.)
-        self.audio.out=Some(s);
+        self.audio.out = Some(s);
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -585,36 +726,44 @@ pub fn feed_audio_samples(samples: &[f32]) {
     }
 }
 
-
-
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     let opt = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([700.0, 620.0]).with_min_inner_size([500.0, 550.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([700.0, 620.0])
+            .with_min_inner_size([500.0, 550.0]),
         ..Default::default()
     };
-    eframe::run_native("Guitar Tuner (egui)", opt, Box::new(|cc| {
-        let mut app = App::default();
-        if let Some(storage) = cc.storage {
-            if let Some(s) = storage.get_string("a4") {
-                if let Ok(v) = s.parse() { app.a4 = v; }
+    eframe::run_native(
+        "Guitar Tuner (egui)",
+        opt,
+        Box::new(|cc| {
+            let mut app = App::default();
+            if let Some(storage) = cc.storage {
+                if let Some(s) = storage.get_string("a4") {
+                    if let Ok(v) = s.parse() {
+                        app.a4 = v;
+                    }
+                }
+                if let Some(s) = storage.get_string("t_idx") {
+                    if let Ok(v) = s.parse() {
+                        app.t_idx = v;
+                    }
+                }
+                if let Some(s) = storage.get_string("spec") {
+                    app.spec = s == "true";
+                }
+                if let Some(s) = storage.get_string("input_device") {
+                    app.audio.selected_input_device = if s.is_empty() { None } else { Some(s) };
+                }
+                if let Some(s) = storage.get_string("show_spectrogram") {
+                    app.viz.show_spectrogram = s == "true";
+                }
             }
-            if let Some(s) = storage.get_string("t_idx") {
-                if let Ok(v) = s.parse() { app.t_idx = v; }
-            }
-            if let Some(s) = storage.get_string("spec") {
-                app.spec = s == "true";
-            }
-            if let Some(s) = storage.get_string("input_device") {
-                app.audio.selected_input_device = if s.is_empty() { None } else { Some(s) };
-            }
-            if let Some(s) = storage.get_string("show_spectrogram") {
-                app.viz.show_spectrogram = s == "true";
-            }
-        }
-        app.audio.refresh();
-        Box::new(app)
-    }))
+            app.audio.refresh();
+            Box::new(app)
+        }),
+    )
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -623,12 +772,9 @@ pub fn start() {
     console_error_panic_hook::set_once();
 
     // init shared state for web audio feed
-    let _ = WEB_ENGINE.get_or_init(|| {
-        std::sync::Arc::new(std::sync::Mutex::new(TunerEngine::new(440.0)))
-    });
-    let _ = WEB_STATE.get_or_init(|| {
-        std::sync::Arc::new(std::sync::Mutex::new(State::default()))
-    });
+    let _ = WEB_ENGINE
+        .get_or_init(|| std::sync::Arc::new(std::sync::Mutex::new(TunerEngine::new(440.0))));
+    let _ = WEB_STATE.get_or_init(|| std::sync::Arc::new(std::sync::Mutex::new(State::default())));
 
     let web_options = eframe::WebOptions::default();
     wasm_bindgen_futures::spawn_local(async {

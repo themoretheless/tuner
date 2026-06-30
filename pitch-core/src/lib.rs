@@ -17,7 +17,7 @@ pub struct TunerUpdate {
     pub is_power: bool,
     pub cents: f32,
     pub note: String,
-    pub spectrum: Vec<f32>,  // normalized 0..1, first half bins
+    pub spectrum: Vec<f32>, // normalized 0..1, first half bins
 }
 
 pub struct TunerEngine {
@@ -37,7 +37,7 @@ impl TunerEngine {
         Self {
             smoother: Smoother::new(),
             a4,
-            tuning: tunings.get(0).cloned().unwrap_or_else(|| Tuning {
+            tuning: tunings.first().cloned().unwrap_or_else(|| Tuning {
                 name: "Standard (EADGBE)",
                 strings: GUITAR_STRINGS_STANDARD.to_vec(),
             }),
@@ -60,8 +60,7 @@ impl TunerEngine {
 
     pub fn process(&mut self, buffer: &[f32], sample_rate: f32) -> TunerUpdate {
         let rms = compute_rms_volume(buffer);
-        let (raw_freq, confidence) = detect_pitch_native(buffer, sample_rate)
-            .unwrap_or((0.0, 0.0));
+        let (raw_freq, confidence) = detect_pitch_native(buffer, sample_rate).unwrap_or((0.0, 0.0));
         let raw_opt = if raw_freq > 0.0 { Some(raw_freq) } else { None };
 
         // Smooth the detected pitch to de-jitter the readout. When detection
@@ -105,10 +104,10 @@ impl TunerEngine {
                 self.spectrum_buffer[i] = rustfft::num_complex::Complex::new(sample * w, 0.0);
             }
             self.fft.process(&mut self.spectrum_buffer);
-            for i in 0..512 {
+            for (i, bin) in spectrum.iter_mut().enumerate().take(512) {
                 let re = self.spectrum_buffer[i].re;
                 let im = self.spectrum_buffer[i].im;
-                spectrum[i] = (re * re + im * im).sqrt();
+                *bin = (re * re + im * im).sqrt();
             }
             let max_mag = spectrum.iter().cloned().fold(0.0, f32::max).max(1e-6);
             for m in &mut spectrum {
@@ -131,8 +130,6 @@ impl TunerEngine {
         self.smoother.reset();
     }
 }
-
-
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
@@ -226,9 +223,9 @@ fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
         None => {
             let mut min_val = f32::INFINITY;
             let mut b = 0;
-            for tau in min_tau..max_tau {
-                if yin[tau] < min_val {
-                    min_val = yin[tau];
+            for (tau, &value) in yin.iter().enumerate().take(max_tau).skip(min_tau) {
+                if value < min_val {
+                    min_val = value;
                     b = tau;
                 }
             }
@@ -260,7 +257,7 @@ fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
     }
 
     let freq = sample_rate / better_tau;
-    if freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ {
+    if !(GUITAR_MIN_FREQ..=GUITAR_MAX_FREQ).contains(&freq) {
         return None;
     }
 
@@ -322,7 +319,7 @@ fn detect_pitch_mpm_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f
     }
 
     let freq = sample_rate / better;
-    if freq < GUITAR_MIN_FREQ || freq > GUITAR_MAX_FREQ {
+    if !(GUITAR_MIN_FREQ..=GUITAR_MAX_FREQ).contains(&freq) {
         return None;
     }
 
@@ -490,7 +487,10 @@ impl Smoother {
 
     pub fn add(&mut self, f: Option<f32>) -> Option<f32> {
         if let Some(v) = f {
-            self.ema = Some(self.ema.map_or(v, |e| self.alpha * v + (1.0 - self.alpha) * e));
+            self.ema = Some(
+                self.ema
+                    .map_or(v, |e| self.alpha * v + (1.0 - self.alpha) * e),
+            );
             if let Some(e) = self.ema {
                 self.hist.push(e);
                 if self.hist.len() > self.maxh {
@@ -528,7 +528,9 @@ pub struct WasmSmoother {
 impl WasmSmoother {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        Self { inner: Smoother::new() }
+        Self {
+            inner: Smoother::new(),
+        }
     }
 
     pub fn add(&mut self, f: Option<f32>) -> Option<f32> {
@@ -540,24 +542,51 @@ impl WasmSmoother {
     }
 }
 
+#[cfg(feature = "wasm")]
+impl Default for WasmSmoother {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sine_buffer(freq: f32, sample_rate: f32, len: usize) -> Vec<f32> {
+        sine_buffer_with_offset(freq, sample_rate, len, 1.0, 0.0)
+    }
+
+    fn sine_buffer_with_offset(
+        freq: f32,
+        sample_rate: f32,
+        len: usize,
+        gain: f32,
+        offset: f32,
+    ) -> Vec<f32> {
+        let mut buf = vec![0.0; len];
+        for (i, sample) in buf.iter_mut().enumerate() {
+            *sample =
+                (2.0 * std::f32::consts::PI * freq * i as f32 / sample_rate).sin() * gain + offset;
+        }
+        buf
+    }
 
     #[test]
     fn test_yin_440hz() {
         // Generate sine wave at 440Hz
         let sr = 44100.0;
         let n = 2048;
-        let mut buf = vec![0.0; n];
-        for i in 0..n {
-            buf[i] = (2.0 * std::f32::consts::PI * 440.0 * i as f32 / sr).sin();
-        }
+        let buf = sine_buffer(440.0, sr, n);
         let res = detect_pitch_native(&buf, sr);
         assert!(res.is_some());
         let (f, c) = res.unwrap();
         // Note: may detect octave, accept close or half for sine test
-        assert!((f - 440.0).abs() < 10.0 || (f - 220.0).abs() < 10.0, "freq was {}", f);
+        assert!(
+            (f - 440.0).abs() < 10.0 || (f - 220.0).abs() < 10.0,
+            "freq was {}",
+            f
+        );
         assert!(c > 0.3);
     }
 
@@ -565,12 +594,9 @@ mod tests {
     fn test_mpm_440hz() {
         let sr = 44100.0;
         let n = 2048;
-        let mut buf = vec![0.0; n];
-        for i in 0..n {
-            buf[i] = (2.0 * std::f32::consts::PI * 440.0 * i as f32 / sr).sin();
-        }
+        let buf = sine_buffer(440.0, sr, n);
         let _ = detect_pitch_native(&buf, sr); // exercises the YIN path
-        // For MPM direct
+                                               // For MPM direct
         if let Some((f, _)) = detect_pitch_mpm_internal(&buf, sr) {
             assert!((f - 440.0).abs() < 2.0);
         }
@@ -582,9 +608,9 @@ mod tests {
         let n = 2048;
         let mut buf = vec![0.0; n];
         let f = 110.0; // A2
-        for i in 0..n {
+        for (i, sample) in buf.iter_mut().enumerate() {
             // Mix fundamental + fifth
-            buf[i] = (2.0 * std::f32::consts::PI * f * i as f32 / sr).sin() * 0.7
+            *sample = (2.0 * std::f32::consts::PI * f * i as f32 / sr).sin() * 0.7
                 + (2.0 * std::f32::consts::PI * f * 1.5 * i as f32 / sr).sin() * 0.5;
         }
         let res = detect_pitch_native(&buf, sr);
@@ -592,7 +618,6 @@ mod tests {
         let (freq, _) = res.unwrap();
         // freq approx, focus on power detection
         let _ = is_likely_power_chord_native(&buf, sr, freq); // may need buffer adjust
-
     }
 
     #[test]
@@ -617,12 +642,19 @@ mod tests {
         assert_eq!(closest.name, "A");
         assert!((closest.frequency - 110.0).abs() < 0.1);
         // A4 scaling
-        let closest_442 = find_closest_string(110.0 * (442.0/440.0), std, 442.0);
+        let closest_442 = find_closest_string(110.0 * (442.0 / 440.0), std, 442.0);
         assert_eq!(closest_442.name, "A");
         // New presets exist and are well-formed (6 strings each, ascending pitch).
-        for name in ["Drop B (BF#BEG#C#)", "Open C (CGCGCE)", "Open A (EAC#EAE)",
-                     "Full Step Down (DGCFAD)", "Open Gm (DGDGA#D)"] {
-            let t = tunings.iter().find(|t| t.name == name)
+        for name in [
+            "Drop B (BF#BEG#C#)",
+            "Open C (CGCGCE)",
+            "Open A (EAC#EAE)",
+            "Full Step Down (DGCFAD)",
+            "Open Gm (DGDGA#D)",
+        ] {
+            let t = tunings
+                .iter()
+                .find(|t| t.name == name)
                 .unwrap_or_else(|| panic!("missing tuning {}", name));
             assert_eq!(t.strings.len(), 6, "{} should have 6 strings", name);
             for w in t.strings.windows(2) {
@@ -638,14 +670,16 @@ mod tests {
         let sr = 44100.0;
         let n = 2048;
         for &expected in &[82.4069f32, 110.0, 146.8324, 195.9977, 246.9417, 329.6276] {
-            let mut buf = vec![0.0f32; n];
-            for i in 0..n {
-                buf[i] = (2.0 * std::f32::consts::PI * expected * i as f32 / sr).sin();
-            }
+            let buf = sine_buffer(expected, sr, n);
             let res = detect_pitch_native(&buf, sr);
             assert!(res.is_some(), "no detection for {} Hz", expected);
             let (f, c) = res.unwrap();
-            assert!((f - expected).abs() < 2.0, "expected {} Hz, got {} Hz", expected, f);
+            assert!(
+                (f - expected).abs() < 2.0,
+                "expected {} Hz, got {} Hz",
+                expected,
+                f
+            );
             assert!(c > 0.5, "low confidence {} for {} Hz", c, expected);
         }
     }
@@ -655,14 +689,10 @@ mod tests {
         // A large DC offset must not break detection (mean is removed first).
         let sr = 44100.0;
         let n = 2048;
-        let mut buf = vec![0.0f32; n];
-        for i in 0..n {
-            buf[i] = (2.0 * std::f32::consts::PI * 110.0 * i as f32 / sr).sin() + 0.6;
-        }
+        let buf = sine_buffer_with_offset(110.0, sr, n, 1.0, 0.6);
         let res = detect_pitch(&buf, sr);
         assert!(res.is_some());
         let (f, _) = res.unwrap();
         assert!((f - 110.0).abs() < 2.0, "got {} Hz", f);
     }
 }
-
