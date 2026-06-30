@@ -53,7 +53,24 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
         },
       });
 
+      // If the mic track ends involuntarily (unplugged / OS revoked), stop
+      // cleanly instead of leaving isListening true and reading stale zeros.
+      stream.getAudioTracks().forEach((track) => {
+        track.addEventListener('ended', handleTrackEnded);
+      });
+
       audioContext = createAudioContext();
+      // Browsers can hand back a suspended context (autoplay policy / iOS);
+      // resume it now and keep it resumed, otherwise the analyser silently
+      // reads zeros and detection produces nothing.
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => {});
+      }
+      audioContext.onstatechange = () => {
+        if (audioContext?.state === 'suspended' && isListening.value) {
+          void audioContext.resume().catch(() => {});
+        }
+      };
       sampleRate.value = audioContext.sampleRate;
       const nextAnalyser = audioContext.createAnalyser();
       nextAnalyser.fftSize = fftSize;
@@ -70,6 +87,11 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     }
   }
 
+  function handleTrackEnded() {
+    error.value = 'Microphone disconnected';
+    stop();
+  }
+
   function cleanup() {
     if (source) {
       source.disconnect();
@@ -77,6 +99,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     }
     analyser.value = null;
     if (audioContext) {
+      audioContext.onstatechange = null;
       audioContext.close().catch(() => {});
       audioContext = null;
     }

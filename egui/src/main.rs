@@ -535,10 +535,11 @@ impl App {
             Err(e) => { eprintln!("[random] build output stream failed: {}", e); return; }
         };
         if let Err(e) = s.play() { eprintln!("[random] play failed: {}", e); return; }
+        // Keep the stream alive in self.audio.out so the tone actually sounds;
+        // it stops when the next tone replaces it or when `out` is cleared.
+        // (Previously an immediate out.take() dropped the stream the same frame,
+        // so the ear-training tone never played.)
         self.audio.out=Some(s);
-        // auto stop after 1.5s
-        let out_clone = self.audio.out.take(); // to stop later? simple, let it drop after timeout but for simplicity keep short
-        // For simplicity, let user stop or add timer later
     }
 
     #[cfg(target_arch = "wasm32")]
