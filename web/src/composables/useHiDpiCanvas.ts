@@ -6,7 +6,7 @@ export interface CanvasFrame {
   w: number;
 }
 
-export function useHiDpiCanvas(cssHeight: number, fallbackWidth = 520) {
+export function useHiDpiCanvas(cssHeight: number, fallbackWidth = 520, minWidth = 260) {
   const canvas = ref<HTMLCanvasElement | null>(null);
   let ctx: CanvasRenderingContext2D | null = null;
 
@@ -20,11 +20,15 @@ export function useHiDpiCanvas(cssHeight: number, fallbackWidth = 520) {
   function resize(): CanvasFrame | null {
     if (!canvas.value || !ctx) return null;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.max(1, Math.round(canvas.value.clientWidth || fallbackWidth));
-    const h = Math.max(1, Math.round(canvas.value.clientHeight || cssHeight));
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const parentWidth = canvas.value.parentElement?.clientWidth || 0;
+    const w = Math.max(minWidth, Math.floor(parentWidth || canvas.value.clientWidth || fallbackWidth));
+    const h = Math.max(1, Math.floor(cssHeight));
     const targetWidth = Math.round(w * dpr);
     const targetHeight = Math.round(h * dpr);
+
+    canvas.value.style.width = `${w}px`;
+    canvas.value.style.height = `${h}px`;
 
     if (canvas.value.width !== targetWidth || canvas.value.height !== targetHeight) {
       canvas.value.width = targetWidth;

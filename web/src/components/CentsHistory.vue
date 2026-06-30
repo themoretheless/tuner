@@ -1,56 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
 
 const props = defineProps<{
   history: number[]
   isListening: boolean
 }>()
 
-const canvas = ref<HTMLCanvasElement | null>(null)
-let ctx: CanvasRenderingContext2D | null = null
+const { canvas, resize, setup } = useHiDpiCanvas(60, 400)
 let raf = 0
 
-const displayW = ref(400)
-const displayH = ref(60)
-
-function getDpr(): number {
-  return (typeof window !== 'undefined' && window.devicePixelRatio) || 1
-}
-
-function resizeCanvas() {
-  if (!canvas.value) return
-  const parent = canvas.value.parentElement
-  if (!parent) return
-
-  const dpr = getDpr()
-  const cssW = Math.max(260, Math.floor(parent.clientWidth))
-  const cssH = 60
-
-  canvas.value.style.width = cssW + 'px'
-  canvas.value.style.height = cssH + 'px'
-
-  const pxW = Math.floor(cssW * dpr)
-  const pxH = Math.floor(cssH * dpr)
-  if (canvas.value.width !== pxW || canvas.value.height !== pxH) {
-    canvas.value.width = pxW
-    canvas.value.height = pxH
-  }
-
-  if (ctx) {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  }
-
-  displayW.value = cssW
-  displayH.value = cssH
-}
-
 function draw() {
-  if (!ctx || !canvas.value) return
+  const frame = resize()
+  if (!frame) return
 
-  resizeCanvas()
-
-  const w = displayW.value
-  const h = displayH.value
+  const { ctx, w, h } = frame
 
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
@@ -98,12 +62,16 @@ function draw() {
   raf = requestAnimationFrame(draw)
 }
 
+function handleResize() {
+  if (raf) cancelAnimationFrame(raf)
+  if (props.isListening) draw()
+  else resize()
+}
+
 onMounted(() => {
-  if (canvas.value) {
-    ctx = canvas.value.getContext('2d', { alpha: true })
-    resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
-  }
+  if (!canvas.value) return
+  setup()
+  window.addEventListener('resize', handleResize)
   watch(() => props.history, () => {
     if (props.isListening) {
       if (raf) cancelAnimationFrame(raf)
@@ -114,7 +82,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
-  window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 
 const props = defineProps<{
@@ -8,67 +9,22 @@ const props = defineProps<{
   currentFreq?: number | null
 }>()
 
-const canvas = ref<HTMLCanvasElement | null>(null)
-let ctx: CanvasRenderingContext2D | null = null
-
-// Logical (CSS px) size we draw in. Actual backing store = this * dpr
-const displayW = ref(400)
-const displayH = ref(100)
-
-function getDpr(): number {
-  return (typeof window !== 'undefined' && window.devicePixelRatio) || 1
-}
-
-function resizeCanvas() {
-  if (!canvas.value) return
-  const parent = canvas.value.parentElement
-  if (!parent) return
-
-  const dpr = getDpr()
-  // Take the real available width from layout (flex-1 + w-full parent)
-  const cssW = Math.max(260, Math.floor(parent.clientWidth))
-  const cssH = 130 // taller for better looking bars
-
-  // Display size (CSS)
-  canvas.value.style.width = cssW + 'px'
-  canvas.value.style.height = cssH + 'px'
-
-  // Real pixel backing store for sharp rendering
-  const pxW = Math.floor(cssW * dpr)
-  const pxH = Math.floor(cssH * dpr)
-  if (canvas.value.width !== pxW || canvas.value.height !== pxH) {
-    canvas.value.width = pxW
-    canvas.value.height = pxH
-  }
-
-  if (ctx) {
-    // Reset and scale so all drawing commands below use CSS pixels
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  }
-
-  displayW.value = cssW
-  displayH.value = cssH
-}
+const { canvas, clear, resize, setup } = useHiDpiCanvas(130, 400)
 
 function clearCanvas() {
-  if (!ctx || !canvas.value) return
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = '#11151b'
-  ctx.fillRect(0, 0, canvas.value.width, canvas.value.height)
+  clear('#11151b')
 }
 
 function drawFrame() {
-  if (!ctx || !canvas.value) return
-
   // Keep size in sync (handles container width changes from sidebar etc.)
-  resizeCanvas()
+  const frame = resize()
+  if (!frame) return
   if (!props.isListening || !props.frame) {
     clearCanvas()
     return
   }
 
-  const w = displayW.value
-  const h = displayH.value
+  const { ctx, w, h } = frame
   const data = props.frame.bins
   const binCount = data.length
 
@@ -158,11 +114,9 @@ function handleResize() {
 }
 
 onMounted(() => {
-  if (canvas.value) {
-    ctx = canvas.value.getContext('2d', { alpha: true })
-    resizeCanvas()
-    window.addEventListener('resize', handleResize)
-  }
+  if (!canvas.value) return
+  setup()
+  window.addEventListener('resize', handleResize)
   watch(() => [props.isListening, props.frame?.sequence, props.currentFreq], () => {
     if (props.isListening && props.frame) startDraw()
     else stopDraw()

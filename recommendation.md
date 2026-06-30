@@ -2,7 +2,7 @@
 
 **Current state audit (2026-06-29, synced with current `main`)**
 
-This is the canonical **open problems backlog** for the current worktree. It currently contains **182 unresolved items** after removing issues that are already fixed or no longer true. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (308 LOC), `useVisualizationFrames.ts` (87 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
+This is the canonical **open problems backlog** for the current worktree. It currently contains **180 unresolved items** after removing issues that are already fixed or no longer true. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (308 LOC), `useVisualizationFrames.ts` (87 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -11,7 +11,7 @@ Synced documents:
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
-## Open Problems (182 unresolved)
+## Open Problems (180 unresolved)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
@@ -178,130 +178,128 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 66. No separation between "raw pitch estimate" and "tuned to selected string cents".
 67. useSettings and useTuner both manage a4 and lastTuningId with manual sync.
 68. Spectrogram history is a VecDeque of Vec in egui with manual size management duplicated from cents_history.
-69. Canvas components still duplicate resize and rendering plumbing instead of using a shared VizCanvas helper.
-70. pitch-core public API mixes f32 buffers with no lifetime or ownership docs.
-71. Native cpal stream callback directly mutates engine through lock without clear producer/consumer.
-72. No "TunerConfig" value type passed around; a4 and tuning are set via methods scattered.
-73. App.vue imports and uses many things from the single useTuner return value.
-74. No ports/adapters for different input sources (mic, file, test tone generator).
+69. pitch-core public API mixes f32 buffers with no lifetime or ownership docs.
+70. Native cpal stream callback directly mutates engine through lock without clear producer/consumer.
+71. No "TunerConfig" value type passed around; a4 and tuning are set via methods scattered.
+72. App.vue imports and uses many things from the single useTuner return value.
+73. No ports/adapters for different input sources (mic, file, test tone generator).
 
 ### Performance & Efficiency Issues
-75. Every egui update pushes to cents_history and spectrogram_history unconditionally.
-76. Spectrum bars in egui are drawn with per-frame math and allocations inside the paint closure.
-77. Web tick function runs full detection + smoothing + history + volume calc at display refresh rate.
-78. DownsampleForPitch often returns the original buffer (no-op fallback) wasting work.
-79. Histogram drawing in CentsHistory likely redraws full history every frame.
-80. In egui waveform painting, every sample becomes a circle_filled call (very slow for 2048 samples).
-81. Spectrogram uses 80 freq bins hard limit and redraws all history every time.
-82. No idle/sleep when not listening – egui always requests repaint.
-83. SharedAudio in web is created lazily but never suspended properly when tab hidden for long.
-84. YIN difference function allocates inside the hot loop in native impl (from internal code structure).
-85. Multiple BiquadFilter and Gain nodes created on every reference tone play.
-86. No frame dropping or priority for viz when CPU is high.
-87. Buffer of 2048 is always used even for higher strings where smaller window would suffice.
-88. History arrays grow/shift without ring buffer (O(n) cost on shift).
-89. In Spectrum.vue log scale bin selection recomputes every draw.
-90. Waveform.vue allocates new path implicitly every frame with beginPath + many lineTo.
-91. No memoization or caching of target note calculations when tuning doesn't change.
-92. egui spectrum takes first 200 bins regardless of actual useful range.
-93. WASM calls from JS have overhead on every raf tick; no batching.
-94. Preallocated buffers in web are only for timeDomain; spectrum and others allocate.
-95. cpal stream config is queried every device change without caching.
-96. No use of requestIdleCallback for non-critical history updates.
-97. In tests synthetic sine generation uses full loop without SIMD.
-98. Vue reactivity on large arrays (centsHistory) causes unnecessary component updates.
-99. No WebGL or offscreen canvas for heavy spectrogram.
-100. Reference tone lowpass is recreated every play instead of reused node.
-101. Device list refresh is synchronous and can block UI.
-102. Lack of any performance marks or profiling hooks in hot paths.
+74. Every egui update pushes to cents_history and spectrogram_history unconditionally.
+75. Spectrum bars in egui are drawn with per-frame math and allocations inside the paint closure.
+76. Web tick function runs full detection + smoothing + history + volume calc at display refresh rate.
+77. DownsampleForPitch often returns the original buffer (no-op fallback) wasting work.
+78. Histogram drawing in CentsHistory likely redraws full history every frame.
+79. In egui waveform painting, every sample becomes a circle_filled call (very slow for 2048 samples).
+80. Spectrogram uses 80 freq bins hard limit and redraws all history every time.
+81. No idle/sleep when not listening – egui always requests repaint.
+82. SharedAudio in web is created lazily but never suspended properly when tab hidden for long.
+83. YIN difference function allocates inside the hot loop in native impl (from internal code structure).
+84. Multiple BiquadFilter and Gain nodes created on every reference tone play.
+85. No frame dropping or priority for viz when CPU is high.
+86. Buffer of 2048 is always used even for higher strings where smaller window would suffice.
+87. History arrays grow/shift without ring buffer (O(n) cost on shift).
+88. In Spectrum.vue log scale bin selection recomputes every draw.
+89. Waveform.vue allocates new path implicitly every frame with beginPath + many lineTo.
+90. No memoization or caching of target note calculations when tuning doesn't change.
+91. egui spectrum takes first 200 bins regardless of actual useful range.
+92. WASM calls from JS have overhead on every raf tick; no batching.
+93. Preallocated buffers in web are only for timeDomain; spectrum and others allocate.
+94. cpal stream config is queried every device change without caching.
+95. No use of requestIdleCallback for non-critical history updates.
+96. In tests synthetic sine generation uses full loop without SIMD.
+97. Vue reactivity on large arrays (centsHistory) causes unnecessary component updates.
+98. No WebGL or offscreen canvas for heavy spectrogram.
+99. Reference tone lowpass is recreated every play instead of reused node.
+100. Device list refresh is synchronous and can block UI.
+101. Lack of any performance marks or profiling hooks in hot paths.
 
 ### Duplication & Code Smells
-103. Canvas resize + DPR code is nearly identical in Spectrum, Waveform, Spectrogram, CentsHistory.
-104. Oscillator + Gain + Biquad creation code duplicated in playReferenceTone and playTone.
-105. Two almost identical smoothing classes in TS (FrequencySmoother and WasmSmoother wrapper).
-106. Spectrum drawing loop in egui duplicated in concept with web Spectrum.vue (log vs linear).
-107. Note name arrays duplicated (Rust NOTE_NAMES, TS NOTE_NAMES).
-108. Tuning list initialization logic similar in TS and Rust but not identical.
-109. History limit 300 is hardcoded in multiple places (web cents, egui viz).
-110. Error handling for audio start is different in web vs native (string message vs eprintln).
-111. Cleanup logic scattered: stop(), cleanup(), onUnmounted, toggle paths.
-112. "In tune" tolerance and hysteresis logic in web; similar but not same "in tune" color in egui.
-113. Device selection UI code in egui and web TunerControls are parallel implementations.
-114. Random string selection uses Math.random in web, SystemTime nanos in egui.
-115. Lowpass freq 1600 and gains are magic in web but not centralized.
-116. Several places do "if listening then show viz" but the condition is repeated in template and logic.
-117. Buffer slicing in native cpal feed and wasm feed both hardcode 2048.
-118. Frequency formatting functions duplicated (formatFreq in TS, inline in egui).
-119. getNoteDisplay logic in web; similar display in egui labels.
-120. Multiple places clamp cents manually ( /50.0 * w etc).
-121. Power chord detection has native and wasm wrappers that may differ slightly.
-122. Storage keys in egui save() are strings without constants.
-123. Tick function in useTuner does detection, smoothing, rms, power, history, raf – god method.
-124. In pitch-core many _impl and pub fn pairs for wasm vs native (boilerplate).
-125. Vue computed for stringsWithCents, targetNote etc. recompute similar math.
-126. Drawing colors are duplicated magic strings across canvas files (#11151b etc).
-127. onUnmounted and stop() both try to clean some of the same things.
-128. URL parsing and persisted load have similar "try find tuning" code.
-129. Two places define "strings" selection (1-6 keys in web, combo in egui).
-130. Sample rate preference duplicated in web constraints and consts.
-131. Several "if (!x) return" guards that could be early returns or optionals.
-132. Comments like "// for spectrum" and "// for waveform" indicate lack of structure.
+102. Oscillator + Gain + Biquad creation code duplicated in playReferenceTone and playTone.
+103. Two almost identical smoothing classes in TS (FrequencySmoother and WasmSmoother wrapper).
+104. Spectrum drawing loop in egui duplicated in concept with web Spectrum.vue (log vs linear).
+105. Note name arrays duplicated (Rust NOTE_NAMES, TS NOTE_NAMES).
+106. Tuning list initialization logic similar in TS and Rust but not identical.
+107. History limit 300 is hardcoded in multiple places (web cents, egui viz).
+108. Error handling for audio start is different in web vs native (string message vs eprintln).
+109. Cleanup logic scattered: stop(), cleanup(), onUnmounted, toggle paths.
+110. "In tune" tolerance and hysteresis logic in web; similar but not same "in tune" color in egui.
+111. Device selection UI code in egui and web TunerControls are parallel implementations.
+112. Random string selection uses Math.random in web, SystemTime nanos in egui.
+113. Lowpass freq 1600 and gains are magic in web but not centralized.
+114. Several places do "if listening then show viz" but the condition is repeated in template and logic.
+115. Buffer slicing in native cpal feed and wasm feed both hardcode 2048.
+116. Frequency formatting functions duplicated (formatFreq in TS, inline in egui).
+117. getNoteDisplay logic in web; similar display in egui labels.
+118. Multiple places clamp cents manually ( /50.0 * w etc).
+119. Power chord detection has native and wasm wrappers that may differ slightly.
+120. Storage keys in egui save() are strings without constants.
+121. Tick function in useTuner does detection, smoothing, rms, power, history, raf – god method.
+122. In pitch-core many _impl and pub fn pairs for wasm vs native (boilerplate).
+123. Vue computed for stringsWithCents, targetNote etc. recompute similar math.
+124. Drawing colors are duplicated magic strings across canvas files (#11151b etc).
+125. onUnmounted and stop() both try to clean some of the same things.
+126. URL parsing and persisted load have similar "try find tuning" code.
+127. Two places define "strings" selection (1-6 keys in web, combo in egui).
+128. Sample rate preference duplicated in web constraints and consts.
+129. Several "if (!x) return" guards that could be early returns or optionals.
+130. Comments like "// for spectrum" and "// for waveform" indicate lack of structure.
 
 ### Error Handling, Robustness & Edge Cases
-133. Many .unwrap() on locks and device queries will panic on real errors.
-134. WASM load failure leaves the app in broken state with only error message.
-135. No handling for AudioContext being closed by browser (low power mode etc).
-136. Device removal while listening not handled gracefully in native.
-137. No recovery if cpal stream errors after start.
-138. getUserMedia rejection only sets error string; no retry UI.
-139. Frequency 0 or NaN from detector not always sanitized before UI.
-140. Visibility change resume can fail silently.
-141. Osc.stop() in try/catch but no state if it was already stopped.
-142. No handling for sample rate mismatch between requested and actual (web micSettings).
-143. Buffer length < 2048 in feed_audio_samples just returns without detection.
-144. No protection against concurrent start/stop calls.
-145. In egui, if engine lock fails, detection is silently skipped in some places.
-146. Power chord flag can flicker without hysteresis like the in-tune state.
-147. DC offset detection test exists but no runtime DC bias removal.
-148. Microphone constraints don't specify echoCancellation etc in all code paths consistently.
-149. No timeout or watchdog for stuck raf loop or detection.
+131. Many .unwrap() on locks and device queries will panic on real errors.
+132. WASM load failure leaves the app in broken state with only error message.
+133. No handling for AudioContext being closed by browser (low power mode etc).
+134. Device removal while listening not handled gracefully in native.
+135. No recovery if cpal stream errors after start.
+136. getUserMedia rejection only sets error string; no retry UI.
+137. Frequency 0 or NaN from detector not always sanitized before UI.
+138. Visibility change resume can fail silently.
+139. Osc.stop() in try/catch but no state if it was already stopped.
+140. No handling for sample rate mismatch between requested and actual (web micSettings).
+141. Buffer length < 2048 in feed_audio_samples just returns without detection.
+142. No protection against concurrent start/stop calls.
+143. In egui, if engine lock fails, detection is silently skipped in some places.
+144. Power chord flag can flicker without hysteresis like the in-tune state.
+145. DC offset detection test exists but no runtime DC bias removal.
+146. Microphone constraints don't specify echoCancellation etc in all code paths consistently.
+147. No timeout or watchdog for stuck raf loop or detection.
 
 ### Testing, Quality & CI Gaps
-150. Tests only cover basic sine waves; no real guitar recordings or inharmonicity cases.
-151. No test that web WASM and native produce same cents within tolerance for same buffer.
-152. No test for A4 != 440 behavior across the stack.
-153. No fuzzing of extreme frequencies (20Hz, 2000Hz+).
-154. Build doesn't run pitch-core tests in the web WASM target.
-155. No visual regression tests for the gauge or canvas output.
-156. Lacking tests for the new chromatic mode and tolerance settings.
-157. No test for the settings migration or schema (none exists yet).
-158. No property test that find_closest_string + get_cents is consistent with target.
-159. Tests use approx but tolerance is loose (2.0 Hz).
-160. No load test or long-running stability test for the smoother.
-161. Missing test for power chord on real multi-string input.
-162. No test that UI doesn't crash when detector returns None for long time.
-163. Documentation examples in code are missing for core functions.
-164. No contract test between the exported WASM functions and TS callers.
-165. Edge case of empty tuning list is handled poorly in tests and code.
-166. No snapshot of TunerUpdate shape for regression.
-167. Lack of mutation testing or any advanced quality metric.
-168. Manual icons and build steps are error-prone and not tested.
+148. Tests only cover basic sine waves; no real guitar recordings or inharmonicity cases.
+149. No test that web WASM and native produce same cents within tolerance for same buffer.
+150. No test for A4 != 440 behavior across the stack.
+151. No fuzzing of extreme frequencies (20Hz, 2000Hz+).
+152. Build doesn't run pitch-core tests in the web WASM target.
+153. No visual regression tests for the gauge or canvas output.
+154. Lacking tests for the new chromatic mode and tolerance settings.
+155. No test for the settings migration or schema (none exists yet).
+156. No property test that find_closest_string + get_cents is consistent with target.
+157. Tests use approx but tolerance is loose (2.0 Hz).
+158. No load test or long-running stability test for the smoother.
+159. Missing test for power chord on real multi-string input.
+160. No test that UI doesn't crash when detector returns None for long time.
+161. Documentation examples in code are missing for core functions.
+162. No contract test between the exported WASM functions and TS callers.
+163. Edge case of empty tuning list is handled poorly in tests and code.
+164. No snapshot of TunerUpdate shape for regression.
+165. Lack of mutation testing or any advanced quality metric.
+166. Manual icons and build steps are error-prone and not tested.
 
 ### Web / Vue / Frontend Specific
-169. Viz components still duplicate resize and draw boilerplate.
-170. Large number of refs in useTuner cause many reactivity triggers.
-171. No virtual list or optimization for long centsHistory render.
-172. Fretboard component exists but may not be integrated well (from imports).
-173. i18n store is simple but strings for errors and hints are still mixed.
-174. Keyboard shortcuts are global without proper focus management.
-175. Tailwind + custom CSS mix without clear design tokens.
-176. Vite base path for /tuner/ must be maintained manually for Pages.
-177. PWA manifest is present but no offline caching strategy implemented.
-178. No proper handling for mic permission prompt UI states beyond pending flag.
-179. LocalStorage via useSettings has no versioning or corruption handling.
-180. No tree-shaking verification for the large pitch wasm bundle.
-181. Dev server port is pinned for Tauri – brittle for other devs.
-182. No source maps or proper error boundaries in production web build.
+167. Viz components still duplicate draw scheduling and start/stop boilerplate.
+168. Large number of refs in useTuner cause many reactivity triggers.
+169. No virtual list or optimization for long centsHistory render.
+170. Fretboard component exists but may not be integrated well (from imports).
+171. i18n store is simple but strings for errors and hints are still mixed.
+172. Keyboard shortcuts are global without proper focus management.
+173. Tailwind + custom CSS mix without clear design tokens.
+174. Vite base path for /tuner/ must be maintained manually for Pages.
+175. PWA manifest is present but no offline caching strategy implemented.
+176. No proper handling for mic permission prompt UI states beyond pending flag.
+177. LocalStorage via useSettings has no versioning or corruption handling.
+178. No tree-shaking verification for the large pitch wasm bundle.
+179. Dev server port is pinned for Tauri – brittle for other devs.
+180. No source maps or proper error boundaries in production web build.
 
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
@@ -318,10 +316,11 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 - Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
 - Decoupled web visualizers from `AnalyserNode` by routing waveform/spectrum/spectrogram renderers through plain visualization frames.
 - Removed `tuner.*.value` noise from `App.vue` by exposing the shell view-model through Vue ref unwrapping.
+- Centralized canvas DPR/backing-store resize logic in `useHiDpiCanvas` and reused it across waveform, spectrum, spectrogram and cents history.
 These fixes were removed from the numbered backlog above so the list tracks only open work.
 
 ## Summary
-- The canonical audit now contains 182 unresolved problems after removing completed or invalid entries.
+- The canonical audit now contains 180 unresolved problems after removing completed or invalid entries.
 - Many are direct violations of the architecture vision.
 - A number are low-hanging: hardcoded values, duplicate canvas plumbing, missing constants, stale README/docs.
 - Highest impact remains: god objects, missing session/audio-port contracts, duplicated domain/pitch logic, realtime safety, and missing parity tests.
