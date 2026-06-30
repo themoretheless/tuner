@@ -51,6 +51,25 @@ pub const GUITAR_STRINGS_STANDARD: [Note; 6] = [
     },
 ];
 
+fn equal_tempered_note(name: &'static str, octave: i32) -> Note {
+    let index = NOTE_NAMES
+        .iter()
+        .position(|&candidate| candidate == name)
+        .unwrap_or(0);
+    let midi = (octave + 1) * 12 + index as i32;
+    Note {
+        name,
+        octave,
+        frequency: midi_to_frequency(midi as f32, 440.0),
+    }
+}
+
+fn equal_tempered_notes(spec: &[(&'static str, i32)]) -> Vec<Note> {
+    spec.iter()
+        .map(|&(name, octave)| equal_tempered_note(name, octave))
+        .collect()
+}
+
 pub fn get_tunings() -> Vec<Tuning> {
     vec![
         Tuning {
@@ -476,6 +495,143 @@ pub fn get_tunings() -> Vec<Tuning> {
                     frequency: 293.6648,
                 },
             ],
+        },
+        Tuning {
+            name: "Nashville High Strung (EADGBE)",
+            strings: equal_tempered_notes(&[
+                ("E", 3),
+                ("A", 3),
+                ("D", 4),
+                ("G", 4),
+                ("B", 3),
+                ("E", 4),
+            ]),
+        },
+        Tuning {
+            name: "7-string Standard (BEADGBE)",
+            strings: equal_tempered_notes(&[
+                ("B", 1),
+                ("E", 2),
+                ("A", 2),
+                ("D", 3),
+                ("G", 3),
+                ("B", 3),
+                ("E", 4),
+            ]),
+        },
+        Tuning {
+            name: "7-string Drop A (AEADGBE)",
+            strings: equal_tempered_notes(&[
+                ("A", 1),
+                ("E", 2),
+                ("A", 2),
+                ("D", 3),
+                ("G", 3),
+                ("B", 3),
+                ("E", 4),
+            ]),
+        },
+        Tuning {
+            name: "Baritone Standard (BEADF#B)",
+            strings: equal_tempered_notes(&[
+                ("B", 1),
+                ("E", 2),
+                ("A", 2),
+                ("D", 3),
+                ("F#", 3),
+                ("B", 3),
+            ]),
+        },
+        Tuning {
+            name: "Baritone Drop A (AEADF#B)",
+            strings: equal_tempered_notes(&[
+                ("A", 1),
+                ("E", 2),
+                ("A", 2),
+                ("D", 3),
+                ("F#", 3),
+                ("B", 3),
+            ]),
+        },
+        Tuning {
+            name: "12-string Standard (E/e A/a D/d G/g B/B E/E)",
+            strings: equal_tempered_notes(&[
+                ("E", 2),
+                ("E", 3),
+                ("A", 2),
+                ("A", 3),
+                ("D", 3),
+                ("D", 4),
+                ("G", 3),
+                ("G", 4),
+                ("B", 3),
+                ("B", 3),
+                ("E", 4),
+                ("E", 4),
+            ]),
+        },
+        Tuning {
+            name: "Bass Standard (EADG)",
+            strings: equal_tempered_notes(&[("E", 1), ("A", 1), ("D", 2), ("G", 2)]),
+        },
+        Tuning {
+            name: "Bass Drop D (DADG)",
+            strings: equal_tempered_notes(&[("D", 1), ("A", 1), ("D", 2), ("G", 2)]),
+        },
+        Tuning {
+            name: "Bass Half Step Down (D#G#C#F#)",
+            strings: equal_tempered_notes(&[("D#", 1), ("G#", 1), ("C#", 2), ("F#", 2)]),
+        },
+        Tuning {
+            name: "Bass 5-string (BEADG)",
+            strings: equal_tempered_notes(&[("B", 0), ("E", 1), ("A", 1), ("D", 2), ("G", 2)]),
+        },
+        Tuning {
+            name: "Bass 6-string (BEADGC)",
+            strings: equal_tempered_notes(&[
+                ("B", 0),
+                ("E", 1),
+                ("A", 1),
+                ("D", 2),
+                ("G", 2),
+                ("C", 3),
+            ]),
+        },
+        Tuning {
+            name: "Ukulele Standard (GCEA)",
+            strings: equal_tempered_notes(&[("G", 4), ("C", 4), ("E", 4), ("A", 4)]),
+        },
+        Tuning {
+            name: "Ukulele Low G (GCEA)",
+            strings: equal_tempered_notes(&[("G", 3), ("C", 4), ("E", 4), ("A", 4)]),
+        },
+        Tuning {
+            name: "Baritone Ukulele (DGBE)",
+            strings: equal_tempered_notes(&[("D", 3), ("G", 3), ("B", 3), ("E", 4)]),
+        },
+        Tuning {
+            name: "Mandolin Standard (GDAE)",
+            strings: equal_tempered_notes(&[("G", 3), ("D", 4), ("A", 4), ("E", 5)]),
+        },
+        Tuning {
+            name: "Banjo Open G (gDGBD)",
+            strings: equal_tempered_notes(&[("G", 4), ("D", 3), ("G", 3), ("B", 3), ("D", 4)]),
+        },
+        Tuning {
+            name: "Violin Standard (GDAE)",
+            strings: equal_tempered_notes(&[("G", 3), ("D", 4), ("A", 4), ("E", 5)]),
+        },
+        Tuning {
+            name: "Viola Standard (CGDA)",
+            strings: equal_tempered_notes(&[("C", 3), ("G", 3), ("D", 4), ("A", 4)]),
+        },
+        Tuning {
+            name: "Cello Standard (CGDA)",
+            strings: equal_tempered_notes(&[("C", 2), ("G", 2), ("D", 3), ("A", 3)]),
+        },
+        Tuning {
+            name: "Vocal Pitch (chromatic)",
+            strings: vec![],
         },
     ]
 }

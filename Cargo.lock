@@ -4000,6 +4000,7 @@ dependencies = [
  "approx",
  "num-complex",
  "rustfft",
+ "serde_json",
  "wasm-bindgen",
 ]
 
