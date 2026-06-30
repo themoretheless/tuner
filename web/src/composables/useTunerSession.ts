@@ -5,17 +5,20 @@ import { usePitchLoop } from './usePitchLoop';
 import { useSyntheticAudioInput } from './useSyntheticAudioInput';
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { AudioBackend } from '../utils/settingsStorage';
-import { syntheticAudioFixtureFromLocation } from '../utils/syntheticAudio';
+import { syntheticAudioFixtureFromLocation, type SyntheticAudioFixture } from '../utils/syntheticAudio';
 
 interface TunerSessionOptions {
   audioBackend: Ref<AudioBackend>;
   selectedInputDeviceId: Ref<string>;
+  syntheticFixture?: SyntheticAudioFixture | null;
 }
 
 export function useTunerSession(options: TunerSessionOptions) {
   const audio = useAudioInput(options.selectedInputDeviceId);
   const nativeAudio = useNativeAudioInput();
-  const syntheticAudio = useSyntheticAudioInput(syntheticAudioFixtureFromLocation());
+  const syntheticAudio = useSyntheticAudioInput(
+    'syntheticFixture' in options ? options.syntheticFixture ?? null : syntheticAudioFixtureFromLocation(),
+  );
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
 
   const usingSyntheticAudio = computed(() => syntheticAudio.enabled.value);

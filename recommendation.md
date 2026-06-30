@@ -125,7 +125,7 @@ Notation used across docs:
 32. **P0: No fake-mic E2E test.** There is no Playwright flow that feeds synthetic audio and asserts the UI detects the expected note.
     **Recommendation:** Add mocked `getUserMedia` / fake WAV pipeline tests.
 
-33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence, range normalization, Rust/Web domain parity and a headless synthetic audio fixture, but not inharmonicity, invalid imports, composables, Playwright fake mic, session behavior or backend switching.
+33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence, range normalization, Rust/Web domain parity, a headless synthetic audio fixture and the synthetic `useTunerSession` path, but not inharmonicity, invalid imports, Playwright fake mic, full session state behavior or backend switching.
     **Recommendation:** Expand fixtures and split test suites by domain/pitch/settings/profile.
 
 34. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
@@ -335,6 +335,7 @@ Notation used across docs:
 - Added canonical frame types (`DetectionFrame`, `SpectrumFrame`, `WaveformFrame`), made `TunerEngine::process` return `DetectionFrame`, and moved egui level rendering to `frame.level`.
 - Added `useCanvasRenderer` with shared draw scheduling/ResizeObserver and moved canvas visualizers onto it.
 - Extracted `useTunerSession` from `useTuner` for web/native/synthetic audio orchestration.
+- Added a Vitest synthetic-session harness for `useTunerSession`.
 - Split `pitch-core` into `frames`, `signal`, `smoother`, `engine` and `dsp` modules, plus `EngineConfig`.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 

@@ -234,7 +234,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net существенно продвинут: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` проходит fmt/clippy/test/wasm feature check в CI, Rust/Web parity проверяет built-in tunings + note/cents math, а `?fixture=E2` даёт headless synthetic audio path. Полный M0 ещё не закрыт: нужны composable/session tests и Playwright fake-mic E2E.
+M0 safety net существенно продвинут: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` проходит fmt/clippy/test/wasm feature check в CI, Rust/Web parity проверяет built-in tunings + note/cents math, `?fixture=E2` даёт headless synthetic audio path, а `useTunerSession` покрыт synthetic-session harness. Полный M0 ещё не закрыт: нужен Playwright fake-mic E2E.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;

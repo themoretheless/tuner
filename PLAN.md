@@ -42,7 +42,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-06-30:** safety-gate slice is now materially in place: toolchain pins, Vitest core fixtures, `build-web.yml` uses `.nvmrc`, `test-core.yml` gates pitch-core fmt/clippy/tests/wasm feature check, Rust `domain_snapshot` -> Vitest parity covers built-in tunings + note/cents/closest-string math, and `?fixture=E2` synthetic audio drives detection headlessly. Remaining M0 work: composable/session harnesses and Playwright fake-mic UI E2E.
+**Status 2026-07-01:** safety-gate slice is now materially in place: toolchain pins, Vitest core fixtures, `build-web.yml` uses `.nvmrc`, `test-core.yml` gates pitch-core fmt/clippy/tests/wasm feature check, Rust `domain_snapshot` -> Vitest parity covers built-in tunings + note/cents/closest-string math, `?fixture=E2` synthetic audio drives detection headlessly, and `useTunerSession` has a synthetic-session harness. Remaining M0 work: Playwright fake-mic UI E2E.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -119,7 +119,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now (this week):** finish M0/M1 leftovers: composable/session harnesses, Playwright fake-mic UI E2E, and full native/session `DetectionFrame` adoption.
+- **Now (this week):** finish M0/M1 leftovers: Playwright fake-mic UI E2E and full native/session `DetectionFrame` adoption.
 - **Next:** finish M3/M4 leftovers: explicit session state machine, smaller `useTuner` view models, `PitchDetector` trait, spectrum module and wasm module split.
 - **Later:** M5 (single-source domain), M6 (native realtime), M7 (DSP accuracy), M8 (polish).
 
