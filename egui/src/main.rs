@@ -5,19 +5,13 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 #[cfg(not(target_arch = "wasm32"))]
 use cpal::{Stream, StreamConfig};
 
-#[cfg(not(target_arch = "wasm32"))]
-type AudioStream = Stream;
-#[cfg(target_arch = "wasm32")]
-type AudioStream = ();
-
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use pitch_core::{
-    compute_rms_volume, normalize_level,
+    normalize_level,
     get_tunings, Tuning, TunerEngine, TunerUpdate,
 };
 
