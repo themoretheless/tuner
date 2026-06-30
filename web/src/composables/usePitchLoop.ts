@@ -108,8 +108,12 @@ export function usePitchLoop(
 
   function requestPitchDetection(frame: AudioFrame, stats: ReturnType<typeof computeSignalStats>) {
     const worker = ensurePitchWorker();
+    const range = {
+      minFrequency: detectionRange.value.minFrequency,
+      maxFrequency: detectionRange.value.maxFrequency,
+    };
     if (!worker) {
-      applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats, detectionRange.value));
+      applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats, range));
       return;
     }
     if (pitchWorkerPending) return;
@@ -120,9 +124,12 @@ export function usePitchLoop(
     worker.postMessage({
       id: pitchRequestId,
       buffer,
-      range: detectionRange.value,
+      range,
       sampleRate: frame.sampleRate,
-      stats,
+      stats: {
+        rms: stats.rms,
+        maxAbs: stats.maxAbs,
+      },
     }, [buffer]);
   }
 

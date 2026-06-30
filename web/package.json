@@ -8,7 +8,9 @@
     "build": "npm run build:wasm && vue-tsc -b && vite build",
     "build:tauri": "npm run build:wasm && vue-tsc -b && vite build --base ./",
     "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
-    "test": "vitest run",
+    "test": "vitest run src tests",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "test:core:legacy": "node ./scripts/test-core.mjs",
     "preview": "vite preview",
     "tauri:dev": "cd ../desktop && npm run tauri dev",
@@ -19,7 +21,9 @@
     "vue": "^3.5.34"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.11.2",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",

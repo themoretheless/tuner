@@ -32,7 +32,7 @@
 - web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
 - TS/Rust таблицы строев и note math теперь покрыты parity-тестом, но всё ещё дублируются; pitch paths между TS/Rust/Tauri пока расходятся;
 - egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
-- тесты уже доказывают Rust/Web domain parity и headless synthetic fixture, но ещё нет Tauri/egui parity и Playwright fake-mic E2E;
+- тесты уже доказывают Rust/Web domain parity, headless synthetic fixture, synthetic session path и Playwright synthetic UI flow; Tauri/egui parity ещё нет;
 - web PWA пока manifest-first, без полноценного Service Worker/offline cache.
 
 Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
@@ -234,7 +234,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net существенно продвинут: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` проходит fmt/clippy/test/wasm feature check в CI, Rust/Web parity проверяет built-in tunings + note/cents math, `?fixture=E2` даёт headless synthetic audio path, а `useTunerSession` покрыт synthetic-session harness. Полный M0 ещё не закрыт: нужен Playwright fake-mic E2E.
+M0 safety net закрыт для текущего refactor gate: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` проходит fmt/clippy/test/wasm feature check в CI, Rust/Web parity проверяет built-in tunings + note/cents math, `?fixture=E2` даёт headless synthetic audio path, `useTunerSession` покрыт synthetic-session harness, а Playwright проверяет synthetic UI flow без доступа к микрофону.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;

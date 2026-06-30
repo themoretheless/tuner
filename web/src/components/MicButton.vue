@@ -10,6 +10,7 @@ const { t } = useL10n()
 <template>
   <div class="flex flex-col items-center gap-3">
     <button
+      data-testid="mic-toggle"
       class="mic-btn focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#11151b] focus:ring-emerald-500"
       :class="{ listening: isListening }"
       @click="$emit('toggle')"

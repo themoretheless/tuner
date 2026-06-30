@@ -19,7 +19,7 @@ const confidencePercent = computed(() => Math.round(Math.max(0, Math.min(1, prop
 <template>
   <div class="text-center pt-2 pb-1 select-none" aria-live="polite">
     <div v-if="isDetected" class="flex flex-col items-center">
-      <span class="note-letter text-emerald-400">{{ display }}</span>
+      <span data-testid="detected-note" class="note-letter text-emerald-400">{{ display }}</span>
       <div class="text-sm text-slate-400 mt-0.5">{{ t('detected') }}</div>
       <div v-if="confidence != null || isPowerChord" class="mt-1 text-[10px] text-slate-500">
         <span v-if="confidence != null">conf {{ confidencePercent }}%</span>

@@ -122,10 +122,10 @@ Notation used across docs:
 31. **P0: Rust/Web domain equivalence harness is partial.** Built-in tuning, note/cents and closest-string parity now runs from a Rust snapshot inside Vitest, but pitch-path and Tauri/egui equivalence are not covered yet.
     **Recommendation:** Extend shared fixtures to pitch detection, native events and egui/session outputs.
 
-32. **P0: No fake-mic E2E test.** There is no Playwright flow that feeds synthetic audio and asserts the UI detects the expected note.
-    **Recommendation:** Add mocked `getUserMedia` / fake WAV pipeline tests.
+32. **P1: Fake-mic E2E coverage is still shallow.** Playwright now verifies `?fixture=E2` through the UI without microphone access, but permission-denied, device loss and mocked `getUserMedia` flows are not covered yet.
+    **Recommendation:** Extend Playwright with denied-permission, device-unplug and fake WAV pipeline tests.
 
-33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence, range normalization, Rust/Web domain parity, a headless synthetic audio fixture and the synthetic `useTunerSession` path, but not inharmonicity, invalid imports, Playwright fake mic, full session state behavior or backend switching.
+33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence, range normalization, Rust/Web domain parity, a headless synthetic audio fixture and the synthetic `useTunerSession` path, while Playwright covers the synthetic UI flow; still missing inharmonicity, invalid imports, full session state behavior and backend switching.
     **Recommendation:** Expand fixtures and split test suites by domain/pitch/settings/profile.
 
 34. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
@@ -336,6 +336,7 @@ Notation used across docs:
 - Added `useCanvasRenderer` with shared draw scheduling/ResizeObserver and moved canvas visualizers onto it.
 - Extracted `useTunerSession` from `useTuner` for web/native/synthetic audio orchestration.
 - Added a Vitest synthetic-session harness for `useTunerSession`.
+- Added Playwright synthetic UI E2E for `?fixture=E2` and fixed worker payload cloning by sending plain detection range/stats objects.
 - Split `pitch-core` into `frames`, `signal`, `smoother`, `engine` and `dsp` modules, plus `EngineConfig`.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
