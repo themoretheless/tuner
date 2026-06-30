@@ -21,13 +21,29 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
       # pitch-core depends only on rustfft (no cpal/ALSA), so -p keeps the
       # workspace's native-audio members out of the build.
+      - name: Check Rust formatting
+        run: cargo fmt --check -p pitch-core
+
+      - name: Lint pitch-core
+        run: cargo clippy -p pitch-core --all-targets --all-features -- -D warnings
+        env:
+          CARGO_INCREMENTAL: 0
+
       - name: Test pitch-core
         run: cargo test -p pitch-core
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: Check pitch-core wasm feature
+        run: cargo check -p pitch-core --target wasm32-unknown-unknown --features wasm
         env:
           CARGO_INCREMENTAL: 0

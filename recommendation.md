@@ -1,17 +1,29 @@
 # Recommendations & Open Problems Backlog
 
-**Current state audit (2026-06-29, synced with current `main`)**
+**Current state audit (synced 2026-06-30)**
 
-This is the canonical **open problems backlog** for the current worktree. It currently contains **183 unresolved items** after removing issues that are already fixed or no longer true. It is based on direct inspection of the current files, including `web/src/composables/useTuner.ts` (308 LOC), `useVisualizationFrames.ts` (87 LOC), `useTuningState.ts` (487 LOC), `useSettings.ts` (362 LOC), `pitch-core/src/lib.rs` (668 LOC), `egui/src/main.rs` (654 LOC), `desktop/src-tauri/src/native_audio.rs` (290 LOC), the Vue visualizers and the build/test scripts.
+This is the canonical **current open-problems extract** for the worktree. It keeps the stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md). The latest direct code audit lives in [TOP-200-current.md](TOP-200-current.md) and contains **187 grounded findings**.
+
+The condensed list below still contains **183 unresolved `R#` items** after removing issues that were already fixed or no longer true. Do not renumber these lightly: execution docs cite them. When turning the audit into GitHub issues, prefer adding issue links/status instead of changing existing `R#` identifiers.
+
+Audit basis: direct inspection of `web/src/composables/useTuner.ts`, `useVisualizationFrames.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs`, `egui/src/main.rs`, `desktop/src-tauri/src/native_audio.rs`, the Vue visualizers, build scripts, CI workflows, and the newer grounded findings in [TOP-200-current.md](TOP-200-current.md).
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
 - [README.md](README.md) summarizes the same debt for users and contributors.
-- [RECOMMENDATIONS.md](RECOMMENDATIONS.md) turns this debt into ordered refactor steps.
+- [PLAN.md](PLAN.md) is the execution-order source of truth.
+- [RECOMMENDATIONS.md](RECOMMENDATIONS.md) turns the same debt into detailed refactor recommendations.
+- [TOP-500-backlog.md](TOP-500-backlog.md) is the master ranked Top 500 (`M#`).
+- [TOP-200-current.md](TOP-200-current.md) is the latest grounded current audit (`C#`).
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
-## Open Problems (183 unresolved)
+Notation used across docs:
+- `R#` - stable recommendation item from this file.
+- `C#` - detailed current-audit item from [TOP-200-current.md](TOP-200-current.md).
+- `M#` - ranked master Top-500 item from [TOP-500-backlog.md](TOP-500-backlog.md).
+
+## Open Problems (183 stable R-items)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
@@ -113,7 +125,7 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 32. **P0: No fake-mic E2E test.** There is no Playwright flow that feeds synthetic audio and asserts the UI detects the expected note.
     **Recommendation:** Add mocked `getUserMedia` / fake WAV pipeline tests.
 
-33. **P1: Core tests are still narrow.** `web/scripts/test-core.mjs` tests useful synthetic notes, but not noisy guitar-like plucks, inharmonicity, silence runs, invalid imports or backend switching.
+33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence and range normalization, but not inharmonicity, invalid imports, composables, fake mic, session behavior or backend switching.
     **Recommendation:** Expand fixtures and split test suites by domain/pitch/settings/profile.
 
 34. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
@@ -151,7 +163,7 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
 45. **P0: The architecture plan is only partially executed.** Domain extraction and composable splits started, but the key boundaries (ports, frames, session, shared registry, realtime-safe audio) are not in place.
-    **Recommendation:** Treat [ARCHITECTURE.md](ARCHITECTURE.md) as the target spec and [RECOMMENDATIONS.md](RECOMMENDATIONS.md) as the ordered execution plan.
+    **Recommendation:** Treat [ARCHITECTURE.md](ARCHITECTURE.md) as the target spec, [PLAN.md](PLAN.md) as the ordered execution plan, and [RECOMMENDATIONS.md](RECOMMENDATIONS.md) as detailed implementation guidance.
 
 ### More Architecture & Coupling Issues
 
@@ -306,14 +318,16 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
+- For the full requested Top 500, use [TOP-500-backlog.md](TOP-500-backlog.md). For the latest grounded code evidence, use [TOP-200-current.md](TOP-200-current.md).
 - Pick the highest impact items first: 1-5, 12, 14-16, 23-27, 31-32 and 45.
 - Every fix should reduce coupling.
-- Update this file, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
+- Update this file, [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if ranking/status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
 
 **Next audit:** after significant layer work or in 2-3 months.
 
 ## Fixes Applied (Small but Real)
+- Added the first M0 safety-gate slice: `.nvmrc`, `rust-toolchain.toml`, Vitest-based `npm test` fixtures for TS pitch/note utilities, CI gates for `pitch-core` fmt/clippy/tests/wasm feature check, and cleaned `pitch-core` so `clippy -D warnings` passes.
 - Fixed inconsistent sample rate (44100 hardcoded in egui spectrum harmonics vs 48000 in feed). Introduced PREFERRED_SAMPLE_RATE const and updated calculations.
 - Documented the double-toggle mic restart hack in device change (egui) as a known smell.
 - Fixed minor frequency rounding inconsistency in domain.rs default note (82.41 -> 82.4069 to match other sources).
@@ -321,8 +335,10 @@ Priority key: **P0** correctness / realtime safety / blocking architecture, **P1
 These fixes were removed from the numbered backlog above so the list tracks only open work.
 
 ## Summary
-- The canonical audit now contains 183 unresolved problems after removing completed or invalid entries.
-- Many are direct violations of the architecture vision.
+- This file contains 183 stable unresolved `R#` problems used by the plan.
+- The latest grounded audit contains 187 detailed `C#` findings in [TOP-200-current.md](TOP-200-current.md).
+- The requested full Top 500 lives in [TOP-500-backlog.md](TOP-500-backlog.md).
+- Many items are direct violations of the architecture vision.
 - A number are low-hanging: hardcoded values, duplicate canvas plumbing, missing constants, stale README/docs.
 - Highest impact remains: god objects, missing session/audio-port contracts, duplicated domain/pitch logic, realtime safety, and missing parity tests.
 

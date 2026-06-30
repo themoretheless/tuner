@@ -2,7 +2,7 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem source: [recommendation.md](recommendation.md) is the canonical current open-problems backlog. This file is the ordered execution plan for fixing those problems.
+Problem sources: [recommendation.md](recommendation.md) is the stable current open-problems extract (`R#`), [TOP-200-current.md](TOP-200-current.md) is the latest grounded audit (`C#`), and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 (`M#`). This file gives detailed implementation recommendations; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
 ## Executive Summary
 

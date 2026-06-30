@@ -1,6 +1,8 @@
-# Guitar Tuner - Master Top 500 backlog
+# Guitar Tuner - Master Top 500 Backlog
 
-> **Влито в ARCHITECTURE.md.** Высокоприоритетные P1/P2 пункты извлечены и размещены в разделе "Integrated Ideas..." (Highest-Priority Items...). Этот файл оставлен как полный исторический источник. Всегда смотри каноническую версию в ARCHITECTURE.md перед планированием.
+> **Canonical master Top 500.** This is the full ranked table of what is still weak, risky, missing, duplicated, or strategically underbuilt. [recommendation.md](recommendation.md) is the current-problem extract, [TOP-200-current.md](TOP-200-current.md) is the latest grounded code audit, and [PLAN.md](PLAN.md) decides execution order. [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape.
+
+Status note 2026-06-30: M0 safety-gate work partially addressed CI hygiene/testing items such as M20/M22/M24/M26/M33/M35 for `pitch-core` and web core utilities, including Vitest core fixtures. Keep the ranked order until the next full re-score; use [TOP-200-current.md](TOP-200-current.md) status notes for current evidence.
 
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 

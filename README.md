@@ -21,9 +21,12 @@
 
 ## Current Audit / Technical Debt
 
-Канонический список того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md).
+Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md).
+Полный ranked **Top 500**: [TOP-500-backlog.md](TOP-500-backlog.md).
+Свежий grounded-аудит по коду: [TOP-200-current.md](TOP-200-current.md).
 
 Главные проблемы:
+- egui random-string tone сейчас ломается из-за `out.take()` и AudioContext в web может остаться suspended;
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком крупные и связные;
 - нет единого `AudioInputPort`, `TunerSessionController` и общего `DetectionFrame`;
 - web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
@@ -32,7 +35,7 @@
 - тесты не доказывают parity между web/Tauri/egui/pitch-core и нет fake-mic E2E;
 - web PWA пока manifest-first, без полноценного Service Worker/offline cache.
 
-Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
 
 ## Возможности
 
@@ -66,7 +69,10 @@ Tuner/
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
 ├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей и приоритеты
-├── recommendation.md    # Канонический backlog открытых проблем
+├── recommendation.md    # Стабильный current extract открытых проблем (R#)
+├── TOP-200-current.md   # Последний grounded-аудит текущего кода (C#)
+├── TOP-500-backlog.md   # Полный ranked Top 500 (M#)
+├── PLAN.md              # Порядок выполнения и DoD
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
 └── README.md
 ```
@@ -226,7 +232,9 @@ npx tauri icon ./icon.png
 
 ## Текущий архитектурный статус
 
-Исторические ревью и старые списки идей сведены в [ARCHITECTURE.md](ARCHITECTURE.md) и [recommendation.md](recommendation.md). README больше не является местом полного аудита.
+Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
+
+M0 safety net начат: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` теперь проходит fmt/clippy/test/wasm feature check в CI. Полный M0 ещё не закрыт: нужны composable tests, Rust<->TS parity и fake-mic E2E.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
@@ -265,10 +273,10 @@ npx tauri icon ./icon.png
 
 ## Идеи и предложения (влиты в ARCHITECTURE.md)
 
-Все существующие бэклоги (TOP-500-backlog.md + IDEAS-round4-500.md) **влиты** в [ARCHITECTURE.md](ARCHITECTURE.md). 
+Все существующие бэклоги ([TOP-500-backlog.md](TOP-500-backlog.md) + [IDEAS-round4-500.md](IDEAS-round4-500.md)) **синхронизированы** с [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Там теперь единая живая картина:
-- Самые высокоприоритетные P1/P2 пункты из мастер-таблицы (вытащены наверх).
+- Самые высокоприоритетные P1/P2 пункты из master Top 500 (вытащены наверх).
 - Выбранные мощные направления расширения из 500 идей (в первую очередь архитектурно интересные, типа course-aware tuning).
 - Полный структурированный список из 200 конкретных реализуемых предложений по категориям (Performance, DSP, Architecture, Web, egui, Canvas/Viz, Features, Testing и др.).
 
@@ -282,11 +290,11 @@ npx tauri icon ./icon.png
 
 См. раздел **"Integrated Ideas..."** в ARCHITECTURE.md. 
 
-Работаем так: берём 5–8 самых высоких по приоритету (сверху из backlog), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Полные сырые списки остаются в отдельных файлах только для архива.
+Работаем так: берём 5–8 самых высоких по приоритету (сверху из [TOP-500-backlog.md](TOP-500-backlog.md), сверяя с [TOP-200-current.md](TOP-200-current.md)), делаем инкрементально, каждый раз спрашивая "уменьшает или увеличивает coupling?". Отдельные списки остаются активными источниками фактов, а не копипастятся в README.
 
 ## Технический долг и что сделано плохо
 
-Полный backlog того, что ещё сделано неправильно или плохо на текущий момент, находится в [recommendation.md](recommendation.md). Сейчас там 183 нерешённых пункта после удаления уже исправленного и неактуального.
+Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, находится в [TOP-500-backlog.md](TOP-500-backlog.md). Текущий grounded-аудит по коду: [TOP-200-current.md](TOP-200-current.md) (**187** detailed findings). Стабильный extract для ссылок из плана: [recommendation.md](recommendation.md) (**183** `R#` items).
 
 Ключевые проблемы на сегодня (выборка):
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
@@ -298,6 +306,6 @@ npx tauri icon ./icon.png
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Полный список открытых проблем — в [recommendation.md](recommendation.md).
+Полный master Top 500 — в [TOP-500-backlog.md](TOP-500-backlog.md). Текущие `R#` проблемы — в [recommendation.md](recommendation.md).
 
-Когда фиксим — обновляем [recommendation.md](recommendation.md), [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Когда фиксим — обновляем [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) при изменении ранга/статуса, [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).

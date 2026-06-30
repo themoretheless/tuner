@@ -24,7 +24,7 @@ Weaknesses (high coupling, low modularity):
 - Duplication between TS note math and Rust domain.
 - Many items from the original critique are only partially addressed.
 
-See the canonical current open-problems backlog in [recommendation.md](recommendation.md).
+See the canonical current open-problems extract in [recommendation.md](recommendation.md), the grounded code audit in [TOP-200-current.md](TOP-200-current.md), and the full ranked Top 500 in [TOP-500-backlog.md](TOP-500-backlog.md).
 
 The list is kept in sync across docs. High priority problems directly contradict the layered architecture described here.
 
@@ -224,7 +224,7 @@ Any code change should be judged by: "Does this increase or decrease coupling be
 
 ## Integrated Ideas, Suggestions and Improvements (June 2026)
 
-All prior raw idea material from TOP-500-backlog.md and IDEAS-round4-500.md has been reviewed and **влито** (integrated) here. The separate files now serve as historical source-of-truth dumps. This section is the canonical living view.
+All prior raw idea material from [TOP-500-backlog.md](TOP-500-backlog.md) and [IDEAS-round4-500.md](IDEAS-round4-500.md) has been reviewed and **влито** (integrated) here. The separate files remain active reference sources: `TOP-500-backlog.md` is the master ranked Top 500, `TOP-200-current.md` is the latest grounded code audit, and this section is the architecture-aligned living view.
 
 - The numbered 200-item categorized list below captures focused, architecture-aligned, implementation-ready proposals (many overlap with or were inspired by the backlogs).
 - High-value items from the ranked Master Top 500 are extracted and prioritized at the top.
@@ -278,7 +278,7 @@ These are the current highest-scored items pulled directly from the ranked backl
 - Versioned settings schema + migration runner.
 - Decimate input to fixed ~22050 Hz before heavy YIN (already reflected in detailed list).
 
-(Full raw ranked table lives in TOP-500-backlog.md for reference.)
+(Full ranked master table lives in [TOP-500-backlog.md](TOP-500-backlog.md).)
 
 ### Selected High-Impact Expansions from Round-4 500 Ideas
 The Round-4 list focused on many instruments. For the core guitar product we selectively pull the architecturally interesting or high-ROI ones that fit the layered design (mostly P1/P2 from that round):
@@ -520,28 +520,35 @@ The following categorized list (200 items) was created to be implementation-conc
 **Next step after adding these ideas:** pick highest-ROI 5-10 from the "Highest-Priority Items from Master Top-500" + the categorized list above (architecture splits + viz data decoupling + realtime safety for cpal + WASM perf + tests + one guitarist feature), turn into GitHub issues or Phase 8, execute incrementally.
 
 ### Статус интеграции бэклогов
-- TOP-500-backlog.md и IDEAS-round4-500.md — исторические сырые источники.
+- [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`).
+- [TOP-200-current.md](TOP-200-current.md) — latest grounded current audit (`C#`).
+- [recommendation.md](recommendation.md) — stable current-problem extract cited by [PLAN.md](PLAN.md) (`R#`).
 - Высокоприоритетные пункты из них **влиты** наверх этого раздела.
-- 200 детализированных предложений — actionable слой поверх них.
+- 200 детализированных предложений — actionable слой поверх master backlog.
 - Всегда проверяем: уменьшает ли изменение зацепленность между audio / dsp / state / presentation?
 
 Любая новая работа должна отвечать: "Does this make future high-value backlog items easier to implement cleanly?"
 
 ## Current Top Problems (Synchronized)
 
-The detailed open-problems backlog (183 unresolved items after removing completed or invalid entries) lives in [recommendation.md](recommendation.md).
+The synchronized problem map is split by purpose:
+- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
+- [TOP-200-current.md](TOP-200-current.md) - latest grounded code audit, 187 findings (`C#`).
+- [recommendation.md](recommendation.md) - stable current extract, 183 plan-cited items (`R#`).
 
 Key highlights that directly block the target architecture:
-- Missing session/audio-port/frame contracts (items 2, 3, 9)
-- God objects and oversized coupling surfaces (items 1, 4-8)
-- Duplication of domain, pitch and registry logic (items 12, 14-18)
-- Realtime safety problems in egui and Tauri native audio (items 23-26)
-- Weak parity, fake-mic and benchmark coverage (items 31-38)
+- Broken/silent audio paths: egui random-string output stream is dropped; web AudioContext can stay suspended (`C1-C7`).
+- Missing session/audio-port/frame contracts (`R2`, `R3`, `R9`; `C47`, `C53`).
+- God objects and oversized coupling surfaces (`R1`, `R4-R8`; `C28`, `C31`, `C62`).
+- Duplication of domain, pitch, tuning registry and smoothing logic (`R12`, `R14-R18`; `C32-C37`, `C57`, `C60-C61`).
+- Realtime safety problems in egui and Tauri native audio (`C8`, `C10-C17`, `C182-C183`; `M1`, `M2`, `M6`).
+- Weak parity, fake-mic, WASM, test and CI coverage (`C3`, `C24`, `C33`, `C37`, `C45`, `C56`, `C180`, `C184`).
 
-When closing any of these open problems, update recommendation.md + this file + README.md and, if the execution order changes, RECOMMENDATIONS.md.
+When closing any of these open problems, update [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if rank/status changes, this file, [README.md](README.md), and if the execution order changes, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
 
 Recommended reading order:
-1. recommendation.md (the problems)
-2. This file (target layered design)
-3. The 200 actionable proposals earlier in this document
-4. Original raw backlogs (for context)
+1. [TOP-200-current.md](TOP-200-current.md) for exact current code evidence.
+2. [TOP-500-backlog.md](TOP-500-backlog.md) for the full ranked Top 500.
+3. [recommendation.md](recommendation.md) for stable `R#` references.
+4. This file for the target layered design.
+5. [PLAN.md](PLAN.md) for execution order.
