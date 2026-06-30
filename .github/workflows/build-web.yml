@@ -68,6 +68,10 @@ jobs:
         working-directory: web
         run: npx vue-tsc --noEmit
 
+      - name: Run web tests
+        working-directory: web
+        run: npm test
+
       - name: Build Vue
         working-directory: web
         run: npm run build
