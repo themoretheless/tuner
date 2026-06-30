@@ -1,10 +1,10 @@
 import { onUnmounted, ref } from 'vue';
 import type { PitchDetectionRange } from '../utils/pitch';
+import type { DetectionFrame } from '../types/frames';
 
-interface NativeAudioFrame {
-  frequency: number | null;
-  level: number;
-}
+type NativeAudioFrame = DetectionFrame & {
+  frequency?: number | null;
+};
 
 type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 type ListenFn = <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
@@ -12,6 +12,7 @@ type ListenFn = <T>(event: string, handler: (event: { payload: T }) => void) => 
 export function useNativeAudioInput() {
   const available = ref(false);
   const error = ref<string | null>(null);
+  const frame = ref<DetectionFrame | null>(null);
   const frequency = ref<number | null>(null);
   const isListening = ref(false);
   const level = ref(0);
@@ -57,8 +58,10 @@ export function useNativeAudioInput() {
     if (isListening.value) return;
 
     unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
-      frequency.value = event.payload.frequency;
-      level.value = Math.max(0, Math.min(1, Number(event.payload.level) || 0));
+      const nextFrame = normalizeNativeFrame(event.payload);
+      frame.value = nextFrame;
+      frequency.value = nextFrame.freq;
+      level.value = nextFrame.level;
     });
 
     try {
@@ -73,6 +76,7 @@ export function useNativeAudioInput() {
   async function stop() {
     cleanupListener();
     isListening.value = false;
+    frame.value = null;
     frequency.value = null;
     level.value = 0;
     if (invokeFn) {
@@ -111,6 +115,7 @@ export function useNativeAudioInput() {
     available,
     clearError,
     error,
+    frame,
     frequency,
     isListening,
     level,
@@ -119,4 +124,23 @@ export function useNativeAudioInput() {
     start,
     stop,
   };
+}
+
+function normalizeNativeFrame(payload: NativeAudioFrame): DetectionFrame {
+  const freq = payload.freq ?? payload.frequency ?? null;
+  return {
+    freq,
+    confidence: clamp01(Number(payload.confidence) || 0),
+    rms: Math.max(0, Number(payload.rms) || 0),
+    level: clamp01(Number(payload.level) || 0),
+    cents: Number(payload.cents) || 0,
+    note: typeof payload.note === 'string' ? payload.note : '—',
+    target: payload.target ?? null,
+    inTune: Boolean(payload.inTune),
+    isPower: Boolean(payload.isPower),
+  };
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
 }

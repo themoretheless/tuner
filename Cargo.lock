@@ -2474,6 +2474,7 @@ name = "guitar-tuner"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "pitch-core",
  "serde",
  "serde_json",
  "tauri",

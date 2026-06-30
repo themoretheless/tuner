@@ -28,7 +28,7 @@
 Главные проблемы:
 - egui random-string tone сейчас ломается из-за `out.take()` и AudioContext в web может остаться suspended;
 - `useTuningState.ts`, `useSettings.ts` и `egui/src/main.rs` всё ещё слишком крупные и связные; `useTuner.ts` уже тоньше после выноса `useTunerSession`, но ещё не полноценный state-machine shell;
-- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, но ещё не принят всеми platform paths;
+- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, Tauri native уже отдаёт frame-shaped payload, но web session ещё не использует frame как главный readout;
 - web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
 - TS/Rust таблицы строев и note math теперь покрыты parity-тестом, но всё ещё дублируются; pitch paths между TS/Rust/Tauri пока расходятся;
 - egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
@@ -240,7 +240,7 @@ M0 safety net закрыт для текущего refactor gate: web core tests
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
 - `pitch-core` уже разделён на `domain`, `frames`, `signal`, `smoother`, `engine`, `dsp`; осталось разнести `dsp` на YIN/MPM, вынести spectrum и WASM surface;
 - web всё ещё держит собственные TS note/pitch helpers;
-- Tauri native audio пока имеет отдельный detector path;
+- Tauri native audio теперь отдаёт frame-shaped event, но detector path и tuning context ещё не полностью общие;
 - egui пока не в feature parity с web UI.
 
 Нативный egui запуск: `cargo run -p guitar-tuner-egui`.

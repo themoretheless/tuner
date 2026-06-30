@@ -1,5 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream, StreamConfig};
+use pitch_core::{frequency_to_note, normalize_level};
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -20,8 +21,24 @@ pub struct NativeAudioRange {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct NativeAudioFrame {
+    freq: Option<f32>,
     frequency: Option<f32>,
+    confidence: f32,
+    rms: f32,
     level: f32,
+    cents: f32,
+    note: String,
+    target: Option<NativeAudioNote>,
+    in_tune: bool,
+    is_power: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeAudioNote {
+    name: String,
+    octave: i32,
+    frequency: f32,
 }
 
 #[derive(Default)]
@@ -188,15 +205,9 @@ where
 
                 last_emit = Instant::now();
                 let window = &buffer[buffer.len() - PITCH_WINDOW_SIZE..];
-                let level = normalize_level(window);
                 let range = shared_range.lock().map(|range| *range).unwrap_or_default();
-                let frequency = detect_pitch_yin(
-                    window,
-                    sample_rate,
-                    range.min_frequency,
-                    range.max_frequency,
-                );
-                let _ = app.emit(EVENT_NAME, NativeAudioFrame { frequency, level });
+                let frame = make_native_audio_frame(window, sample_rate, range);
+                let _ = app.emit(EVENT_NAME, frame);
             },
             |error| eprintln!("native audio input error: {error}"),
             None,
@@ -236,10 +247,41 @@ fn set_range(state: &State<'_, NativeAudioState>, range: NativeAudioRange) {
     }
 }
 
-fn normalize_level(buffer: &[f32]) -> f32 {
-    let rms =
-        (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt();
-    (rms * 18.0).clamp(0.0, 1.0)
+fn make_native_audio_frame(
+    buffer: &[f32],
+    sample_rate: f32,
+    range: NativeAudioRange,
+) -> NativeAudioFrame {
+    let rms = compute_rms(buffer);
+    let level = normalize_level(rms).clamp(0.0, 1.0);
+    let detection = detect_pitch_yin(
+        buffer,
+        sample_rate,
+        range.min_frequency,
+        range.max_frequency,
+    );
+    let (freq, confidence) = detection.unwrap_or((0.0, 0.0));
+    let freq = if freq > 0.0 { Some(freq) } else { None };
+    let (note, cents) = freq
+        .map(|frequency| frequency_to_note(frequency, 440.0))
+        .unwrap_or_else(|| ("—".to_string(), 0.0));
+
+    NativeAudioFrame {
+        freq,
+        frequency: freq,
+        confidence,
+        rms,
+        level,
+        cents,
+        note,
+        target: None,
+        in_tune: freq.is_some() && cents.abs() <= 5.0,
+        is_power: false,
+    }
+}
+
+fn compute_rms(buffer: &[f32]) -> f32 {
+    (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt()
 }
 
 fn detect_pitch_yin(
@@ -247,7 +289,7 @@ fn detect_pitch_yin(
     sample_rate: f32,
     min_frequency: f32,
     max_frequency: f32,
-) -> Option<f32> {
+) -> Option<(f32, f32)> {
     let size = buffer.len();
     let half = size / 2;
     if half < 64 {
@@ -302,8 +344,8 @@ fn detect_pitch_yin(
         }
     }
 
-    let tau = match estimate {
-        Some(tau) => tau,
+    let (tau, confidence) = match estimate {
+        Some(tau) => (tau, (1.0 - yin[tau]).clamp(0.0, 1.0)),
         None => {
             let mut min_value = f32::INFINITY;
             let mut best = min_tau;
@@ -316,7 +358,7 @@ fn detect_pitch_yin(
             if min_value > 0.35 {
                 return None;
             }
-            best
+            (best, (1.0 - min_value).clamp(0.0, 1.0))
         }
     };
 
@@ -334,7 +376,7 @@ fn detect_pitch_yin(
     let frequency = sample_rate / better_tau;
 
     if frequency >= min_frequency && frequency <= max_frequency {
-        Some(frequency)
+        Some((frequency, confidence))
     } else {
         None
     }

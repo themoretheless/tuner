@@ -51,7 +51,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-06-30:** first contract slice done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`. Remaining M1 work: make Tauri native/web session consume the same full frame rather than partial native events/frequency refs.
+**Status 2026-07-01:** first contract slices done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`; Tauri native now emits a frame-shaped event (`freq/confidence/rms/level/cents/note/...`) and the web native adapter stores it as `DetectionFrame`. Remaining M1 work: make the web session/useTuner path consume the full frame as the primary readout, pass native tuning/target context, and remove legacy frequency-only plumbing.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.

@@ -50,8 +50,8 @@ Notation used across docs:
 8. **P1: `App.vue` is an overloaded feature shell.** It imports almost every panel and wires tuner, settings, practice, metronome, custom tunings, temperaments and display controls on one screen.
    **Recommendation:** Split into feature screens/slices: tuner, library, practice, settings.
 
-9. **P1: `DetectionFrame` contract is started but not universal.** `pitch-core` now emits `DetectionFrame` and TS has matching frame types, but Tauri native still emits a partial `{ frequency, level }` event and web tuning/session still resolves some readout state outside the frame.
-    **Recommendation:** Finish canonical frame adoption across web session, Tauri native and egui.
+9. **P1: `DetectionFrame` contract is started but not universal.** `pitch-core` now emits `DetectionFrame`, TS has matching frame types, and Tauri native emits a frame-shaped event, but web tuning/session still resolves readout state from frequency refs and native does not yet receive target/tuning context.
+    **Recommendation:** Finish canonical frame adoption across web session, Tauri native and egui, then remove legacy frequency-only plumbing.
 
 10. **P1: Engine internals leak into UI shape.** The UI still receives raw frequencies, selected strings, backend flags and many refs as one broad API.
     **Recommendation:** Return small view-model slices and commands for each feature.
@@ -337,6 +337,7 @@ Notation used across docs:
 - Extracted `useTunerSession` from `useTuner` for web/native/synthetic audio orchestration.
 - Added a Vitest synthetic-session harness for `useTunerSession`.
 - Added Playwright synthetic UI E2E for `?fixture=E2` and fixed worker payload cloning by sending plain detection range/stats objects.
+- Made Tauri native audio emit a frame-shaped payload and made the web native adapter normalize it into `DetectionFrame`.
 - Split `pitch-core` into `frames`, `signal`, `smoother`, `engine` and `dsp` modules, plus `EngineConfig`.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
