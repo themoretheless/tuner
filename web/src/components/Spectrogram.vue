@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
-import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
+import { useCanvasRenderer } from '../composables/useCanvasRenderer'
+import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 
 const props = defineProps<{
@@ -8,7 +8,13 @@ const props = defineProps<{
   isListening: boolean
 }>()
 
-const { canvas, clear, resize, setup } = useHiDpiCanvas(120, 400)
+const { canvas } = useCanvasRenderer({
+  cssHeight: 120,
+  fallbackWidth: 400,
+  source: () => [props.isListening, props.frame?.sequence],
+  draw: drawFrame,
+})
+void canvas
 
 const history: Uint8Array[] = []
 const MAX_HISTORY = 150 // time steps
@@ -16,8 +22,9 @@ let historyCount = 0
 let lastSequence = 0
 let writeIndex = 0
 
-function clearCanvas() {
-  clear('#11151b')
+function clearCanvas(frame: CanvasFrame) {
+  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
 function resetHistory() {
@@ -49,11 +56,10 @@ function getHistoryFrame(index: number) {
   return history[(start + index) % MAX_HISTORY]
 }
 
-function drawFrame() {
-  const frame = resize()
-  if (!frame) return
+function drawFrame(frame: CanvasFrame) {
   if (!props.isListening || !props.frame) {
-    clearCanvas()
+    resetHistory()
+    clearCanvas(frame)
     return
   }
 
@@ -95,33 +101,6 @@ function drawFrame() {
     }
   }
 }
-
-function startDraw() {
-  drawFrame()
-}
-
-function stopDraw() {
-  resetHistory()
-  clearCanvas()
-}
-
-function handleResize() {
-  drawFrame()
-}
-
-onMounted(() => {
-  if (!canvas.value) return
-  setup()
-  window.addEventListener('resize', handleResize)
-  watch(() => [props.isListening, props.frame?.sequence], () => {
-    if (props.isListening && props.frame) startDraw()
-    else stopDraw()
-  }, { immediate: true })
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-})
 </script>
 
 <template>

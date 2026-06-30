@@ -1,23 +1,28 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
-import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
+import { useCanvasRenderer } from '../composables/useCanvasRenderer'
+import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 
 const props = defineProps<{
   history: number[]
   isListening: boolean
 }>()
 
-const { canvas, resize, setup } = useHiDpiCanvas(60, 400)
-let raf = 0
+const { canvas } = useCanvasRenderer({
+  cssHeight: 60,
+  fallbackWidth: 400,
+  source: () => [props.isListening, props.history.length, props.history[props.history.length - 1]],
+  draw,
+  deep: true,
+})
+void canvas
 
-function draw() {
-  const frame = resize()
-  if (!frame) return
-
+function draw(frame: CanvasFrame) {
   const { ctx, w, h } = frame
 
   ctx.fillStyle = '#11151b'
   ctx.fillRect(0, 0, w, h)
+
+  if (!props.isListening) return
 
   const history = props.history
   if (history.length < 2) return
@@ -58,32 +63,7 @@ function draw() {
   ctx.moveTo(0, h / 2 + (50/50)*(h/2))
   ctx.lineTo(w, h / 2 + (50/50)*(h/2))
   ctx.stroke()
-
-  raf = requestAnimationFrame(draw)
 }
-
-function handleResize() {
-  if (raf) cancelAnimationFrame(raf)
-  if (props.isListening) draw()
-  else resize()
-}
-
-onMounted(() => {
-  if (!canvas.value) return
-  setup()
-  window.addEventListener('resize', handleResize)
-  watch(() => props.history, () => {
-    if (props.isListening) {
-      if (raf) cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(draw)
-    }
-  }, { deep: true })
-})
-
-onUnmounted(() => {
-  cancelAnimationFrame(raf)
-  window.removeEventListener('resize', handleResize)
-})
 </script>
 
 <template>

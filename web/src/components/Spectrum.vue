@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
-import { useHiDpiCanvas } from '../composables/useHiDpiCanvas'
+import { useCanvasRenderer } from '../composables/useCanvasRenderer'
+import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 
 const props = defineProps<{
@@ -9,18 +9,22 @@ const props = defineProps<{
   currentFreq?: number | null
 }>()
 
-const { canvas, clear, resize, setup } = useHiDpiCanvas(130, 400)
+const { canvas } = useCanvasRenderer({
+  cssHeight: 130,
+  fallbackWidth: 400,
+  source: () => [props.isListening, props.frame?.sequence, props.currentFreq],
+  draw: drawFrame,
+})
+void canvas
 
-function clearCanvas() {
-  clear('#11151b')
+function clearCanvas(frame: CanvasFrame) {
+  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
-function drawFrame() {
-  // Keep size in sync (handles container width changes from sidebar etc.)
-  const frame = resize()
-  if (!frame) return
+function drawFrame(frame: CanvasFrame) {
   if (!props.isListening || !props.frame) {
-    clearCanvas()
+    clearCanvas(frame)
     return
   }
 
@@ -100,32 +104,6 @@ function drawFrame() {
     }
   }
 }
-
-function startDraw() {
-  drawFrame()
-}
-
-function stopDraw() {
-  clearCanvas()
-}
-
-function handleResize() {
-  drawFrame()
-}
-
-onMounted(() => {
-  if (!canvas.value) return
-  setup()
-  window.addEventListener('resize', handleResize)
-  watch(() => [props.isListening, props.frame?.sequence, props.currentFreq], () => {
-    if (props.isListening && props.frame) startDraw()
-    else stopDraw()
-  }, { immediate: true })
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
-})
 </script>
 
 <template>
