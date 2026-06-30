@@ -27,12 +27,12 @@
 
 Главные проблемы:
 - egui random-string tone сейчас ломается из-за `out.take()` и AudioContext в web может остаться suspended;
-- `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком крупные и связные;
-- нет единого `AudioInputPort`, `TunerSessionController` и общего `DetectionFrame`;
+- `useTuningState.ts`, `useSettings.ts` и `egui/src/main.rs` всё ещё слишком крупные и связные; `useTuner.ts` уже тоньше после выноса `useTunerSession`, но ещё не полноценный state-machine shell;
+- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, но ещё не принят всеми platform paths;
 - web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
-- TS/Rust таблицы строев, note math и pitch paths могут расходиться;
+- TS/Rust таблицы строев и note math теперь покрыты parity-тестом, но всё ещё дублируются; pitch paths между TS/Rust/Tauri пока расходятся;
 - egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
-- тесты не доказывают parity между web/Tauri/egui/pitch-core и нет fake-mic E2E;
+- тесты уже доказывают Rust/Web domain parity и headless synthetic fixture, но ещё нет Tauri/egui parity и Playwright fake-mic E2E;
 - web PWA пока manifest-first, без полноценного Service Worker/offline cache.
 
 Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
@@ -234,11 +234,11 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net начат: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` теперь проходит fmt/clippy/test/wasm feature check в CI. Полный M0 ещё не закрыт: нужны composable tests, Rust<->TS parity и fake-mic E2E.
+M0 safety net существенно продвинут: web core tests переведены на Vitest и расширены, Node/Rust toolchains закреплены, `pitch-core` проходит fmt/clippy/test/wasm feature check в CI, Rust/Web parity проверяет built-in tunings + note/cents math, а `?fixture=E2` даёт headless synthetic audio path. Полный M0 ещё не закрыт: нужны composable/session tests и Playwright fake-mic E2E.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
-- `pitch-core/src/lib.rs` всё ещё содержит engine + DSP + WASM surface;
+- `pitch-core` уже разделён на `domain`, `frames`, `signal`, `smoother`, `engine`, `dsp`; осталось разнести `dsp` на YIN/MPM, вынести spectrum и WASM surface;
 - web всё ещё держит собственные TS note/pitch helpers;
 - Tauri native audio пока имеет отдельный detector path;
 - egui пока не в feature parity с web UI.
@@ -298,11 +298,11 @@ M0 safety net начат: web core tests переведены на Vitest и р�
 
 Ключевые проблемы на сегодня (выборка):
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
-- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, `DetectionFrame` / `TunerFrame`.
-- Дублирование таблиц строев, pitch paths и математики нот между TS, Rust core и Tauri native.
+- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, полного `TunerFrame` на всех платформах.
+- Дублирование таблиц строев и математики нот теперь guarded parity-тестом, но ещё не заменено single-source/codegen; pitch paths между TS, Rust core и Tauri native всё ещё расходятся.
 - Mutex'ы, аллокации и обработка DSP в realtime callback path.
-- Слабые тесты, нет equivalence harness между путями.
-- Много hardcoded значений и дублированного кода отрисовки канвасов.
+- Слабые тесты вокруг session/backend switching/Tauri/egui; Rust/Web domain harness уже есть.
+- Много hardcoded значений; canvas renderer lifecycle уже централизован, но ещё требует visual QA.
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
 

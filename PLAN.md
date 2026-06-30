@@ -42,7 +42,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-06-30:** first safety-gate slice done: toolchain pins, Vitest core fixtures, `build-web.yml` uses `.nvmrc`, and `test-core.yml` gates pitch-core fmt/clippy/tests/wasm feature check. Remaining M0 work: composable harness, Rust<->TS parity dump/deep-equal, fake-mic/synthetic UI injection.
+**Status 2026-06-30:** safety-gate slice is now materially in place: toolchain pins, Vitest core fixtures, `build-web.yml` uses `.nvmrc`, `test-core.yml` gates pitch-core fmt/clippy/tests/wasm feature check, Rust `domain_snapshot` -> Vitest parity covers built-in tunings + note/cents/closest-string math, and `?fixture=E2` synthetic audio drives detection headlessly. Remaining M0 work: composable/session harnesses and Playwright fake-mic UI E2E.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -50,6 +50,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Define `DetectionFrame { freq, confidence, cents, note, target, in_tune, is_power, level }`, `SpectrumFrame`, `WaveformFrame` in pitch-core (small `frames`/types module).
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
+
+**Status 2026-06-30:** first contract slice done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`. Remaining M1 work: make Tauri native/web session consume the same full frame rather than partial native events/frequency refs.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -59,12 +61,16 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Extend the same frame contracts toward `CentsHistory`/future native-session outputs where useful.
 **Verify / DoD:** `grep AnalyserNode web/src/components` is empty; `vue-tsc` green; visual parity by inspection.
 
+**Status 2026-06-30:** shared `useCanvasRenderer` now owns draw scheduling and `ResizeObserver`; waveform/spectrum/spectrogram/legacy cents canvas use it. Remaining M2 work: visual inspection in browser and extending the same frame flow to native/session outputs where useful.
+
 ## M3 - Split the web god-composable **[BP]**
 **Goal:** `useTuner` becomes a thin orchestrator. Phase 3 + Phase 5.
 **Targets:** `R1`, `R6-R8`, `R10-R11`, `R49`, `R62`, `R67`, `R73`, `R170`; grounded audit `C18`, `C21-C22`, `C25-C26`, `C31`.
 - Extract `useAudioInput` (mic/devices/AudioContext/rAF/mic-settings), `useReferenceTone` (output ctx + reference/random tone, decoupled via callbacks), `useTunerSession` (wraps engine, exposes the `DetectionFrame`).
 - `useTuner` composes them; settings stays persistence-only.
 **Verify / DoD:** `useTuner` < ~150 LOC; each new composable single-responsibility; `vue-tsc` green; behavior preserved.
+
+**Status 2026-06-30:** first split done: `useTunerSession` owns web/native/synthetic audio backend orchestration, pitch loop, detection range and session error/volume/frequency refs. Remaining M3 work: explicit session state machine, smaller return view-model slices, and more tests around backend switching.
 
 ## M4 - Finish pitch-core layering **[BP]**
 **Goal:** small focused modules + a detector trait. Phase 1.
@@ -73,6 +79,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `trait PitchDetector { fn detect(&[f32], sr) -> Option<Detection>; }`; YIN/MPM implement it.
 - `EngineConfig` value type for the scattered magic numbers (2048, 0.12, gates).
 **Verify / DoD:** `cargo test` green; files < ~200 LOC; `clippy -D warnings` clean.
+
+**Status 2026-06-30:** core layering slice done: `frames.rs`, `signal.rs`, `smoother.rs`, `engine.rs`, and `dsp.rs` extracted; `EngineConfig` added; `lib.rs` is now mostly re-exports plus tests. Remaining M4 work: split `dsp.rs` further into `dsp/yin.rs` + `dsp/mpm.rs`, extract spectrum analyzer module, add `PitchDetector` trait, and move wasm bindings into `wasm.rs`.
 
 ## M5 - Unify the domain (kill duplication)
 **Goal:** pitch-core is the only source of tunings + note math. Phase 1/2.
@@ -111,9 +119,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now (this week):** M0 (safety net) + M1 (frame contracts). Nothing else is safe without these.
-- **Next:** M2 -> M3 (decouple presentation, split god-composable) + M4 (core layering). This is the bulk of the loose-coupling win.
-- **Later:** M5 (domain unify), M6 (native realtime), M7 (DSP accuracy), M8 (polish).
+- **Now (this week):** finish M0/M1 leftovers: composable/session harnesses, Playwright fake-mic UI E2E, and full native/session `DetectionFrame` adoption.
+- **Next:** finish M3/M4 leftovers: explicit session state machine, smaller `useTuner` view models, `PitchDetector` trait, spectrum module and wasm module split.
+- **Later:** M5 (single-source domain), M6 (native realtime), M7 (DSP accuracy), M8 (polish).
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

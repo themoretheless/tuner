@@ -163,6 +163,8 @@ Platform shells (very thin):
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
 - Extract magic numbers into config structs.
 
+**Status 2026-06-30:** started. `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame` and TS frame types exist; `TunerEngine::process` emits `DetectionFrame`. Full native/session adoption is still pending.
+
 ### Phase 1 — Strengthen the Core (highest value)
 - Split `pitch-core`:
   - `src/domain.rs`
@@ -171,6 +173,8 @@ Platform shells (very thin):
   - `src/lib.rs` only re-exports + wasm bindings
 - Introduce `trait PitchDetector`.
 - Improve WASM exports to a higher-level API.
+
+**Status 2026-06-30:** partially done. `domain`, `frames`, `signal`, `smoother`, `engine` and `dsp` modules exist, and `EngineConfig` is introduced. Remaining: split YIN/MPM, spectrum and wasm modules, then add `PitchDetector`.
 
 ### Phase 2 — Audio Abstraction Layer
 - Define `AudioInput` trait + implementations.
@@ -184,6 +188,8 @@ Platform shells (very thin):
   - `useReferenceTone.ts`
   - `useVizData.ts`
 - Keep visualizers on data props and move the remaining session/native outputs to typed frames.
+
+**Status 2026-06-30:** started. `useTunerSession` owns web/native/synthetic audio orchestration and pitch loop wiring; `useTuner` is thinner but still returns a broad view model and lacks an explicit session state machine.
 
 ### Phase 4 — Unify egui + Reduce Platform Differences
 - Make egui use the same `TunerSession` / traits.
@@ -342,12 +348,12 @@ The following categorized list (200 items) was created to be implementation-conc
 40. Optional pYIN-lite (probabilistic) or Viterbi smoothing across frames when latency budget allows.
 
 ### Architecture, Layers & Coupling (41-60)
-41. Finish strict layering: domain (no_std), dsp (pure), engine, audio-traits, types.
+41. Finish strict layering: domain (no_std), split dsp modules, spectrum module, engine, audio-traits, types.
 42. Introduce `trait PitchDetector { fn detect(&[f32], sr: f32) -> Option<Detection>; }`.
 43. Extract `AudioInput` trait + WebAudioInput / CpalAudioInput / MockAudioInput.
 44. Extract `ToneGenerator` trait; unify reference + ear-training tone behind it.
-45. Keep all visualizers on plain data (DetectionFrame, SpectrumFrame, WaveformFrame) and extend the same contract to native/session outputs.
-46. Split useTuner.ts into: useAudioInput, useTunerSession, useReferenceTone, useVizData.
+45. Keep all visualizers on plain data (DetectionFrame, SpectrumFrame, WaveformFrame) and finish the same contract for native/session outputs.
+46. Continue splitting useTuner.ts into smaller feature view models; useAudioInput/useTunerSession/useReferenceTone are started.
 47. Move note/frequency math duplication: make TS a thin client of WASM domain exports or generate from Rust.
 48. Define single `DetectionFrame` struct in pitch-core and use identically in Vue and egui.
 49. Remove direct state mutation from viz components; all data flows down as props.

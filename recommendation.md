@@ -35,8 +35,8 @@ Notation used across docs:
 3. **P0: No clean audio port abstraction.** Web audio, Tauri native audio and egui cpal paths expose different concepts and are selected with ad hoc conditionals.
    **Recommendation:** Introduce `AudioInputPort` and `ToneGenerator` ports, with web, Tauri, egui and mock adapters.
 
-4. **P0: `pitch-core/src/lib.rs` remains monolithic.** Domain was partially extracted, but engine, YIN, MPM, smoothing, spectrum, power-chord detection, WASM exports and tests still share one large file.
-   **Recommendation:** Split into `domain`, `dsp/yin`, `dsp/mpm`, `engine`, `spectrum`, `smoothing`, `wasm`.
+4. **P0: `pitch-core` layering is only partially complete.** `lib.rs` is no longer the monolith: `frames`, `signal`, `smoother`, `engine` and `dsp` are split out. The remaining debt is that YIN/MPM still share one `dsp.rs`, spectrum analysis lives in `engine.rs`, WASM exports live with DSP and tests still sit in root.
+   **Recommendation:** Finish the split into `dsp/yin`, `dsp/mpm`, `spectrum`, `wasm` and add a `PitchDetector` trait.
 
 5. **P0: `egui/src/main.rs` is still a god file.** `App::update` handles repaint policy, input, painting, history mutation, device UI, stream toggles and reference tone wiring.
    **Recommendation:** Extract widgets/painters/managers, then make egui consume the same session/data contracts as web.
@@ -50,8 +50,8 @@ Notation used across docs:
 8. **P1: `App.vue` is an overloaded feature shell.** It imports almost every panel and wires tuner, settings, practice, metronome, custom tunings, temperaments and display controls on one screen.
    **Recommendation:** Split into feature screens/slices: tuner, library, practice, settings.
 
-9. **P1: No single `DetectionFrame` / `TunerFrame` contract.** Web, Tauri native and egui all move different partial data shapes around.
-    **Recommendation:** Define canonical frame types and use them across all consumers.
+9. **P1: `DetectionFrame` contract is started but not universal.** `pitch-core` now emits `DetectionFrame` and TS has matching frame types, but Tauri native still emits a partial `{ frequency, level }` event and web tuning/session still resolves some readout state outside the frame.
+    **Recommendation:** Finish canonical frame adoption across web session, Tauri native and egui.
 
 10. **P1: Engine internals leak into UI shape.** The UI still receives raw frequencies, selected strings, backend flags and many refs as one broad API.
     **Recommendation:** Return small view-model slices and commands for each feature.
@@ -66,8 +66,8 @@ Notation used across docs:
     **Recommendation:** Split detector/analyzer/smoother and let session request only needed outputs.
 
 ### Duplication & Drift
-14. **P0: Tuning and instrument truth is duplicated.** `web/src/utils/notes.ts` has a rich registry with ids, instruments, temperaments and custom features; `pitch-core/src/domain.rs` has a smaller independent list.
-    **Recommendation:** Use one registry source or add parity/codegen tests that fail on drift.
+14. **P0: Tuning and instrument truth is still duplicated, but drift is now guarded.** `web/src/utils/notes.ts` and `pitch-core/src/domain.rs` now have parity coverage for built-in tunings, but they are still two hand-maintained sources.
+    **Recommendation:** Move to one registry source/codegen so the parity test passes by construction.
 
 15. **P0: Note math and cents logic exist in both TS and Rust.** `frequency_to_note`, `get_cents`, closest string selection and display formatting can diverge silently.
     **Recommendation:** Add numeric equivalence tests and converge on one source of truth.
@@ -109,8 +109,8 @@ Notation used across docs:
 27. **P1: Web pitch loop still depends on `requestAnimationFrame`.** Detection cadence is throttled to ~33ms, but the loop itself is a paint loop and copies buffers to a worker.
     **Recommendation:** Use AudioWorklet or a dedicated audio worker-style pipeline independent of paint.
 
-28. **P1: Canvas resize happens inside every draw.** `resizeCanvas()` is called on each frame in the visualizers.
-    **Recommendation:** Use `ResizeObserver` and resize only when dimensions/DPR change.
+28. **P1: Canvas renderer lifecycle is improved but still not fully optimized.** Web visualizers now share `useCanvasRenderer` with `ResizeObserver` and coalesced RAF scheduling, but the HiDPI validation still runs on scheduled draws.
+    **Recommendation:** Cache dimensions/DPR and skip backing-store checks unless `ResizeObserver` or DPR changes.
 
 29. **P2: egui requests repaint unconditionally.** `ctx.request_repaint()` runs every update even when idle.
     **Recommendation:** Repaint on audio frames, animations or user input; sleep when idle.
@@ -119,13 +119,13 @@ Notation used across docs:
     **Recommendation:** Add typed sample-format handling or reuse the Tauri/native audio service code.
 
 ### Testing & Verification
-31. **P0: No Rust/TS equivalence harness.** The project can drift between `notes.ts`, `pitch.ts`, `domain.rs`, `pitch-core`, Tauri native and egui without CI catching it.
-    **Recommendation:** Add shared fixtures and assert frequency/note/cents parity.
+31. **P0: Rust/Web domain equivalence harness is partial.** Built-in tuning, note/cents and closest-string parity now runs from a Rust snapshot inside Vitest, but pitch-path and Tauri/egui equivalence are not covered yet.
+    **Recommendation:** Extend shared fixtures to pitch detection, native events and egui/session outputs.
 
 32. **P0: No fake-mic E2E test.** There is no Playwright flow that feeds synthetic audio and asserts the UI detects the expected note.
     **Recommendation:** Add mocked `getUserMedia` / fake WAV pipeline tests.
 
-33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence and range normalization, but not inharmonicity, invalid imports, composables, fake mic, session behavior or backend switching.
+33. **P1: Core tests are still narrow.** Vitest now covers useful synthetic notes, noisy sine, silence, range normalization, Rust/Web domain parity and a headless synthetic audio fixture, but not inharmonicity, invalid imports, composables, Playwright fake mic, session behavior or backend switching.
     **Recommendation:** Expand fixtures and split test suites by domain/pitch/settings/profile.
 
 34. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
@@ -331,7 +331,12 @@ Notation used across docs:
 - Decoupled web visualizers from `AnalyserNode` by routing waveform/spectrum/spectrogram renderers through plain visualization frames.
 - Removed `tuner.*.value` noise from `App.vue` by exposing the shell view-model through Vue ref unwrapping.
 - Centralized canvas DPR/backing-store resize logic in `useHiDpiCanvas` and reused it across waveform, spectrum, spectrogram and cents history.
-These fixes were removed from the numbered backlog above so the list tracks only open work.
+- Added Rust/Web domain parity through `pitch-core/examples/domain_snapshot.rs` and Vitest, aligned built-in tuning registries, and added headless synthetic audio fixture support (`?fixture=E2`).
+- Added canonical frame types (`DetectionFrame`, `SpectrumFrame`, `WaveformFrame`), made `TunerEngine::process` return `DetectionFrame`, and moved egui level rendering to `frame.level`.
+- Added `useCanvasRenderer` with shared draw scheduling/ResizeObserver and moved canvas visualizers onto it.
+- Extracted `useTunerSession` from `useTuner` for web/native/synthetic audio orchestration.
+- Split `pitch-core` into `frames`, `signal`, `smoother`, `engine` and `dsp` modules, plus `EngineConfig`.
+Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
 - This file contains 183 stable unresolved `R#` problems used by the plan.
@@ -339,6 +344,6 @@ These fixes were removed from the numbered backlog above so the list tracks only
 - The requested full Top 500 lives in [TOP-500-backlog.md](TOP-500-backlog.md).
 - Many items are direct violations of the architecture vision.
 - A number are low-hanging: hardcoded values, duplicate canvas plumbing, missing constants, stale README/docs.
-- Highest impact remains: god objects, missing session/audio-port contracts, duplicated domain/pitch logic, realtime safety, and missing parity tests.
+- Highest impact remains: explicit session/audio-port contracts, single-source domain/codegen, Tauri/egui parity, realtime safety, DSP hot-path allocation, and UI/release hardening.
 
 Update this file when fixing. Link from issues.
