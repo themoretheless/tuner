@@ -1,29 +1,22 @@
-import { computed, ref, watch } from 'vue';
-import { useAudioInput } from './useAudioInput';
+import { computed, watch } from 'vue';
 import { useCentsHistory } from './useCentsHistory';
 import { useEarTraining } from './useEarTraining';
 import { useMetronome } from './useMetronome';
-import { useNativeAudioInput } from './useNativeAudioInput';
-import { usePitchLoop } from './usePitchLoop';
 import { useReferenceTone } from './useReferenceTone';
 import { useSettings } from './useSettings';
+import { useTunerSession } from './useTunerSession';
 import { useTuningState } from './useTuningState';
 import { useVisualizationFrames } from './useVisualizationFrames';
-import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
   const settings = useSettings();
-  const audio = useAudioInput(settings.selectedInputDeviceId);
-  const nativeAudio = useNativeAudioInput();
-  const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
-  const pitch = usePitchLoop(audio.readFrame, detectionRange);
-  const usingNativeAudio = computed(() => settings.audioBackend.value === 'native' && nativeAudio.available.value);
-  const detectedFrequencySource = computed(() => (
-    usingNativeAudio.value ? nativeAudio.frequency.value : pitch.smoothedFrequency.value
-  ));
-  const tuning = useTuningState(detectedFrequencySource, {
-    onResetDetection: pitch.reset,
+  const session = useTunerSession({
+    audioBackend: settings.audioBackend,
+    selectedInputDeviceId: settings.selectedInputDeviceId,
+  });
+  const tuning = useTuningState(session.detectedFrequency, {
+    onResetDetection: session.resetDetection,
   });
   const referenceTone = useReferenceTone(() => tuning.targetNote.value);
   const centsHistory = useCentsHistory(tuning.cents, computed(() => !!tuning.detectedNote.value));
@@ -35,41 +28,28 @@ export function useTuner() {
   );
   const practiceSummary = computed(() => summarizePractice(settings.practiceHistory.value));
   const shouldCaptureVisualizationFrames = computed(() => (
-    !usingNativeAudio.value &&
-    audio.isListening.value &&
+    !session.usingNativeAudio.value &&
+    !session.usingSyntheticAudio.value &&
+    session.webAudioListening.value &&
     (settings.showWaveform.value || settings.showSpectrum.value || settings.showSpectrogram.value)
   ));
   const visualization = useVisualizationFrames(
-    audio.analyser,
-    audio.sampleRate,
+    session.analyser,
+    session.audioSampleRate,
     shouldCaptureVisualizationFrames,
   );
 
   watch(tuning.detectionRange, (range) => {
-    detectionRange.value = range;
-    void nativeAudio.setRange(range);
+    session.setDetectionRange(range);
   }, { immediate: true });
 
   async function start() {
-    if (usingNativeAudio.value) {
-      centsHistory.clear();
-      pitch.reset();
-      await nativeAudio.start(tuning.detectionRange.value);
-      return;
-    }
-
-    await audio.start();
-    if (audio.isListening.value) {
-      centsHistory.clear();
-      pitch.reset();
-      pitch.start();
-    }
+    centsHistory.clear();
+    await session.start(tuning.detectionRange.value);
   }
 
   function stop() {
-    pitch.stop();
-    audio.stop();
-    void nativeAudio.stop();
+    session.stop();
     referenceTone.stopReferenceTone();
   }
 
@@ -97,15 +77,14 @@ export function useTuner() {
 
   function setAudioBackend(backend: AudioBackend) {
     if (backend !== 'web' && backend !== 'native') return;
-    const shouldRestart = audio.isListening.value || nativeAudio.isListening.value;
+    const shouldRestart = session.isListening.value;
     if (shouldRestart) stop();
     settings.audioBackend.value = backend;
     if (shouldRestart) void start();
   }
 
   function clearError() {
-    audio.clearError();
-    nativeAudio.clearError();
+    session.clearError();
   }
 
   async function toggleFullscreen() {
@@ -144,15 +123,15 @@ export function useTuner() {
 
   return {
     // state
-    isListening: computed(() => usingNativeAudio.value ? nativeAudio.isListening.value : audio.isListening.value),
-    currentFrequency: computed(() => usingNativeAudio.value ? nativeAudio.frequency.value : pitch.currentFrequency.value),
-    smoothedFrequency: detectedFrequencySource,
-    volume: computed(() => usingNativeAudio.value ? nativeAudio.level.value : pitch.volume.value),
-    error: computed(() => usingNativeAudio.value ? nativeAudio.error.value : audio.error.value),
+    isListening: session.isListening,
+    currentFrequency: session.currentFrequency,
+    smoothedFrequency: session.detectedFrequency,
+    volume: session.volume,
+    error: session.error,
     audioBackend: settings.audioBackend,
-    inputDevices: audio.inputDevices,
+    inputDevices: session.inputDevices,
     selectedString: tuning.selectedString,
-    selectedInputDeviceId: audio.selectedInputDeviceId,
+    selectedInputDeviceId: session.selectedInputDeviceId,
     selectedStringIndex: tuning.selectedStringIndex,
     referencePlaying: referenceTone.referencePlaying,
     a4: tuning.a4,
@@ -187,12 +166,14 @@ export function useTuner() {
     practiceHistory: settings.practiceHistory,
     practiceSummary,
     sweeteningProfile: tuning.sweeteningProfile,
-    nativeAudioAvailable: nativeAudio.available,
-    usingNativeAudio,
+    nativeAudioAvailable: session.nativeAudioAvailable,
+    syntheticAudioFixture: session.syntheticAudioFixture,
+    usingNativeAudio: session.usingNativeAudio,
+    usingSyntheticAudio: session.usingSyntheticAudio,
 
     // computed
     detectedNote: tuning.detectedNote,
-    detectionRange,
+    detectionRange: session.detectionRange,
     targetNote: tuning.targetNote,
     cents: tuning.cents,
     isInTune: tuning.isInTune,
@@ -214,12 +195,12 @@ export function useTuner() {
     toggleReferenceTone: referenceTone.toggleReferenceTone,
     clearError,
     clearCentsHistory: centsHistory.clear,
-    refreshInputDevices: audio.refreshInputDevices,
+    refreshInputDevices: session.refreshInputDevices,
     setA4: tuning.setA4,
     setAudioBackend,
     setCapo: tuning.setCapo,
     setDisplayMode,
-    setInputDevice: audio.setInputDevice,
+    setInputDevice: session.setInputDevice,
     setLayoutMode,
     setLeftHanded,
     setMetronomeBeats: metronome.setBeats,
