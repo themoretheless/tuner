@@ -1,16 +1,7 @@
 import { onUnmounted, ref, watch, type Ref } from 'vue';
+import type { SpectrumFrame, WaveformFrame } from '../types/frames';
 
-export interface WaveformFrame {
-  samples: Float32Array<ArrayBuffer>;
-  sampleRate: number;
-  sequence: number;
-}
-
-export interface SpectrumFrame {
-  bins: Uint8Array<ArrayBuffer>;
-  sampleRate: number;
-  sequence: number;
-}
+export type { SpectrumFrame, WaveformFrame } from '../types/frames';
 
 export function useVisualizationFrames(
   analyser: Ref<AnalyserNode | null>,

@@ -10,7 +10,7 @@ use wasm_bindgen::prelude::*;
 
 use std::sync::{Arc, Mutex};
 
-use pitch_core::{get_tunings, normalize_level, TunerEngine, TunerUpdate, Tuning};
+use pitch_core::{get_tunings, TunerEngine, TunerUpdate, Tuning};
 
 // Consistent sample rate for audio processing and viz calculations.
 // Matches the wasm feed path (48000) and preferred in web.
@@ -541,7 +541,7 @@ impl App {
                         g.cents = update.cents;
                         g.confidence = update.confidence;
                         g.is_power = update.is_power;
-                        g.level = normalize_level(update.rms);
+                        g.level = update.level;
                         g.note = Some(update.note);
                         g.waveform.clear();
                         g.waveform.extend_from_slice(window);
@@ -718,7 +718,7 @@ pub fn feed_audio_samples(samples: &[f32]) {
             g.confidence = update.confidence;
             g.is_power = update.is_power;
             g.waveform = window.to_vec();
-            g.level = normalize_level(update.rms);
+            g.level = update.level;
             if !update.spectrum.is_empty() {
                 g.spectrum = update.spectrum.clone();
             }
