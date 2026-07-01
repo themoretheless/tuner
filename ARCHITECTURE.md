@@ -163,7 +163,7 @@ Platform shells (very thin):
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
 - Extract magic numbers into config structs.
 
-**Status 2026-06-30:** started. `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame` and TS frame types exist; `TunerEngine::process` emits `DetectionFrame`. Full native/session adoption is still pending.
+**Status 2026-07-01:** started. `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame` and TS frame types exist; `TunerEngine::process` emits `DetectionFrame`; Tauri native emits frame-shaped events; web `useTunerSession`/`useTuner` now use an enriched `DetectionFrame` as the primary readout. Remaining: pass full tuning/target context into native frames, move egui to the same contract, and remove compatibility frequency-only aliases.
 
 ### Phase 1 — Strengthen the Core (highest value)
 - Split `pitch-core`:
@@ -189,7 +189,7 @@ Platform shells (very thin):
   - `useVizData.ts`
 - Keep visualizers on data props and move the remaining session/native outputs to typed frames.
 
-**Status 2026-06-30:** started. `useTunerSession` owns web/native/synthetic audio orchestration and pitch loop wiring; `useTuner` is thinner but still returns a broad view model and lacks an explicit session state machine.
+**Status 2026-07-01:** started. `useTunerSession` owns web/native/synthetic audio orchestration and pitch loop wiring; `useTuner` is thinner and exposes an enriched `DetectionFrame`, but still returns a broad view model and lacks an explicit session state machine.
 
 ### Phase 4 — Unify egui + Reduce Platform Differences
 - Make egui use the same `TunerSession` / traits.
@@ -544,7 +544,7 @@ The synchronized problem map is split by purpose:
 
 Key highlights that directly block the target architecture:
 - Broken/silent audio paths: egui random-string output stream is dropped; web AudioContext can stay suspended (`C1-C7`).
-- Missing session/audio-port/frame contracts (`R2`, `R3`, `R9`; `C47`, `C53`).
+- Missing session/audio-port/frame contracts outside the web readout path (`R2`, `R3`, `R9`; `C47`, `C53`).
 - God objects and oversized coupling surfaces (`R1`, `R4-R8`; `C28`, `C31`, `C62`).
 - Duplication of domain, pitch, tuning registry and smoothing logic (`R12`, `R14-R18`; `C32-C37`, `C57`, `C60-C61`).
 - Realtime safety problems in egui and Tauri native audio (`C8`, `C10-C17`, `C182-C183`; `M1`, `M2`, `M6`).

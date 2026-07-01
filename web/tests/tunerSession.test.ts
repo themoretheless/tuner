@@ -57,11 +57,16 @@ describe('useTunerSession', () => {
     expect(session.usingSyntheticAudio.value).toBe(true);
     expect(session.isListening.value).toBe(true);
     expect(session.volume.value).toBeGreaterThan(0);
+    expect(session.detectionFrame.value.level).toBeGreaterThan(0);
+    expect(session.detectionFrame.value.confidence).toBe(1);
     expect(session.detectedFrequency.value).not.toBeNull();
+    expect(session.detectionFrame.value.freq).toBe(session.detectedFrequency.value);
     expect(Math.abs(session.detectedFrequency.value! - 82.4069)).toBeLessThan(1.5);
 
     session.stop();
     expect(session.isListening.value).toBe(false);
     expect(session.detectedFrequency.value).toBeNull();
+    expect(session.detectionFrame.value.freq).toBeNull();
+    expect(session.detectionFrame.value.level).toBe(0);
   });
 });

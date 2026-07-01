@@ -173,7 +173,9 @@ onUnmounted(() => {
         </div>
 
         <NoteDisplay
+          :confidence="tuner.detectionFrame.confidence"
           :display="tuner.currentNoteDisplay"
+          :is-power-chord="tuner.detectionFrame.isPower"
           :is-detected="!!tuner.detectedNote"
           :target-name="tuner.getNoteDisplay(tuner.targetNote)"
           :target-freq="tuner.targetNote.frequency"

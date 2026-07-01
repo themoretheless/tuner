@@ -461,16 +461,16 @@ First add fixtures and parity. Then decide:
 
 ## Recommended Next 8 Commits
 
-1. `Add shared frame type contract tests`
-2. `Remove analyser props from one visualizer`
-3. `Add audio input port contract`
-4. `Move tuner lifecycle into session controller`
+1. `Move tuner lifecycle into session controller`
+2. `Add audio input port contract`
+3. `Pass tuning context into native frame path`
+4. `Move egui readout onto DetectionFrame`
 5. `Move native callback work behind queue`
-6. `Add Rust/TS preset and note parity tests`
-7. `Split pitch range and smoothing modules`
-8. `Add versioned user profile schema`
+6. `Split pitch range and smoothing modules`
+7. `Add versioned user profile schema`
+8. `Split useTuner view model slices`
 
-This sequence attacks the current P0/P1 open items first: data contracts, audio-port boundaries, realtime safety and parity. Practice extraction is still useful, but it is no longer the first architectural blocker.
+This sequence attacks the current P0/P1 open items first: session lifecycle, audio-port boundaries, remaining frame-contract drift, realtime safety and core modularity. Practice extraction is still useful, but it is no longer the first architectural blocker.
 
 ## What Not To Do Next
 
@@ -483,7 +483,7 @@ This sequence attacks the current P0/P1 open items first: data contracts, audio-
 ## Success Metrics
 
 - Visualizer components keep receiving only plain frame props.
-- Shared `DetectionFrame` / viz frame contracts exist.
+- Shared `DetectionFrame` / viz frame contracts exist and the web readout path consumes them.
 - egui and Tauri native callbacks do not lock engine state or allocate detector buffers.
 - `useTuner.ts` under 100 lines.
 - `notes.ts` becomes compatibility export only.

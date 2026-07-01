@@ -9,6 +9,7 @@ Tiers: P0=17 P1=58 P2=110 P3=2
 ## Status Notes
 
 - 2026-06-30: M0 safety-gate slice landed. `build-web.yml` runs `npm test`; `npm test` now uses Vitest for core note/pitch fixtures; `test-core.yml` gates `cargo fmt --check -p pitch-core`, `cargo clippy -p pitch-core --all-targets --all-features -- -D warnings`, `cargo test -p pitch-core`, and `cargo check -p pitch-core --target wasm32-unknown-unknown --features wasm`; `.nvmrc` and `rust-toolchain.toml` were added. This resolves the CI-wiring part of C3/C180 and partially addresses C76/C79/C99/C114/C118 for `pitch-core`. Remaining: composable tests, Rust<->TS parity harness, fake-mic E2E, and broader egui/Tauri clippy/fmt gates.
+- 2026-07-01: M1 web-frame slice landed. `useTunerSession` now exposes `DetectionFrame` as the primary readout contract, `useTuner` enriches it with tuning target/cents/in-tune state, the native web adapter stores Tauri events as `DetectionFrame`, and the synthetic session harness asserts the frame shape. Remaining C47/C53/R9 work: native tuning context, egui frame adoption, and compatibility frequency aliases.
 
 ## P0 (17)
 

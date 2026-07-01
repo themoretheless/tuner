@@ -6,6 +6,7 @@ import { useSyntheticAudioInput } from './useSyntheticAudioInput';
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { AudioBackend } from '../utils/settingsStorage';
 import { syntheticAudioFixtureFromLocation, type SyntheticAudioFixture } from '../utils/syntheticAudio';
+import type { DetectionFrame } from '../types/frames';
 
 interface TunerSessionOptions {
   audioBackend: Ref<AudioBackend>;
@@ -33,9 +34,13 @@ export function useTunerSession(options: TunerSessionOptions) {
     detectionRange,
   );
 
-  const detectedFrequency = computed(() => (
-    usingNativeAudio.value ? nativeAudio.frequency.value : pitch.smoothedFrequency.value
-  ));
+  const detectionFrame = computed<DetectionFrame>(() => {
+    if (usingNativeAudio.value) {
+      return nativeAudio.frame.value ?? createDetectionFrame(null, 0);
+    }
+    return createDetectionFrame(pitch.smoothedFrequency.value, pitch.volume.value);
+  });
+  const detectedFrequency = computed(() => detectionFrame.value.freq);
 
   const isListening = computed(() => {
     if (usingSyntheticAudio.value) return syntheticAudio.isListening.value;
@@ -47,9 +52,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     return usingNativeAudio.value ? nativeAudio.error.value : audio.error.value;
   });
 
-  const volume = computed(() => (
-    usingNativeAudio.value ? nativeAudio.level.value : pitch.volume.value
-  ));
+  const volume = computed(() => detectionFrame.value.level);
 
   async function start(range: PitchDetectionRange = detectionRange.value) {
     setDetectionRange(range);
@@ -105,7 +108,8 @@ export function useTunerSession(options: TunerSessionOptions) {
     analyser: audio.analyser,
     audioSampleRate: audio.sampleRate,
     clearError,
-    currentFrequency: computed(() => usingNativeAudio.value ? nativeAudio.frequency.value : pitch.currentFrequency.value),
+    currentFrequency: computed(() => usingNativeAudio.value ? detectionFrame.value.freq : pitch.currentFrequency.value),
+    detectionFrame,
     detectedFrequency,
     detectionRange,
     error,
@@ -124,5 +128,19 @@ export function useTunerSession(options: TunerSessionOptions) {
     usingSyntheticAudio,
     volume,
     webAudioListening: audio.isListening,
+  };
+}
+
+function createDetectionFrame(freq: number | null, level: number): DetectionFrame {
+  return {
+    freq,
+    confidence: freq == null ? 0 : 1,
+    rms: 0,
+    level,
+    cents: 0,
+    note: '—',
+    target: null,
+    inTune: false,
+    isPower: false,
   };
 }

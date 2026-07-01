@@ -28,8 +28,8 @@
 Главные проблемы:
 - egui random-string tone сейчас ломается из-за `out.take()` и AudioContext в web может остаться suspended;
 - `useTuningState.ts`, `useSettings.ts` и `egui/src/main.rs` всё ещё слишком крупные и связные; `useTuner.ts` уже тоньше после выноса `useTunerSession`, но ещё не полноценный state-machine shell;
-- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, Tauri native уже отдаёт frame-shaped payload, но web session ещё не использует frame как главный readout;
-- web-визуализаторы уже получают plain frames, но общий session/native frame contract ещё не доведён до всех платформ;
+- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, Tauri native уже отдаёт frame-shaped payload, а web session/useTuner теперь использует frame как главный readout;
+- web-визуализаторы и tuner readout уже получают plain frames, но общий native/egui frame contract ещё не доведён до всех платформ;
 - TS/Rust таблицы строев и note math теперь покрыты parity-тестом, но всё ещё дублируются; pitch paths между TS/Rust/Tauri пока расходятся;
 - egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
 - тесты уже доказывают Rust/Web domain parity, headless synthetic fixture, synthetic session path и Playwright synthetic UI flow; Tauri/egui parity ещё нет;
@@ -240,7 +240,7 @@ M0 safety net закрыт для текущего refactor gate: web core tests
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
 - `pitch-core` уже разделён на `domain`, `frames`, `signal`, `smoother`, `engine`, `dsp`; осталось разнести `dsp` на YIN/MPM, вынести spectrum и WASM surface;
 - web всё ещё держит собственные TS note/pitch helpers;
-- Tauri native audio теперь отдаёт frame-shaped event, но detector path и tuning context ещё не полностью общие;
+- Tauri native audio теперь отдаёт frame-shaped event, web session/useTuner потребляет typed `DetectionFrame`, но detector path и native tuning context ещё не полностью общие;
 - egui пока не в feature parity с web UI.
 
 Нативный egui запуск: `cargo run -p guitar-tuner-egui`.
@@ -298,7 +298,7 @@ M0 safety net закрыт для текущего refactor gate: web core tests
 
 Ключевые проблемы на сегодня (выборка):
 - `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
-- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, полного `TunerFrame` на всех платформах.
+- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, полного `DetectionFrame`/readout-frame на всех платформах.
 - Дублирование таблиц строев и математики нот теперь guarded parity-тестом, но ещё не заменено single-source/codegen; pitch paths между TS, Rust core и Tauri native всё ещё расходятся.
 - Mutex'ы, аллокации и обработка DSP в realtime callback path.
 - Слабые тесты вокруг session/backend switching/Tauri/egui; Rust/Web domain harness уже есть.

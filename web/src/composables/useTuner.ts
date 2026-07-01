@@ -7,6 +7,7 @@ import { useSettings } from './useSettings';
 import { useTunerSession } from './useTunerSession';
 import { useTuningState } from './useTuningState';
 import { useVisualizationFrames } from './useVisualizationFrames';
+import type { DetectionFrame } from '../types/frames';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
@@ -15,7 +16,8 @@ export function useTuner() {
     audioBackend: settings.audioBackend,
     selectedInputDeviceId: settings.selectedInputDeviceId,
   });
-  const tuning = useTuningState(session.detectedFrequency, {
+  const detectedFrequency = computed(() => session.detectionFrame.value.freq);
+  const tuning = useTuningState(detectedFrequency, {
     onResetDetection: session.resetDetection,
   });
   const referenceTone = useReferenceTone(() => tuning.targetNote.value);
@@ -38,6 +40,16 @@ export function useTuner() {
     session.audioSampleRate,
     shouldCaptureVisualizationFrames,
   );
+  const detectionFrame = computed<DetectionFrame>(() => {
+    const baseFrame = session.detectionFrame.value;
+    return {
+      ...baseFrame,
+      cents: tuning.detectedNote.value ? tuning.cents.value : 0,
+      note: tuning.currentNoteDisplay.value ?? baseFrame.note,
+      target: tuning.targetNote.value,
+      inTune: tuning.isInTune.value,
+    };
+  });
 
   watch(tuning.detectionRange, (range) => {
     session.setDetectionRange(range);
@@ -125,8 +137,9 @@ export function useTuner() {
     // state
     isListening: session.isListening,
     currentFrequency: session.currentFrequency,
-    smoothedFrequency: session.detectedFrequency,
-    volume: session.volume,
+    detectionFrame,
+    smoothedFrequency: computed(() => detectionFrame.value.freq),
+    volume: computed(() => detectionFrame.value.level),
     error: session.error,
     audioBackend: settings.audioBackend,
     inputDevices: session.inputDevices,

@@ -1,6 +1,6 @@
 # Recommendations & Open Problems Backlog
 
-**Current state audit (synced 2026-06-30)**
+**Current state audit (synced 2026-07-01)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps the stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md). The latest direct code audit lives in [TOP-200-current.md](TOP-200-current.md) and contains **187 grounded findings**.
 
@@ -50,8 +50,8 @@ Notation used across docs:
 8. **P1: `App.vue` is an overloaded feature shell.** It imports almost every panel and wires tuner, settings, practice, metronome, custom tunings, temperaments and display controls on one screen.
    **Recommendation:** Split into feature screens/slices: tuner, library, practice, settings.
 
-9. **P1: `DetectionFrame` contract is started but not universal.** `pitch-core` now emits `DetectionFrame`, TS has matching frame types, and Tauri native emits a frame-shaped event, but web tuning/session still resolves readout state from frequency refs and native does not yet receive target/tuning context.
-    **Recommendation:** Finish canonical frame adoption across web session, Tauri native and egui, then remove legacy frequency-only plumbing.
+9. **P1: `DetectionFrame` contract is started but not universal.** `pitch-core` now emits `DetectionFrame`, TS has matching frame types, Tauri native emits a frame-shaped event, and web session/useTuner now exposes a primary enriched `DetectionFrame`. Remaining drift: native does not yet receive full tuning/target context, egui is not on the same frame contract, and some compatibility frequency aliases remain.
+    **Recommendation:** Finish canonical frame adoption across Tauri native and egui, pass tuning context into the native frame path, then remove compatibility frequency-only plumbing.
 
 10. **P1: Engine internals leak into UI shape.** The UI still receives raw frequencies, selected strings, backend flags and many refs as one broad API.
     **Recommendation:** Return small view-model slices and commands for each feature.

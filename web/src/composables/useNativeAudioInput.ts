@@ -13,9 +13,7 @@ export function useNativeAudioInput() {
   const available = ref(false);
   const error = ref<string | null>(null);
   const frame = ref<DetectionFrame | null>(null);
-  const frequency = ref<number | null>(null);
   const isListening = ref(false);
-  const level = ref(0);
 
   let invokeFn: InvokeFn | null = null;
   let listenFn: ListenFn | null = null;
@@ -58,10 +56,7 @@ export function useNativeAudioInput() {
     if (isListening.value) return;
 
     unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
-      const nextFrame = normalizeNativeFrame(event.payload);
-      frame.value = nextFrame;
-      frequency.value = nextFrame.freq;
-      level.value = nextFrame.level;
+      frame.value = normalizeNativeFrame(event.payload);
     });
 
     try {
@@ -77,8 +72,6 @@ export function useNativeAudioInput() {
     cleanupListener();
     isListening.value = false;
     frame.value = null;
-    frequency.value = null;
-    level.value = 0;
     if (invokeFn) {
       try {
         await invokeFn('stop_native_audio');
@@ -116,9 +109,7 @@ export function useNativeAudioInput() {
     clearError,
     error,
     frame,
-    frequency,
     isListening,
-    level,
     refreshAvailability,
     setRange,
     start,

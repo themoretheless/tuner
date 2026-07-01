@@ -51,7 +51,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-07-01:** first contract slices done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`; Tauri native now emits a frame-shaped event (`freq/confidence/rms/level/cents/note/...`) and the web native adapter stores it as `DetectionFrame`. Remaining M1 work: make the web session/useTuner path consume the full frame as the primary readout, pass native tuning/target context, and remove legacy frequency-only plumbing.
+**Status 2026-07-01:** first contract slices done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`; Tauri native now emits a frame-shaped event (`freq/confidence/rms/level/cents/note/...`) and the web native adapter stores it as `DetectionFrame`; web `useTunerSession`/`useTuner` now consume an enriched `DetectionFrame` as the primary readout. Remaining M1 work: pass native tuning/target context, move egui to the same frame contract, and remove compatibility frequency-only aliases.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -70,7 +70,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `useTuner` composes them; settings stays persistence-only.
 **Verify / DoD:** `useTuner` < ~150 LOC; each new composable single-responsibility; `vue-tsc` green; behavior preserved.
 
-**Status 2026-06-30:** first split done: `useTunerSession` owns web/native/synthetic audio backend orchestration, pitch loop, detection range and session error/volume/frequency refs. Remaining M3 work: explicit session state machine, smaller return view-model slices, and more tests around backend switching.
+**Status 2026-07-01:** first split done: `useTunerSession` owns web/native/synthetic audio backend orchestration, pitch loop, detection range and session error/readout frame refs. Remaining M3 work: explicit session state machine, smaller return view-model slices, and more tests around backend switching.
 
 ## M4 - Finish pitch-core layering **[BP]**
 **Goal:** small focused modules + a detector trait. Phase 1.
@@ -119,8 +119,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now (this week):** finish M1 leftovers: full native/session `DetectionFrame` adoption.
-- **Next:** finish M3/M4 leftovers: explicit session state machine, smaller `useTuner` view models, `PitchDetector` trait, spectrum module and wasm module split.
+- **Now (this week):** finish M3 lifecycle: explicit session state machine, serialized start/stop/restart, and backend-switching tests.
+- **Next:** finish M1/M4 leftovers: native tuning context, egui frame contract, smaller `useTuner` view models, `PitchDetector` trait, spectrum module and wasm module split.
 - **Later:** M5 (single-source domain), M6 (native realtime), M7 (DSP accuracy), M8 (polish).
 
 ## Working conventions
