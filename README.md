@@ -21,21 +21,34 @@
 
 ## Current Audit / Technical Debt
 
-Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md).
-Полный ranked **Top 500**: [TOP-500-backlog.md](TOP-500-backlog.md).
-Свежий grounded-аудит по коду: [TOP-200-current.md](TOP-200-current.md).
+Канонический текущий **Top 50** того, что сейчас сделано плохо или неправильно (свежий, независимо перепроверенный аудит от 2026-07-01, заменяет прошлый список из 183 пунктов): [recommendation.md](recommendation.md).
 
-Главные проблемы:
-- egui random-string tone сейчас ломается из-за `out.take()` и AudioContext в web может остаться suspended;
-- `useTuningState.ts`, `useSettings.ts` и `egui/src/main.rs` всё ещё слишком крупные и связные; `useTuner.ts` уже тоньше после выноса `useTunerSession`, но ещё не полноценный state-machine shell;
-- нет единого `AudioInputPort` и `TunerSessionController`; общий `DetectionFrame` начат в `pitch-core`, Tauri native уже отдаёт frame-shaped payload, а web session/useTuner теперь использует frame как главный readout;
-- web-визуализаторы и tuner readout уже получают plain frames, но общий native/egui frame contract ещё не доведён до всех платформ;
-- TS/Rust таблицы строев и note math теперь покрыты parity-тестом, но всё ещё дублируются; pitch paths между TS/Rust/Tauri пока расходятся;
-- egui и Tauri native audio всё ещё делают тяжёлую работу в cpal callback path;
-- тесты уже доказывают Rust/Web domain parity, headless synthetic fixture, synthetic session path и Playwright synthetic UI flow; Tauri/egui parity ещё нет;
-- web PWA пока manifest-first, без полноценного Service Worker/offline cache.
+Этот проход перечитывал код напрямую, а не старые аудиты — и часть старых P0 оказалась уже исправлена (обрыв egui random-string тона через `out.take()`, AudioContext без `resume()`), а часть описаний устарела (например, `pitch-core/src/lib.rs` описывался как монолит на ~660 строк — сейчас это ~191 строка, крейт уже разбит на `domain`/`dsp`/`engine`/`frames`/`signal`/`smoother`). [TOP-500-backlog.md](TOP-500-backlog.md) (Top 500, `M#`) и [TOP-200-current.md](TOP-200-current.md) (187 findings, `C#`) не входили в этот проход и местами ссылаются на устаревшие номера строк.
 
-Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Главные проблемы (детали и file:line — в recommendation.md):
+- Три независимо расходящихся реализации YIN (web TS, pitch-core, Tauri desktop) — web и desktop не получили фиксы, уже внесённые в Rust-эталон; wasm-сборка pitch-core компилируется на каждый билд, но нигде не импортируется в web.
+- egui и Tauri native audio всё ещё делают allocation/FFT/lock прямо в realtime cpal callback без throttling — реальный риск дропаутов звука.
+- pitch-core захардкожен на диапазон гитары 30-400Hz — все не-гитарные строи (мандолина, скрипка, банджо, укулеле), которые крейт сам же предоставляет, тихо не детектятся.
+- Редактор строя в egui обновляет отображаемую частоту и reference tone, но не синхронизирует live TunerEngine — тюнер молча считает по старой частоте.
+- Release workflow тегает и публикует релиз, даже если сборка Tauri/egui упала, без пометки о неполном релизе; desktop-бинарники неподписаны и без checksums.
+- PWA-манифест и index.html утверждают «работает офлайн», но Service Worker в проекте нет вообще.
+- Быстрые повторные нажатия на mic-toggle могут запустить второй getUserMedia поверх ещё не завершившегося первого — утечка MediaStream/AudioContext.
+- Playwright E2E существует, но не запускается ни в одном CI workflow.
+
+Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md) (пока ссылается на старую нумерацию, ждёт отдельной синхронизации). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+
+Помимо Top 50, в [recommendation.md](recommendation.md) есть более широкий проход — **509 пунктов** (проблемы, идеи улучшений и разбор дизайна), полученные за 3 итерации на файл-группу (плюс дополнительный проход на новизну, чтобы перевалить за 500) и перепроверенные против кода: [«Full Backlog: 509 Problems...»](recommendation.md#full-backlog-509-problems-improvements--design-suggestions-by-piece).
+
+## Как разбирать проект по маленьким кусочкам (SOLID/DRY)
+
+Чтобы не читать один гигантский список, весь проект разбит на **32 маленьких «кусочка»** (по принципу single-responsibility) в 6 группах — полное описание каждого кусочка (файлы, зона ответственности) в [ARCHITECTURE.md](ARCHITECTURE.md#soliddry-module-decomposition-small-pieces), а его пункты (`bug`/`idea`/`design`/`split`) — в соответствующем разделе [recommendation.md](recommendation.md). Берёшь один кусочек — читаешь только его файлы и его пункты, чинишь, идёшь дальше.
+
+- **Web State & Session**: useTunerOrchestrator, TunerSessionController, useAudioInput, useNativeAudioInput/useSyntheticAudioInput, useReferenceTone, useMetronome, useEarTraining, usePracticeController, useSettingsController, useTuningState (split), useDisplayPreferencesController.
+- **Music / Pitch Domain**: core/music/noteMath, temperaments+sweetening, instrumentsAndTunings (TS), core/pitch/detectPitch (TS), pitch-core::domain/dsp/engine (Rust).
+- **Visualization / Canvas**: useVisualizationFrames, useCanvasRenderer/useHiDpiCanvas, Vue-визуализаторы, egui painters.
+- **Native Audio & Desktop Platform**: desktop native_audio split, egui AudioManager, Tauri release/signing/CSP.
+- **Testing / CI / Build / Release / Docs**: test coverage & CI wiring, build/PWA/release pipeline.
+- **Product / UX / Visual Design**: design system, interaction states, information architecture, accessibility-as-design, content/локализация — это результат отдельного дизайн-прохода (не только баги, но и разбор цвета/типографики/иерархии как это сделал бы дизайнер).
 
 ## Возможности
 
@@ -64,12 +77,12 @@ Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 
 ```
 Tuner/
-├── pitch-core/          # Shared Rust pitch core (YIN + MPM) - used by egui, WASM for web
+├── pitch-core/          # Shared Rust pitch core (YIN + MPM) - used by egui; wasm target builds but web doesn't import it yet (recommendation.md #11)
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
 ├── desktop/             # Tauri desktop (Vue frontend + Rust backend)
 ├── egui/                # Pure native offline (egui + cpal, no webview)
 ├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей и приоритеты
-├── recommendation.md    # Стабильный current extract открытых проблем (R#)
+├── recommendation.md    # Свежий перепроверенный Top 50 открытых проблем
 ├── TOP-200-current.md   # Последний grounded-аудит текущего кода (C#)
 ├── TOP-500-backlog.md   # Полный ranked Top 500 (M#)
 ├── PLAN.md              # Порядок выполнения и DoD
@@ -294,18 +307,16 @@ M0 safety net закрыт для текущего refactor gate: web core tests
 
 ## Технический долг и что сделано плохо
 
-Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, находится в [TOP-500-backlog.md](TOP-500-backlog.md). Текущий grounded-аудит по коду: [TOP-200-current.md](TOP-200-current.md) (**187** detailed findings). Стабильный extract для ссылок из плана: [recommendation.md](recommendation.md) (**183** `R#` items).
+Текущий **Top 50** того, что сделано плохо, неправильно или рискованно (перепроверено против живого кода 2026-07-01, ранжировано по severity), и отдельно — **509 пунктов** (проблемы + идеи + дизайн-разбор), разложенные по 32 SOLID/DRY-«кусочкам» из 6 групп: оба списка в [recommendation.md](recommendation.md), таксономия кусочков — в [ARCHITECTURE.md](ARCHITECTURE.md#soliddry-module-decomposition-small-pieces). Более старые полные списки — [TOP-500-backlog.md](TOP-500-backlog.md) (Top 500, `M#`) и [TOP-200-current.md](TOP-200-current.md) (187 findings, `C#`) — не обновлялись в этих проходах; часть их конкретных file:line ссылок устарела (см. методологию в начале recommendation.md).
 
-Ключевые проблемы на сегодня (выборка):
-- `useTuner.ts`, `useTuningState.ts`, `useSettings.ts`, `pitch-core/src/lib.rs` и `egui/src/main.rs` всё ещё слишком связные.
-- Нет полноценного общего `AudioInputPort`, `TunerSessionController`, полного `DetectionFrame`/readout-frame на всех платформах.
-- Дублирование таблиц строев и математики нот теперь guarded parity-тестом, но ещё не заменено single-source/codegen; pitch paths между TS, Rust core и Tauri native всё ещё расходятся.
-- Mutex'ы, аллокации и обработка DSP в realtime callback path.
-- Слабые тесты вокруг session/backend switching/Tauri/egui; Rust/Web domain harness уже есть.
-- Много hardcoded значений; canvas renderer lifecycle уже централизован, но ещё требует visual QA.
+Ключевые архитектурные проблемы на сегодня (выборка, помимо P0 из раздела выше):
+- `useTuner.ts` (302 строки) остаётся god-object'ом, напрямую связывающим 8 composables без чётких границ владения; `egui`'s `App::update` (~330 строк) аналогично мешает input, семь визуализаций, device-switching и settings-UI в одной функции.
+- Нет `PitchDetector` trait в pitch-core — YIN/MPM это ad-hoc функции с захардкоженным fallback; нет `AudioInputPort`/`TunerSessionController`.
+- Rust `domain.rs` вообще не содержит temperament/sweetening данных — «общий» domain-слой на деле не общий для этой фичи.
+- Tauri hand-дублирует форму `DetectionFrame` с лишним legacy-полем `frequency`; egui и Tauri desktop крейты не имеют unit-тестов и не линтятся в CI.
+- 12 из 15 web composables не покрыты тестами; `test_yin_440hz` принимает ошибку на целую октаву как «прошёл», `test_power_chord` не проверяет свой же результат.
+- Мёртвый/сиротский код: `CentsHistory.vue` дублирует `CentsHistoryGraph.vue` без единого вызова; `Fretboard.vue` и `PerStringCents.vue` нигде не используются; wasm-сборка pitch-core компилируется, но не импортируется.
 
-См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).
+См. также раздел "Current Top Problems (Synchronized)" в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Полный master Top 500 — в [TOP-500-backlog.md](TOP-500-backlog.md). Текущие `R#` проблемы — в [recommendation.md](recommendation.md).
-
-Когда фиксим — обновляем [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) при изменении ранга/статуса, [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Когда фиксим — обновляем [recommendation.md](recommendation.md), [ARCHITECTURE.md](ARCHITECTURE.md) и этот README; [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md), [PLAN.md](PLAN.md) и [RECOMMENDATIONS.md](RECOMMENDATIONS.md) ждут отдельного прохода синхронизации со свежим Top 50.
