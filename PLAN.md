@@ -5,8 +5,8 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - stable current-problem extract (183 plan-safe `R#` items).
-- [TOP-200-current.md](TOP-200-current.md) - latest grounded audit (187 detailed `C#` findings).
+- [recommendation.md](recommendation.md) - current extract (121 open/partial, 59 closed stable `R#` items).
+- [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` evidence; use its 2026-07-11 overlay before old findings.
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
@@ -31,6 +31,20 @@ If not, it doesn't belong in this plan.
 Each milestone is independently shippable and verified with `cargo test -p pitch-core`,
 `vue-tsc --noEmit`, and `cargo check` on egui. Behavior-preserving milestones are marked **[BP]**.
 
+## Status Overlay (2026-07-11)
+
+| Milestone | Status | Result / remaining gate |
+| --- | --- | --- |
+| M0 safety net | Done baseline | 31 Vitest, 8 core tests, parity, synthetic session/E2E; real WAV/property/soak still belong to M7 |
+| M1 frames | Mostly done | Rust/Tauri/egui frame adopted; native tuning context and alias remain |
+| M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
+| M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice done; broad root/tuning controller remain |
+| M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers and optional spectrum |
+| M5 single-source domain | Open | Parity guards two registries; codegen/WASM convergence remains |
+| M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
+| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges and silence reset done; HPS/filter/adaptive gate/fixtures remain |
+| M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
+
 ---
 
 ## M0 - Safety net (do this first) **[BP]**
@@ -51,7 +65,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-07-01:** first contract slices done: `pitch-core::DetectionFrame`, `SpectrumFrame`, `WaveformFrame`, TS frame types, and `TunerEngine::process -> DetectionFrame` are in place; egui consumes normalized `frame.level`; Tauri native now emits a frame-shaped event (`freq/confidence/rms/level/cents/note/...`) and the web native adapter stores it as `DetectionFrame`; web `useTunerSession`/`useTuner` now consume an enriched `DetectionFrame` as the primary readout. Remaining M1 work: pass native tuning/target context, move egui to the same frame contract, and remove compatibility frequency-only aliases.
+**Status 2026-07-11:** pitch-core, Tauri and egui now use the shared frame; Vue enriches native output with active tuning context. Remaining M1 work: pass that context to native processing and remove compatibility aliases.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -61,7 +75,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Extend the same frame contracts toward `CentsHistory`/future native-session outputs where useful.
 **Verify / DoD:** `grep AnalyserNode web/src/components` is empty; `vue-tsc` green; visual parity by inspection.
 
-**Status 2026-06-30:** shared `useCanvasRenderer` now owns draw scheduling and `ResizeObserver`; waveform/spectrum/spectrogram/legacy cents canvas use it. Remaining M2 work: visual inspection in browser and extending the same frame flow to native/session outputs where useful.
+**Status 2026-07-11:** complete for the intended boundary. Shared canvas scheduling/ResizeObserver/theme palette is used; backing stores resize only on dimension changes; visual checks pass at desktop and `320 px` without document overflow.
 
 ## M3 - Split the web god-composable **[BP]**
 **Goal:** `useTuner` becomes a thin orchestrator. Phase 3 + Phase 5.
@@ -70,7 +84,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `useTuner` composes them; settings stays persistence-only.
 **Verify / DoD:** `useTuner` < ~150 LOC; each new composable single-responsibility; `vue-tsc` green; behavior preserved.
 
-**Status 2026-07-01:** first split done: `useTunerSession` owns web/native/synthetic audio backend orchestration, pitch loop, detection range and session error/readout frame refs. Remaining M3 work: explicit session state machine, smaller return view-model slices, and more tests around backend switching.
+**Status 2026-07-11:** explicit tested lifecycle, practice/profile/domain extraction, feature ports and four lazy screens are done. Remaining M3 work: shrink `useTuner` below a broad composition API and split `useTuningState`/global settings ownership.
 
 ## M4 - Finish pitch-core layering **[BP]**
 **Goal:** small focused modules + a detector trait. Phase 1.
@@ -80,7 +94,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `EngineConfig` value type for the scattered magic numbers (2048, 0.12, gates).
 **Verify / DoD:** `cargo test` green; files < ~200 LOC; `clippy -D warnings` clean.
 
-**Status 2026-06-30:** core layering slice done: `frames.rs`, `signal.rs`, `smoother.rs`, `engine.rs`, and `dsp.rs` extracted; `EngineConfig` added; `lib.rs` is now mostly re-exports plus tests. Remaining M4 work: split `dsp.rs` further into `dsp/yin.rs` + `dsp/mpm.rs`, extract spectrum analyzer module, add `PitchDetector` trait, and move wasm bindings into `wasm.rs`.
+**Status 2026-07-11:** complete: detector/yin/mpm/power, spectrum and WASM modules are split; `PitchDetector` and `EngineConfig` exist; detector buffers are reused and spectrum is demand-gated.
 
 ## M5 - Unify the domain (kill duplication)
 **Goal:** pitch-core is the only source of tunings + note math. Phase 1/2.
@@ -100,6 +114,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 **Verify / DoD:** `cargo check` clean; by inspection no DSP/alloc/lock in callback; random tone audibly plays.
 **Risk:** medium-high (threading) - do after M0/M1 so behavior is pinned.
 
+**Status 2026-07-11:** complete for realtime safety and structural decomposition. Tauri/egui share `audio-input`; callback work is bounded nonblocking downmix/copy, DSP runs on workers, and egui main/audio/state/visualization are separate. Runtime error telemetry/restart remains under reliability work.
+
 ## M7 - DSP accuracy hardening
 **Goal:** fewer octave/jitter errors, robust gating - guarded by M0 fixtures. Phase 6 (P2).
 **Targets:** `R20`, `R25-R27`, `R143`, `R150-R152`, `R154-R166`; grounded audit `C9`, `C15`, `C29-C30`, `C48-C49`, `C173`, `C185`; master `M4`, `M9`, `M10`, `M12`, `M15`, `M17`, `M30`, `M40`.
@@ -109,7 +125,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
 **Targets:** `R36-R44`, `R175-R183`; grounded audit `C19-C20`, `C39-C42`, `C95`, `C168-C172`, `C178-C180`; master `M5`, `M8`, `M14`, `M16`, `M23`, `M31`, `M33`, `M37`, `M45`.
-- Real Service Worker + offline cache (currently manifest only).
+- Real Service Worker + offline cache is done; add update/rollback and zero-network CI verification.
 - a11y: aria-live on note/cents; colorblind + forced-colors palettes; non-color-only in-tune cue.
 - Observability: "Test my mic" wizard + pipeline health strip + silent/clipping/DC/hum watchdog.
 - Release: Tauri CSP; macOS notarize / Windows sign; CI "zero network in release build" proof + cargo-deny/npm-audit.
@@ -119,9 +135,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now (this week):** finish M3 lifecycle: explicit session state machine, serialized start/stop/restart, and backend-switching tests.
-- **Next:** finish M1/M4 leftovers: native tuning context, egui frame contract, smaller `useTuner` view models, `PitchDetector` trait, spectrum module and wasm module split.
-- **Later:** M5 (single-source domain), M6 (native realtime), M7 (DSP accuracy), M8 (polish).
+- **Now:** M5 entry gate: explicit TS audio port, then stateful pitch-core/WASM worker and numeric parity fixtures.
+- **Next:** generated music registry, native tuning context/alias removal, then split the tuning/settings controllers.
+- **Later:** M7 real-audio/benchmark/soak accuracy work and the remaining M8 diagnostics/a11y/release gates.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

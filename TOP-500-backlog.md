@@ -1,26 +1,26 @@
 # Guitar Tuner - Master Top 500 Backlog
 
-> **Canonical master Top 500.** This is the full ranked table of what is still weak, risky, missing, duplicated, or strategically underbuilt. [recommendation.md](recommendation.md) is the current-problem extract, [TOP-200-current.md](TOP-200-current.md) is the latest grounded code audit, and [PLAN.md](PLAN.md) decides execution order. [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape.
+> **Canonical master Top 500.** This is a stable option/risk registry, not a list of 500 simultaneously required features. [recommendation.md](recommendation.md) is the current-problem extract, [PLAN.md](PLAN.md) decides execution order, and [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape. Rows marked `[DONE 2026-07-11]` remain here for traceability and are excluded from the current-open count.
 
-Status note 2026-06-30: M0 safety-gate work partially addressed CI hygiene/testing items such as M20/M22/M24/M26/M33/M35 for `pitch-core` and web core utilities, including Vitest core fixtures. Keep the ranked order until the next full re-score; use [TOP-200-current.md](TOP-200-current.md) status notes for current evidence.
+Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M24, M25, M26, M29, M39, M40, M41, M44, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
 
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
 | # | Item | Tier | Val | Source | Note |
 |---|------|------|-----|--------|------|
-| 1 | move DSP off cpal realtime callback | P1 | 78 | r1:review |  |
-| 2 | remove blocking Mutex in audio callback | P1 | 76 | r1:review |  |
+| 1 | move DSP off cpal realtime callback | P1 | 78 | r1:review | [DONE 2026-07-11] |
+| 2 | remove blocking Mutex in audio callback | P1 | 76 | r1:review | [DONE 2026-07-11] |
 | 3 | unify tunings and note math into pitch-core | P2 | 74 | r1:review |  |
 | 4 | octave-error guard subharmonic/NSDF | P2 | 73 | r1:review |  |
-| 5 | real service worker / offline PWA | P2 | 72 | r1:review |  |
-| 6 | eliminate per-callback heap allocations | P2 | 70 | r1:review |  |
-| 7 | check Rust and TS tuning tables match | P2 | 66 | r1:review |  |
+| 5 | real service worker / offline PWA | P2 | 72 | r1:review | [DONE 2026-07-11] |
+| 6 | eliminate per-callback heap allocations | P2 | 70 | r1:review | [DONE 2026-07-11] |
+| 7 | check Rust and TS tuning tables match | P2 | 66 | r1:review | [DONE 2026-07-11] |
 | 8 | code-sign and notarize macOS/Windows | P2 | 66 | r1:review |  |
 | 9 | Harmonic Product Spectrum octave disambiguator from the existing 2048 FFT | P2 | 66 | r2:algorithms | Reuses current FFT to kill octave errors with minimal code. |
 | 10 | high-pass filter rumble/mains | P2 | 64 | r1:review |  |
 | 11 | reconcile Rust/TS frequency-to-MIDI rounding | P2 | 64 | r1:review |  |
 | 12 | Multi-resolution dual-window analysis: long window for low strings, short for high | P2 | 64 | r2:algorithms | Fixes low-E resolution vs high-string latency tradeoff. |
-| 13 | stop resizeCanvas every frame | P2 | 62 | r1:review |  |
+| 13 | stop resizeCanvas every frame | P2 | 62 | r1:review | [DONE 2026-07-11] |
 | 14 | Tauri CSP | P2 | 62 | r1:review |  |
 | 15 | adaptive noise-floor gate | P2 | 62 | r1:review |  |
 | 16 | Verifiable '100% local, no network' privacy badge backed by CI zero-fetch test | P2 | 62 | r2:distribution | Strong trust signal with a cheap CI assertion; differentiates from cloud tuners. |
@@ -31,12 +31,12 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 21 | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | P2 | 60 | r2:distribution | Primary organic-discovery lever for a web tuner. |
 | 22 | WASM/native numeric-equivalence harness over a shared fixture manifest | P2 | 60 | r2:dx-quality | Guarantees egui and web paths agree numerically. |
 | 23 | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | P2 | 60 | r3:observability-reliability | Defines deterministic UX for every failure mode instead of blank screens. |
-| 24 | Playwright fake-WAV pipeline test asserts detected note | P2 | 60 | r4:docs-dx | Feed synthetic E2 audio, assert NoteDisplay shows E. |
-| 25 | legible sidebar text | P2 | 58 | r1:review |  |
-| 26 | vitest unit tests note math | P2 | 58 | r1:review |  |
+| 24 | Playwright fake-WAV pipeline test asserts detected note | P2 | 60 | r4:docs-dx | Feed synthetic E2 audio, assert NoteDisplay shows E. [DONE 2026-07-11] |
+| 25 | legible sidebar text | P2 | 58 | r1:review | [DONE 2026-07-11] |
+| 26 | vitest unit tests note math | P2 | 58 | r1:review | [DONE 2026-07-11] |
 | 27 | one-euro filter | P2 | 58 | r1:review |  |
 | 28 | WebKitGTK media backend AppImage | P2 | 58 | r1:review |  |
-| 29 | hardcoded 44100 in egui harmonic overlay | P2 | 58 | r1:review |  |
+| 29 | hardcoded 44100 in egui harmonic overlay | P2 | 58 | r1:review | [DONE 2026-07-11] |
 | 30 | Confidence-weighted late fusion of YIN, MPM, HPS and Goertzel into one estimate | P2 | 58 | r2:algorithms | Single fused estimate from existing detectors cuts octave/jitter errors cheaply. |
 | 31 | Shape/texture redundancy so in-tune state never relies on color alone | P2 | 58 | r2:a11y-deep | WCAG non-color-reliance; trivial and broadly useful. |
 | 32 | Property-based test for frequencyToNote round-trip across A4 sweep | P2 | 58 | r2:dx-quality | Catches note-math regressions cheaply. |
@@ -46,19 +46,19 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 36 | Mic-signal sanity watchdog (silent / clipping / DC-stuck warnings) | P2 | 57 | r3:observability-reliability | Proactively tells users why detection is wrong before they blame the app. |
 | 37 | aria-live for note and cents | P2 | 56 | r1:review |  |
 | 38 | auto-advance string-by-string guided tuning | P2 | 56 | r1:review |  |
-| 39 | fix CentsHistory deep watcher | P2 | 56 | r1:review |  |
-| 40 | bound MPM NSDF tau range | P2 | 56 | r1:review |  |
-| 41 | chromatic auto-detect mode | P2 | 56 | r1:review |  |
+| 39 | fix CentsHistory deep watcher | P2 | 56 | r1:review | [DONE 2026-07-11] |
+| 40 | bound MPM NSDF tau range | P2 | 56 | r1:review | [DONE 2026-07-11] |
+| 41 | chromatic auto-detect mode | P2 | 56 | r1:review | [DONE 2026-07-11] |
 | 42 | insta snapshot tests for full DetectionResult on fixture WAVs | P2 | 56 | r2:dx-quality | Locks down pipeline output on real signals. |
 | 43 | Browser-language auto-detect via navigator.languages with persisted override | P2 | 56 | r3:i18n-breadth | Foundation for all localization; cheap and immediately broadens reach. |
-| 44 | Preallocate YIN buffers as module singletons across calls | P2 | 56 | r4:perf-bundle | pitch.ts reallocates per size change; pin to max guitar size. |
+| 44 | Preallocate YIN buffers as module singletons across calls | P2 | 56 | r4:perf-bundle | pitch.ts reallocates per size change; pin to max guitar size. [DONE 2026-07-11] |
 | 45 | Playwright E2E for mic-permission-denied flow | P2 | 56 | r4:docs-dx | Drive fake getUserMedia, assert permission UI path renders. |
 | 46 | localize hardcoded English in-tune hint | P2 | 55 | r1:review |  |
 | 47 | Goertzel bank locked to 6 selected-string targets and their first 4 harmonics | P2 | 55 | r2:algorithms | Cheap targeted detection when string is known. |
 | 48 | WASM streaming instantiation via instantiateStreaming for pitch-core | P2 | 55 | r4:perf-bundle | When web wires WASM, compile-while-download instead of arrayBuffer fetch. |
-| 49 | validate/clamp A4 on load | P3 | 54 | r1:review |  |
-| 50 | gate FFT spectrum when viz hidden | P3 | 54 | r1:review |  |
-| 51 | reuse YIN difference buffers | P3 | 54 | r1:review |  |
+| 49 | validate/clamp A4 on load | P3 | 54 | r1:review | [DONE 2026-07-11] |
+| 50 | gate FFT spectrum when viz hidden | P3 | 54 | r1:review | [DONE 2026-07-11] |
+| 51 | reuse YIN difference buffers | P3 | 54 | r1:review | [DONE 2026-07-11] |
 | 52 | Native mic-permission preflight via Tauri macOS AVCaptureDevice request | P3 | 54 | r2:native-os | Avoids silent failure when OS denies mic. |
 | 53 | Gaussian-window interpolation on log-magnitude FFT peaks (Jacobsen/Quinn) | P3 | 54 | r2:algorithms | Sub-bin frequency accuracy from existing FFT. |
 | 54 | Stale-PWA / update-available checker against version.json | P3 | 54 | r3:observability-reliability | Stops users getting stuck on cached old builds. |
@@ -66,19 +66,19 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 56 | first-run onboarding + mic priming | P3 | 53 | r1:review |  |
 | 57 | cache Spectrum gradients | P3 | 52 | r1:review |  |
 | 58 | collapsible settings sidebar on mobile | P3 | 52 | r1:review |  |
-| 59 | build script copies WASM to unserved dir | P3 | 52 | r1:review |  |
+| 59 | build script copies WASM to unserved dir | P3 | 52 | r1:review | [DONE 2026-07-11] |
 | 60 | Colorblind palette presets (deuteran/protan/tritan) replacing red/green coding | P3 | 52 | r2:a11y-deep | Red/green in-tune coding fails ~8% of male users. |
 | 61 | Golden-trace differential runner: flag any fixture moving >1 cent | P3 | 52 | r2:dx-quality | Regression tripwire for DSP changes. |
 | 62 | Adjustable in-tune tolerance + detection smoothing as accessibility controls | P3 | 52 | r2:a11y-deep | Lets tremor/motor users widen the target. |
 | 63 | Locale-correct A4 decimal parsing accepting comma and period keypads | P3 | 52 | r3:i18n-breadth | Prevents broken A4 entry for half the world; trivial fix. |
-| 64 | Configurable in-tune tolerance band in cents | P3 | 52 | r4:settings-personalization | Slider 1-10 cents controls green-zone width directly. |
-| 65 | Lazy-load Waveform and Spectrum via defineAsyncComponent | P3 | 52 | r4:perf-bundle | App.vue statically imports both; split each into its own chunk. |
+| 64 | Configurable in-tune tolerance band in cents | P3 | 52 | r4:settings-personalization | Slider 1-10 cents controls green-zone width directly. [DONE 2026-07-11] |
+| 65 | Lazy-load Waveform and Spectrum via defineAsyncComponent | P3 | 52 | r4:perf-bundle | App.vue statically imports both; split each into its own chunk. [DONE 2026-07-11] |
 | 66 | spectrogram allocation and full redraw | P3 | 50 | r1:review |  |
 | 67 | pin toolchain and wasm-pack version | P3 | 50 | r1:review |  |
-| 68 | custom/editable tuning builder | P3 | 50 | r1:review |  |
+| 68 | custom/editable tuning builder | P3 | 50 | r1:review | [DONE 2026-07-11] |
 | 69 | web AudioWorklet detection | P3 | 50 | r1:review |  |
-| 70 | strengthen TARGET vs detected note hierarchy | P3 | 50 | r1:review |  |
-| 71 | async device-change restart | P3 | 50 | r1:review |  |
+| 70 | strengthen TARGET vs detected note hierarchy | P3 | 50 | r1:review | [DONE 2026-07-11] |
+| 71 | async device-change restart | P3 | 50 | r1:review | [DONE 2026-07-11] |
 | 72 | useSettings single source for tuning/A4 | P3 | 50 | r1:review |  |
 | 73 | in-tune confirmation cue haptic/sound/flash | P3 | 50 | r1:review |  |
 | 74 | auto-detected string highlight + spring needle | P3 | 50 | r1:review |  |
@@ -184,7 +184,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 174 | FAQ schema JSON-LD on landing page | P3 | 38 | r4:content-marketing | Rich-result eligibility for "is this tuner accurate" queries. |
 | 175 | Three-target architecture diagram in README | P3 | 38 | r4:docs-dx | Mermaid graph: pitch-core feeding web, egui, Tauri. |
 | 176 | Visual-regression snapshots per CentsGauge needle angle | P3 | 38 | r4:docs-dx | Lock pixel output of gauge at -50/0/+50 cents. |
-| 177 | prefers-reduced-motion handling | P3 | 36 | r1:review |  |
+| 177 | prefers-reduced-motion handling | P3 | 36 | r1:review | [DONE 2026-07-11] |
 | 178 | capo/transpose + pitch-pipe per-string reference | P3 | 36 | r1:review |  |
 | 179 | Distinct vibration patterns: pulse-train flat, long-buzz sharp, double-tap in-tune | P3 | 36 | r2:a11y-deep | Eyes-free directional feedback; small code, big inclusion. |
 | 180 | Modular type scale + 4px spacing tokens with fluid clamp() root | P3 | 36 | r2:design-motion | Design-system foundation for consistent layout. |

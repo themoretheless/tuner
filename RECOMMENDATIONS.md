@@ -2,43 +2,43 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the stable current open-problems extract (`R#`), [TOP-200-current.md](TOP-200-current.md) is the latest grounded audit (`C#`), and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 (`M#`). This file gives detailed implementation recommendations; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (121 open/partial and 59 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+
+**Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
 Главная рекомендация: не начинать с большого переезда в workspace. Сначала сделать границы реальными внутри текущего проекта, покрыть их тестами, а уже потом физически переносить код.
 
-Порядок, синхронизированный с открытым backlog:
+Актуальный порядок оставшейся работы:
 
-1. Зафиксировать текущее поведение тестами.
-2. Ввести shared frame contracts (`DetectionFrame`, `WaveformFrame`, `SpectrumFrame`).
-3. Ввести порты: audio, tone, storage, profile transfer.
-4. Вынести realtime work из cpal callbacks и preallocate hot DSP buffers.
-5. Разрезать `useTuner`, `useTuningState`, `useSettings` на application controllers.
-6. Вынести pure core: pitch, music, practice summary.
-7. Ввести versioned full profile import/export.
-8. Синхронизировать web/Tauri/egui через общий registry/parity tests.
-9. Разрезать UI на feature screens.
-10. Только после этого думать о workspace migration.
+1. Ввести один TS `AudioInputPort` и contract tests для web/native/synthetic.
+2. Перевести web worker на stateful pitch-core/WASM с TS fallback и numeric parity.
+3. Сгенерировать Rust/TS instrument+tuning registry из одного источника.
+4. Передать tuning/A4 context в native processor и удалить compatibility alias.
+5. Разрезать `useTuningState`, затем broad `useTuner`/global settings ownership.
+6. Добавить WAV/property/benchmark/soak/permission/device-loss suites.
+7. Ввести typed diagnostics/errors и завершить accessibility/release gates.
+8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
 
 ## Recommendation Matrix
 
-| Priority | Recommendation | Main Risk Closed | Expected Impact |
+| Status | Priority | Recommendation | Remaining Impact |
 | --- | --- | --- | --- |
-| P0 | Freeze behavior with tests | Refactor regressions | Можно безопасно резать модули |
-| P0 | Extend shared frame contracts | Session/backend frame drift | Viz уже получает plain data; session/native должны догнать |
-| P0 | Move native audio work off callbacks | Realtime safety | egui/Tauri audio перестаёт блокироваться |
-| P0 | Extract practice summary module | Быстрый win, меньше `useTuner` | Первый безопасный срез controller logic |
-| P0 | Split `core/pitch` | Performance logic coupling | Чистый pitch API и conformance base |
-| P0 | Split `core/music` | Domain god-file | Чистая музыкальная модель |
-| P1 | Introduce `AudioInputPort` | Backend leakage into UI | Новый backend без каскада правок |
-| P1 | Create `TunerSessionController` | Lifecycle spread | Единый start/stop/restart/status |
-| P1 | Add versioned `UserProfileV1` | Storage schema drift | Полный backup/migrations |
-| P1 | Split app controllers | `useTuner` god-object | Модули по workflows |
-| P2 | Split feature screens | UI overcrowding/coupling | Tune/Practice/Library/Settings boundaries |
-| P2 | Add preset parity tests | web/egui drift | Один truth source для instruments/tunings |
-| P2 | Split Rust native audio service | Tauri command god-module | Тестируемый native layer |
-| P3 | Workspace migration | Physical structure drift | Механический переезд после стабилизации |
+| Done baseline | P0 | Freeze behavior with tests | Extend to real audio/failure/soak, not another harness rewrite |
+| Partial | P0 | Complete shared frame contract | Add native tuning context and remove alias |
+| Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
+| Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
+| Partial | P0 | Unify pitch core | Rust complete; web WASM convergence remains |
+| Open | P0 | Unify music source | Generate both registries |
+| Next | P0 | Introduce TS `AudioInputPort` | Removes concrete backend branching |
+| Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
+| Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
+| Partial | P1 | Split app controllers | Tuning/settings/root remain broad |
+| Done | P2 | Split feature screens | Keep ports narrow as features grow |
+| Done guard | P2 | Add preset parity tests | Replace guard with codegen by construction |
+| Done | P2 | Split Rust native audio service | Add recovery diagnostics |
+| Deferred | P3 | Further workspace migration | No current benefit over existing crates/modules |
 
 ## P0 Recommendations
 
