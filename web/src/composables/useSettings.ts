@@ -1,249 +1,133 @@
 import { effectScope, ref, watch } from 'vue';
+import { createDefaultSettings, normalizePersistedSettings } from '../settings/normalizeSettings';
+import { decodeUserProfile, encodeUserProfile } from '../settings/profileCodec';
+import type { InstrumentId, InstrumentPreset, NoteName, SweeteningProfileId, Temperament, TemperamentId, Tuning } from '../utils/notes';
 import {
-  INSTRUMENTS,
-  NOTE_NAMES,
-  SWEETENING_PROFILES,
-  TEMPERAMENTS,
-  normalizeTemperamentOffsets,
-  type InstrumentId,
-  type InstrumentPreset,
-  type Note,
-  type NoteName,
-  type SweeteningProfileId,
-  type Temperament,
-  type TemperamentId,
-  type Tuning,
-} from '../utils/notes';
-import type {
-  AudioBackend,
-  DisplayMode,
-  LayoutMode,
-  PracticeHistoryEntry,
-  ThemeMode,
+  loadPersistedSettings,
+  savePersistedSettings,
+  type AudioBackend,
+  type DisplayMode,
+  type LayoutMode,
+  type PersistedSettings,
+  type PracticeHistoryEntry,
+  type ThemeMode,
 } from '../utils/settingsStorage';
-import { loadPersistedSettings, savePersistedSettings } from '../utils/settingsStorage';
 
-const a4 = ref(440);
-const activeInstrument = ref<InstrumentId>('guitar');
-const audioBackend = ref<AudioBackend>('web');
-const capo = ref(0);
+const defaults = createDefaultSettings();
+const a4 = ref(defaults.a4);
+const activeInstrument = ref<InstrumentId>(defaults.activeInstrument);
+const audioBackend = ref<AudioBackend>(defaults.audioBackend);
+const capo = ref(defaults.capo);
+const chromatic = ref(defaults.chromatic);
 const customInstruments = ref<InstrumentPreset[]>([]);
 const customTemperaments = ref<Temperament[]>([]);
 const customTunings = ref<Tuning[]>([]);
-const displayMode = ref<DisplayMode>('gauge');
-const lastTuningId = ref('standard');
-const layoutMode = ref<LayoutMode>('default');
-const leftHanded = ref(false);
-const metronomeBeats = ref(4);
-const metronomeBpm = ref(96);
-const metronomeSubdivision = ref(1);
+const displayMode = ref<DisplayMode>(defaults.displayMode);
+const inTuneTolerance = ref(defaults.inTuneTolerance);
+const lastTuningId = ref(defaults.lastTuningId);
+const layoutMode = ref<LayoutMode>(defaults.layoutMode);
+const leftHanded = ref(defaults.leftHanded);
+const metronomeBeats = ref(defaults.metronomeBeats);
+const metronomeBpm = ref(defaults.metronomeBpm);
+const metronomeSubdivision = ref(defaults.metronomeSubdivision);
 const practiceHistory = ref<PracticeHistoryEntry[]>([]);
-const selectedInputDeviceId = ref('');
-const chromatic = ref(false);
-const inTuneTolerance = ref(5);
-const showSpectrogram = ref(false);
-const showWaveform = ref(true);
-const showSpectrum = ref(true);
+const selectedInputDeviceId = ref(defaults.selectedInputDeviceId);
+const showSpectrogram = ref(defaults.showSpectrogram);
+const showSpectrum = ref(defaults.showSpectrum);
+const showWaveform = ref(defaults.showWaveform);
 const stringOffsets = ref<number[]>([]);
-const sweeteningProfile = ref<SweeteningProfileId>('none');
-const temperament = ref<TemperamentId>('equal');
-const temperamentRoot = ref<NoteName>('A');
-const themeMode = ref<ThemeMode>('dark');
-const transpose = ref(0);
+const sweeteningProfile = ref<SweeteningProfileId>(defaults.sweeteningProfile);
+const temperament = ref<TemperamentId>(defaults.temperament);
+const temperamentRoot = ref<NoteName>(defaults.temperamentRoot);
+const themeMode = ref<ThemeMode>(defaults.themeMode);
+const transpose = ref(defaults.transpose);
 const loaded = ref(false);
 
 let loadPromise: Promise<void> | null = null;
 let watchStarted = false;
 let isLoading = false;
 let saveTimer: number | null = null;
+let saveTail: Promise<void> = Promise.resolve();
 const settingsScope = effectScope(true);
-
-function normalizeA4(value: unknown) {
-  const next = Number(value);
-  if (!Number.isFinite(next)) return 440;
-  return Math.max(420, Math.min(460, Math.round(next)));
-}
-
-function normalizeInstrument(value: unknown, instruments: InstrumentPreset[] = INSTRUMENTS): InstrumentId {
-  return instruments.some((instrument) => instrument.id === value) ? value as InstrumentId : 'guitar';
-}
-
-function normalizeTemperament(value: unknown, temperaments: Temperament[] = TEMPERAMENTS): TemperamentId {
-  return temperaments.some((item) => item.id === value) ? value as TemperamentId : 'equal';
-}
-
-function normalizeSweeteningProfile(value: unknown): SweeteningProfileId {
-  return SWEETENING_PROFILES.some((item) => item.id === value) ? value as SweeteningProfileId : 'none';
-}
-
-function normalizeInteger(value: unknown, min: number, max: number, fallback = min) {
-  const next = Number(value);
-  if (!Number.isFinite(next)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(next)));
-}
-
-function normalizeOffsets(value: unknown): number[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((offset) => normalizeInteger(offset, -25, 25, 0));
-}
-
-function normalizeDisplayMode(value: unknown): DisplayMode {
-  return value === 'needle' || value === 'strobe' ? value : 'gauge';
-}
-
-function normalizeAudioBackend(value: unknown): AudioBackend {
-  return value === 'native' ? 'native' : 'web';
-}
-
-function normalizeThemeMode(value: unknown): ThemeMode {
-  return value === 'light' || value === 'colorblind' ? value : 'dark';
-}
-
-function normalizeLayoutMode(value: unknown): LayoutMode {
-  return value === 'stage' || value === 'compact' ? value : 'default';
-}
-
-function normalizeNoteName(value: unknown, fallback: NoteName = 'A'): NoteName {
-  return NOTE_NAMES.includes(value as NoteName) ? value as NoteName : fallback;
-}
-
-function normalizeNote(value: unknown): Note | null {
-  if (!value || typeof value !== 'object') return null;
-  const item = value as Partial<Note>;
-  if (!NOTE_NAMES.includes(item.name as NoteName)) return null;
-  const octave = normalizeInteger(item.octave, 0, 8, 4);
-  const frequency = Number(item.frequency);
-  return {
-    name: item.name as NoteName,
-    octave,
-    frequency: Number.isFinite(frequency) && frequency > 0 ? frequency : 0,
-  };
-}
-
-function normalizeTunings(value: unknown): Tuning[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((tuning): tuning is Tuning => (
-      tuning &&
-      typeof tuning.id === 'string' &&
-      typeof tuning.name === 'string' &&
-      Array.isArray(tuning.strings)
-    ))
-    .map((tuning) => ({
-      ...tuning,
-      id: tuning.id.trim(),
-      name: tuning.name.trim() || 'Custom tuning',
-      strings: tuning.strings.map(normalizeNote).filter((note): note is Note => !!note),
-      instrument: typeof tuning.instrument === 'string' ? tuning.instrument : undefined,
-      kind: 'custom' as const,
-    }))
-    .filter((tuning) => tuning.id && (tuning.strings.length || tuning.instrument === 'vocal'));
-}
-
-function normalizeInstruments(value: unknown): InstrumentPreset[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((instrument): instrument is InstrumentPreset => (
-      instrument &&
-      typeof instrument.id === 'string' &&
-      typeof instrument.name === 'string' &&
-      typeof instrument.defaultTuningId === 'string'
-    ))
-    .map((instrument) => ({
-      id: instrument.id.trim(),
-      name: instrument.name.trim() || 'Custom instrument',
-      defaultTuningId: instrument.defaultTuningId.trim(),
-      custom: true,
-    }))
-    .filter((instrument) => instrument.id && instrument.defaultTuningId);
-}
-
-function normalizeTemperaments(value: unknown): Temperament[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Temperament => (
-      item &&
-      typeof item.id === 'string' &&
-      typeof item.name === 'string' &&
-      Array.isArray(item.offsets)
-    ))
-    .map((item) => ({
-      id: item.id.trim(),
-      name: item.name.trim() || 'Custom temperament',
-      offsets: normalizeTemperamentOffsets(item.offsets),
-      custom: true,
-    }))
-    .filter((item) => item.id);
-}
-
-function normalizePracticeHistory(value: unknown): PracticeHistoryEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is PracticeHistoryEntry => (
-      entry &&
-      Number.isFinite(Number(entry.at)) &&
-      typeof entry.correct === 'boolean' &&
-      typeof entry.note === 'string'
-    ))
-    .map((entry) => ({
-      at: Number(entry.at),
-      correct: entry.correct,
-      note: entry.note,
-    }))
-    .slice(-500);
-}
 
 async function load() {
   if (loadPromise) return loadPromise;
-
   loadPromise = (async () => {
     isLoading = true;
     try {
-      const saved = await loadPersistedSettings();
-      customInstruments.value = normalizeInstruments(saved.customInstruments);
-      customTemperaments.value = normalizeTemperaments(saved.customTemperaments);
-      customTunings.value = normalizeTunings(saved.customTunings);
-
-      const instrumentOptions = [...INSTRUMENTS, ...customInstruments.value];
-      const temperamentOptions = [...TEMPERAMENTS, ...customTemperaments.value];
-
-      if (saved.a4 != null) a4.value = normalizeA4(saved.a4);
-      if (saved.activeInstrument) activeInstrument.value = normalizeInstrument(saved.activeInstrument, instrumentOptions);
-      if (saved.audioBackend) audioBackend.value = normalizeAudioBackend(saved.audioBackend);
-      if (saved.capo != null) capo.value = normalizeInteger(saved.capo, 0, 12, 0);
-      if (saved.chromatic != null) chromatic.value = Boolean(saved.chromatic);
-      if (saved.displayMode) displayMode.value = normalizeDisplayMode(saved.displayMode);
-      if (saved.inTuneTolerance != null) inTuneTolerance.value = normalizeInteger(saved.inTuneTolerance, 1, 25, 5);
-      if (saved.lastTuningId) lastTuningId.value = saved.lastTuningId;
-      if (saved.layoutMode) layoutMode.value = normalizeLayoutMode(saved.layoutMode);
-      if (saved.leftHanded != null) leftHanded.value = Boolean(saved.leftHanded);
-      if (saved.metronomeBeats != null) metronomeBeats.value = normalizeInteger(saved.metronomeBeats, 1, 12, 4);
-      if (saved.metronomeBpm != null) metronomeBpm.value = normalizeInteger(saved.metronomeBpm, 30, 240, 96);
-      if (saved.metronomeSubdivision != null) metronomeSubdivision.value = normalizeInteger(saved.metronomeSubdivision, 1, 8, 1);
-      practiceHistory.value = normalizePracticeHistory(saved.practiceHistory);
-      if (saved.selectedInputDeviceId != null) selectedInputDeviceId.value = String(saved.selectedInputDeviceId);
-      if (saved.showSpectrogram != null) showSpectrogram.value = saved.showSpectrogram;
-      if (saved.showWaveform != null) showWaveform.value = saved.showWaveform;
-      if (saved.showSpectrum != null) showSpectrum.value = saved.showSpectrum;
-      stringOffsets.value = normalizeOffsets(saved.stringOffsets);
-      if (saved.sweeteningProfile) sweeteningProfile.value = normalizeSweeteningProfile(saved.sweeteningProfile);
-      if (saved.temperament) temperament.value = normalizeTemperament(saved.temperament, temperamentOptions);
-      if (saved.temperamentRoot) temperamentRoot.value = normalizeNoteName(saved.temperamentRoot);
-      if (saved.themeMode) themeMode.value = normalizeThemeMode(saved.themeMode);
-      if (saved.transpose != null) transpose.value = normalizeInteger(saved.transpose, -12, 12, 0);
+      applySettings(await loadPersistedSettings());
+    } catch {
+      applySettings(defaults);
     } finally {
       isLoading = false;
       loaded.value = true;
     }
   })();
-
   return loadPromise;
 }
 
-async function save() {
-  if (!loaded.value || isLoading) return;
+function save() {
+  if (!loaded.value || isLoading) return Promise.resolve();
+  const settings = snapshotSettings();
+  const operation = saveTail
+    .catch(() => {})
+    .then(() => savePersistedSettings(settings));
+  saveTail = operation;
+  return operation;
+}
 
-  await savePersistedSettings({
+function exportUserProfile() {
+  return encodeUserProfile(snapshotSettings());
+}
+
+async function importUserProfile(payload: string) {
+  await load();
+  const profile = decodeUserProfile(payload);
+  if (!profile) return false;
+
+  isLoading = true;
+  try {
+    applySettings(profile.settings);
+  } finally {
+    isLoading = false;
+  }
+  await save();
+  return true;
+}
+
+function applySettings(value: Partial<PersistedSettings>) {
+  const settings = normalizePersistedSettings(value);
+  a4.value = settings.a4;
+  activeInstrument.value = settings.activeInstrument;
+  audioBackend.value = settings.audioBackend;
+  capo.value = settings.capo;
+  chromatic.value = settings.chromatic;
+  customInstruments.value = settings.customInstruments;
+  customTemperaments.value = settings.customTemperaments;
+  customTunings.value = settings.customTunings;
+  displayMode.value = settings.displayMode;
+  inTuneTolerance.value = settings.inTuneTolerance;
+  lastTuningId.value = settings.lastTuningId;
+  layoutMode.value = settings.layoutMode;
+  leftHanded.value = settings.leftHanded;
+  metronomeBeats.value = settings.metronomeBeats;
+  metronomeBpm.value = settings.metronomeBpm;
+  metronomeSubdivision.value = settings.metronomeSubdivision;
+  practiceHistory.value = settings.practiceHistory;
+  selectedInputDeviceId.value = settings.selectedInputDeviceId;
+  showSpectrogram.value = settings.showSpectrogram;
+  showSpectrum.value = settings.showSpectrum;
+  showWaveform.value = settings.showWaveform;
+  stringOffsets.value = settings.stringOffsets;
+  sweeteningProfile.value = settings.sweeteningProfile;
+  temperament.value = settings.temperament;
+  temperamentRoot.value = settings.temperamentRoot;
+  themeMode.value = settings.themeMode;
+  transpose.value = settings.transpose;
+}
+
+function snapshotSettings(): PersistedSettings {
+  return {
     a4: a4.value,
     activeInstrument: activeInstrument.value,
     audioBackend: audioBackend.value,
@@ -271,17 +155,15 @@ async function save() {
     temperamentRoot: temperamentRoot.value,
     themeMode: themeMode.value,
     transpose: transpose.value,
-  });
+  };
 }
 
 function scheduleSave() {
   if (!loaded.value || isLoading) return;
-  if (saveTimer != null) {
-    window.clearTimeout(saveTimer);
-  }
+  if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
     saveTimer = null;
-    void save();
+    void save().catch(() => {});
   }, 150);
 }
 
@@ -309,17 +191,15 @@ function ensureWatcher() {
       practiceHistory,
       selectedInputDeviceId,
       showSpectrogram,
-      showWaveform,
       showSpectrum,
+      showWaveform,
       stringOffsets,
       sweeteningProfile,
       temperament,
       temperamentRoot,
       themeMode,
       transpose,
-    ], () => {
-      scheduleSave();
-    }, { deep: true });
+    ], scheduleSave, { deep: true });
   });
 }
 
@@ -337,26 +217,28 @@ export function useSettings() {
     customTemperaments,
     customTunings,
     displayMode,
+    exportUserProfile,
+    importUserProfile,
     inTuneTolerance,
     lastTuningId,
     layoutMode,
     leftHanded,
+    loaded,
+    load,
     metronomeBeats,
     metronomeBpm,
     metronomeSubdivision,
     practiceHistory,
+    save,
     selectedInputDeviceId,
     showSpectrogram,
-    showWaveform,
     showSpectrum,
+    showWaveform,
     stringOffsets,
     sweeteningProfile,
     temperament,
     temperamentRoot,
     themeMode,
     transpose,
-    loaded,
-    load,
-    save,
   };
 }

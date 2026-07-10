@@ -2,6 +2,7 @@
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { WaveformFrame } from '../composables/useVisualizationFrames'
+import { canvasPalette } from '../utils/canvasPalette'
 
 const props = defineProps<{
   frame: WaveformFrame | null
@@ -17,7 +18,7 @@ const { canvas } = useCanvasRenderer({
 void canvas
 
 function clearCanvas(frame: CanvasFrame) {
-  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillStyle = canvasPalette(frame).background
   frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
@@ -31,10 +32,11 @@ function drawFrame(frame: CanvasFrame) {
   const data = props.frame.samples
   const bufferLength = data.length
 
-  ctx.fillStyle = '#11151b'
+  const palette = canvasPalette(frame)
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
 
-  ctx.strokeStyle = '#22c55e'
+  ctx.strokeStyle = palette.accent
   ctx.lineWidth = 1.5
   ctx.beginPath()
 
@@ -59,7 +61,7 @@ function drawFrame(frame: CanvasFrame) {
   <div class="w-full">
     <canvas
       ref="canvas"
-      class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      class="visual-canvas block w-full rounded-lg border"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
+import { canvasPalette } from '../utils/canvasPalette'
 
 const props = defineProps<{
   history: number[]
@@ -12,14 +13,14 @@ const { canvas } = useCanvasRenderer({
   fallbackWidth: 400,
   source: () => [props.isListening, props.history.length, props.history[props.history.length - 1]],
   draw,
-  deep: true,
 })
 void canvas
 
 function draw(frame: CanvasFrame) {
   const { ctx, w, h } = frame
+  const palette = canvasPalette(frame)
 
-  ctx.fillStyle = '#11151b'
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
 
   if (!props.isListening) return
@@ -28,7 +29,7 @@ function draw(frame: CanvasFrame) {
   if (history.length < 2) return
 
   // Draw center line (0 cents)
-  ctx.strokeStyle = '#475569'
+  ctx.strokeStyle = palette.grid
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(0, h / 2)
@@ -36,7 +37,7 @@ function draw(frame: CanvasFrame) {
   ctx.stroke()
 
   // Draw history line
-  ctx.strokeStyle = '#22c55e'
+  ctx.strokeStyle = palette.accent
   ctx.lineWidth = 2
   ctx.beginPath()
 
@@ -55,7 +56,7 @@ function draw(frame: CanvasFrame) {
   ctx.stroke()
 
   // Draw bounds
-  ctx.strokeStyle = '#ef4444'
+  ctx.strokeStyle = palette.warning
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(0, h / 2 - (50/50)*(h/2))
@@ -70,7 +71,7 @@ function draw(frame: CanvasFrame) {
   <div class="w-full">
     <canvas
       ref="canvas"
-      class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      class="visual-canvas block w-full rounded-lg border"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

@@ -55,11 +55,10 @@ export function useNativeAudioInput() {
     }
     if (isListening.value) return;
 
-    unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
-      frame.value = normalizeNativeFrame(event.payload);
-    });
-
     try {
+      unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
+        frame.value = normalizeNativeFrame(event.payload);
+      });
       await invokeFn('start_native_audio', { range });
       isListening.value = true;
     } catch (nativeError) {
@@ -118,7 +117,8 @@ export function useNativeAudioInput() {
 }
 
 function normalizeNativeFrame(payload: NativeAudioFrame): DetectionFrame {
-  const freq = payload.freq ?? payload.frequency ?? null;
+  const rawFrequency = Number(payload.freq ?? payload.frequency);
+  const freq = Number.isFinite(rawFrequency) && rawFrequency > 0 ? rawFrequency : null;
   return {
     freq,
     confidence: clamp01(Number(payload.confidence) || 0),

@@ -49,6 +49,7 @@ describe('useTunerSession', () => {
     });
 
     await session.start({ minFrequency: 60, maxFrequency: 120 });
+    expect(session.status.value).toBe('listening');
     for (let i = 0; i < 4; i += 1) {
       await vi.runOnlyPendingTimersAsync();
       await nextTick();
@@ -63,7 +64,8 @@ describe('useTunerSession', () => {
     expect(session.detectionFrame.value.freq).toBe(session.detectedFrequency.value);
     expect(Math.abs(session.detectedFrequency.value! - 82.4069)).toBeLessThan(1.5);
 
-    session.stop();
+    await session.stop();
+    expect(session.status.value).toBe('idle');
     expect(session.isListening.value).toBe(false);
     expect(session.detectedFrequency.value).toBeNull();
     expect(session.detectionFrame.value.freq).toBeNull();

@@ -24,7 +24,8 @@ export function usePitchLoop(
   let missedFrames = 0;
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
-  let pitchWorkerPending = false;
+  let pendingPitchRequestId: number | null = null;
+  let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
   const smoother = new FrequencySmoother();
 
@@ -33,13 +34,19 @@ export function usePitchLoop(
     if (pitchWorker) return pitchWorker;
 
     pitchWorker = new Worker(new URL('../workers/pitchWorker.ts', import.meta.url), { type: 'module' });
-    pitchWorker.onmessage = (event: MessageEvent<{ id: number; frequency: number | null }>) => {
-      pitchWorkerPending = false;
+    pitchWorker.onmessage = (event: MessageEvent<{
+      buffer: ArrayBuffer
+      id: number
+      frequency: number | null
+    }>) => {
+      workerTransferBuffer = event.data.buffer;
+      if (event.data.id !== pendingPitchRequestId) return;
+      pendingPitchRequestId = null;
       if (event.data.id !== pitchRequestId) return;
       applyDetectedFrequency(event.data.frequency);
     };
     pitchWorker.onerror = () => {
-      pitchWorkerPending = false;
+      pendingPitchRequestId = null;
       pitchWorker?.terminate();
       pitchWorker = null;
     };
@@ -49,7 +56,8 @@ export function usePitchLoop(
   function disposePitchWorker() {
     pitchWorker?.terminate();
     pitchWorker = null;
-    pitchWorkerPending = false;
+    pendingPitchRequestId = null;
+    workerTransferBuffer = null;
     pitchRequestId += 1;
   }
 
@@ -59,7 +67,6 @@ export function usePitchLoop(
     volume.value = 0;
     missedFrames = 0;
     lastPitchDetectAt = 0;
-    pitchWorkerPending = false;
     pitchRequestId += 1;
     smoother.reset();
   }
@@ -96,7 +103,6 @@ export function usePitchLoop(
     const signalTooQuiet = stats.rms < 0.002 || stats.maxAbs < 0.01;
     if (signalTooQuiet) {
       pitchRequestId += 1;
-      pitchWorkerPending = false;
       applyDetectedFrequency(null);
     } else if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
       lastPitchDetectAt = now;
@@ -116,11 +122,16 @@ export function usePitchLoop(
       applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats, range));
       return;
     }
-    if (pitchWorkerPending) return;
+    if (pendingPitchRequestId != null) return;
 
-    pitchWorkerPending = true;
     pitchRequestId += 1;
-    const buffer = frame.buffer.buffer.slice(0);
+    pendingPitchRequestId = pitchRequestId;
+    const byteLength = frame.buffer.byteLength;
+    const buffer = workerTransferBuffer?.byteLength === byteLength
+      ? workerTransferBuffer
+      : new ArrayBuffer(byteLength);
+    new Float32Array(buffer).set(frame.buffer);
+    workerTransferBuffer = null;
     worker.postMessage({
       id: pitchRequestId,
       buffer,

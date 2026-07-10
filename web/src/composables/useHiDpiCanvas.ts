@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 
 export interface CanvasFrame {
+  canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   h: number;
   w: number;
@@ -22,7 +23,10 @@ export function useHiDpiCanvas(cssHeight: number, fallbackWidth = 520, minWidth 
 
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     const parentWidth = canvas.value.parentElement?.clientWidth || 0;
-    const w = Math.max(minWidth, Math.floor(parentWidth || canvas.value.clientWidth || fallbackWidth));
+    const measuredWidth = canvas.value.clientWidth || fallbackWidth;
+    const w = Math.max(1, Math.floor(
+      parentWidth > 0 ? parentWidth : Math.max(minWidth, measuredWidth),
+    ));
     const h = Math.max(1, Math.floor(cssHeight));
     const targetWidth = Math.round(w * dpr);
     const targetHeight = Math.round(h * dpr);
@@ -36,7 +40,7 @@ export function useHiDpiCanvas(cssHeight: number, fallbackWidth = 520, minWidth 
     }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return { ctx, w, h };
+    return { canvas: canvas.value, ctx, w, h };
   }
 
   function clear(fillStyle = '#11151b') {

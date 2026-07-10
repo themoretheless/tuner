@@ -2,6 +2,7 @@
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
+import { canvasPalette } from '../utils/canvasPalette'
 
 const props = defineProps<{
   frame: SpectrumFrame | null
@@ -18,7 +19,7 @@ const { canvas } = useCanvasRenderer({
 void canvas
 
 function clearCanvas(frame: CanvasFrame) {
-  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillStyle = canvasPalette(frame).background
   frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
@@ -32,7 +33,8 @@ function drawFrame(frame: CanvasFrame) {
   const data = props.frame.bins
   const binCount = data.length
 
-  ctx.fillStyle = '#11151b'
+  const palette = canvasPalette(frame)
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
 
   const sr = props.frame.sampleRate || 48000
@@ -78,16 +80,16 @@ function drawFrame(frame: CanvasFrame) {
 
     // Nice vertical gradient (brighter on top)
     const grad = ctx.createLinearGradient(0, h - barH, 0, h)
-    grad.addColorStop(0, '#4ade80')
-    grad.addColorStop(0.65, '#22c55e')
-    grad.addColorStop(1, '#166534')
+    grad.addColorStop(0, palette.accent)
+    grad.addColorStop(0.65, palette.accent)
+    grad.addColorStop(1, palette.accentStrong)
     ctx.fillStyle = grad
     ctx.fillRect(x1, h - barH, bw, barH)
   }
 
   // Highlight harmonics at correct log positions (crisp lines)
   if (props.currentFreq && props.currentFreq > 40) {
-    ctx.strokeStyle = '#f59e0b'
+    ctx.strokeStyle = palette.warning
     ctx.lineWidth = 1
     for (let harm = 2; harm <= 5; harm++) {
       const harmFreq = props.currentFreq * harm
@@ -110,7 +112,7 @@ function drawFrame(frame: CanvasFrame) {
   <div class="w-full">
     <canvas
       ref="canvas"
-      class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      class="visual-canvas block w-full rounded-lg border"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

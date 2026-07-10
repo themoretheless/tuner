@@ -15,6 +15,7 @@ export function useCanvasRenderer(options: CanvasRendererOptions) {
 
   let rafId: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let themeObserver: MutationObserver | null = null;
   let hasWindowResizeFallback = false;
 
   function cancelScheduledDraw() {
@@ -46,6 +47,13 @@ export function useCanvasRenderer(options: CanvasRendererOptions) {
     hasWindowResizeFallback = true;
   }
 
+  function attachThemeListener() {
+    const root = canvasTools.canvas.value?.closest('.app-root');
+    if (!root || typeof MutationObserver === 'undefined') return;
+    themeObserver = new MutationObserver(scheduleDraw);
+    themeObserver.observe(root, { attributeFilter: ['class'], attributes: true });
+  }
+
   watch(options.source, scheduleDraw, {
     deep: options.deep,
     immediate: true,
@@ -54,6 +62,7 @@ export function useCanvasRenderer(options: CanvasRendererOptions) {
   onMounted(() => {
     canvasTools.setup();
     attachResizeListener();
+    attachThemeListener();
     scheduleDraw();
   });
 
@@ -61,6 +70,8 @@ export function useCanvasRenderer(options: CanvasRendererOptions) {
     cancelScheduledDraw();
     resizeObserver?.disconnect();
     resizeObserver = null;
+    themeObserver?.disconnect();
+    themeObserver = null;
     if (hasWindowResizeFallback) {
       window.removeEventListener('resize', scheduleDraw);
       hasWindowResizeFallback = false;

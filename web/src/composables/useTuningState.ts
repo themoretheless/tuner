@@ -2,6 +2,21 @@ import { computed, ref, watch, type Ref } from 'vue';
 import type { DetectedNote, Note } from '../utils/notes';
 import type { PitchDetectionRange } from '../utils/pitch';
 import {
+  createCustomTemperament,
+  createCustomTuning,
+  createInstrumentProfile,
+  normalizeImportedTunings,
+  type CustomTemperamentPayload,
+  type CustomTuningPayload,
+} from '../domain/customLibrary';
+import {
+  chromaticPracticeNotes,
+  defaultTuningForInstrument,
+  detectionRangeForStrings,
+  offsetsForProfile,
+  tuningsForInstrument,
+} from '../domain/tuningCalculations';
+import {
   INSTRUMENTS,
   NOTE_NAMES,
   SWEETENING_PROFILES,
@@ -13,7 +28,6 @@ import {
   frequencyToNote,
   getCents,
   getNoteDisplay,
-  normalizeTemperamentOffsets,
   noteId,
   noteWithA4,
   scaleTuning,
@@ -28,20 +42,10 @@ import {
 } from '../utils/notes';
 import { useSettings } from './useSettings';
 
+export type { CustomTemperamentPayload, CustomTuningPayload } from '../domain/customLibrary';
+
 const IN_TUNE_THRESHOLD = 5;
 const OUT_OF_TUNE_THRESHOLD = 7;
-
-export interface CustomTuningPayload {
-  id?: string | null;
-  name: string;
-  strings: Note[];
-}
-
-export interface CustomTemperamentPayload {
-  id?: string | null;
-  name: string;
-  offsets: number[];
-}
 
 export interface TuningStateOptions {
   onResetDetection?: () => void;
@@ -74,19 +78,13 @@ export function useTuningState(
     ...TUNINGS,
     ...settings.customTunings.value,
   ]);
-  const allTunings = computed<Tuning[]>(() => {
-    const instrument = activeInstrument.value;
-    const builtInTunings = TUNINGS.filter((tuning) => (
-      tuning.kind === 'chromatic' || tuning.instrument === instrument
-    ));
-    const customTunings = settings.customTunings.value.filter((tuning) => (
-      tuning.instrument === instrument || (!tuning.instrument && instrument === 'guitar')
-    ));
-    return [...builtInTunings, ...customTunings];
-  });
+  const allTunings = computed<Tuning[]>(() => tuningsForInstrument(
+    activeInstrument.value,
+    settings.customTunings.value,
+  ));
   const currentTuning = ref<Tuning>(
     allTunings.value.find((tuning) => tuning.id === settings.lastTuningId.value) ||
-    defaultTuningForInstrument(activeInstrument.value),
+    resolveDefaultTuning(activeInstrument.value),
   );
 
   let inTuneStable = false;
@@ -112,22 +110,10 @@ export function useTuningState(
   const strings = computed(() => baseStrings.value.map((string, index) => (
     applyCentsOffset(string, activeStringOffsets.value[index] ?? 0)
   )));
-  const detectionRange = computed<PitchDetectionRange>(() => {
-    const frequencies = strings.value
-      .map((string) => string.frequency)
-      .filter((frequency) => Number.isFinite(frequency) && frequency > 0);
-
-    if (!frequencies.length) {
-      return activeInstrument.value === 'vocal'
-        ? { minFrequency: 65, maxFrequency: 1100 }
-        : { minFrequency: 24, maxFrequency: 1200 };
-    }
-
-    return {
-      minFrequency: Math.max(20, Math.floor(Math.min(...frequencies) * 0.65)),
-      maxFrequency: Math.min(1800, Math.ceil(Math.max(...frequencies) * 1.45)),
-    };
-  });
+  const detectionRange = computed<PitchDetectionRange>(() => detectionRangeForStrings(
+    strings.value,
+    activeInstrument.value,
+  ));
   const temperamentOffsets = computed(() => temperamentOffsetsByNote(
     temperament.value,
     temperamentRoot.value,
@@ -204,7 +190,7 @@ export function useTuningState(
   function setInstrument(instrument: InstrumentId) {
     if (!instrumentOptions.value.some((item) => item.id === instrument)) return;
     activeInstrument.value = instrument;
-    setTuning(defaultTuningForInstrument(instrument));
+    setTuning(resolveDefaultTuning(instrument));
   }
 
   function setTemperament(nextTemperament: TemperamentId) {
@@ -257,11 +243,8 @@ export function useTuningState(
   }
 
   function saveCustomTuning(payload: CustomTuningPayload) {
-    const name = payload.name.trim() || 'Custom tuning';
-    const strings = payload.strings.map((string) => noteWithA4(string, 440));
-    const id = payload.id || `custom-${Date.now().toString(36)}`;
-    const tuning: Tuning = { id, name, strings, instrument: activeInstrument.value, kind: 'custom' };
-    const nextTunings = settings.customTunings.value.filter((item) => item.id !== id);
+    const tuning = createCustomTuning(payload, activeInstrument.value);
+    const nextTunings = settings.customTunings.value.filter((item) => item.id !== tuning.id);
     settings.customTunings.value = [...nextTunings, tuning];
     setTuning(tuning);
   }
@@ -275,34 +258,19 @@ export function useTuningState(
 
     settings.customTunings.value = settings.customTunings.value.filter((item) => item.id !== id);
     if (currentTuning.value.id === id) {
-      setTuning(defaultTuningForInstrument(activeInstrument.value));
+      setTuning(resolveDefaultTuning(activeInstrument.value));
     }
   }
 
   function saveInstrumentProfile(name: string) {
-    const profileName = name.trim() || 'Custom instrument';
     const profileStrings = strings.value.length ? strings.value : currentTuning.value.strings;
-    if (!profileStrings.length) return null;
-
-    const id = `instrument-${Date.now().toString(36)}`;
-    const tuningId = `${id}-default`;
-    const tuning: Tuning = {
-      id: tuningId,
-      name: `${profileName} Default`,
-      strings: profileStrings.map((string) => noteWithA4(string, 440)),
-      instrument: id,
-      kind: 'custom',
-    };
-    const profile: InstrumentPreset = {
-      id,
-      name: profileName,
-      defaultTuningId: tuningId,
-      custom: true,
-    };
+    const created = createInstrumentProfile(name, profileStrings);
+    if (!created) return null;
+    const { profile, tuning } = created;
 
     settings.customInstruments.value = [...settings.customInstruments.value, profile];
     settings.customTunings.value = [...settings.customTunings.value, tuning];
-    activeInstrument.value = id;
+    activeInstrument.value = profile.id;
     setTuning(tuning);
     return profile;
   }
@@ -312,24 +280,17 @@ export function useTuningState(
     settings.customTunings.value = settings.customTunings.value.filter((item) => item.instrument !== id);
     if (activeInstrument.value === id) {
       activeInstrument.value = 'guitar';
-      setTuning(defaultTuningForInstrument('guitar'));
+      setTuning(resolveDefaultTuning('guitar'));
     }
   }
 
   function saveCustomTemperament(payload: CustomTemperamentPayload) {
-    const name = payload.name.trim() || 'Custom temperament';
-    const id = payload.id || `temperament-${Date.now().toString(36)}`;
-    const item: Temperament = {
-      id,
-      name,
-      offsets: normalizeTemperamentOffsets(payload.offsets),
-      custom: true,
-    };
+    const item = createCustomTemperament(payload);
     settings.customTemperaments.value = [
-      ...settings.customTemperaments.value.filter((current) => current.id !== id),
+      ...settings.customTemperaments.value.filter((current) => current.id !== item.id),
       item,
     ];
-    temperament.value = id;
+    temperament.value = item.id;
     resetDetectionState();
   }
 
@@ -342,7 +303,14 @@ export function useTuningState(
   }
 
   function getRandomPracticeNote() {
-    const availableStrings = strings.value.length ? strings.value : chromaticPracticeNotes();
+    const availableStrings = strings.value.length ? strings.value : chromaticPracticeNotes(
+      activeInstrument.value,
+      a4.value,
+      temperament.value,
+      transpose.value,
+      temperamentRoot.value,
+      temperamentOptions.value,
+    );
     return availableStrings[Math.floor(Math.random() * availableStrings.length)];
   }
 
@@ -351,21 +319,12 @@ export function useTuningState(
   }
 
   function importCustomTunings(tunings: Tuning[]) {
-    const normalized = tunings
-      .filter((tuning) => tuning && typeof tuning.name === 'string' && Array.isArray(tuning.strings))
-      .map((tuning, index) => {
-        const strings = tuning.strings
-          .filter((string) => NOTE_NAMES.includes(string.name) && Number.isFinite(Number(string.octave)))
-          .map((string) => noteWithA4(string, 440));
-        return {
-          id: tuning.id || `custom-import-${Date.now().toString(36)}-${index}`,
-          name: tuning.name.trim() || `Imported ${index + 1}`,
-          strings,
-          instrument: tuning.instrument || activeInstrument.value,
-          kind: 'custom' as const,
-        };
-      })
-      .filter((tuning) => tuning.strings.length > 0);
+    const normalized = normalizeImportedTunings(
+      tunings,
+      activeInstrument.value,
+      Date.now(),
+      new Set(instrumentOptions.value.map((instrument) => instrument.id)),
+    );
 
     if (!normalized.length) return 0;
 
@@ -377,18 +336,12 @@ export function useTuningState(
     return normalized.length;
   }
 
-  function defaultTuningForInstrument(instrument: InstrumentId) {
-    const defaultId = instrumentOptions.value.find((item) => item.id === instrument)?.defaultTuningId || 'standard';
-    return storedTunings.value.find((tuning) => tuning.id === defaultId) ||
-      TUNINGS.find((tuning) => tuning.id === 'standard') ||
-      TUNINGS[0];
-  }
-
-  function chromaticPracticeNotes() {
-    const octaves = activeInstrument.value === 'vocal' ? [3, 4] : [2, 3, 4];
-    return octaves.flatMap((octave) => (
-      NOTE_NAMES.map((name) => noteWithA4({ name, octave }, a4.value, temperament.value, transpose.value, temperamentRoot.value, temperamentOptions.value))
-    ));
+  function resolveDefaultTuning(instrument: InstrumentId) {
+    return defaultTuningForInstrument(
+      instrument,
+      instrumentOptions.value,
+      storedTunings.value,
+    );
   }
 
   watch([
@@ -407,7 +360,7 @@ export function useTuningState(
     }
 
     const saved = allTunings.value.find((tuning) => tuning.id === settings.lastTuningId.value) ||
-      defaultTuningForInstrument(activeInstrument.value);
+      resolveDefaultTuning(activeInstrument.value);
     if (saved.id !== currentTuning.value.id) {
       currentTuning.value = saved;
       selectedStringIndex.value = null;
@@ -464,24 +417,4 @@ export function useTuningState(
     toggleString,
     transpose,
   };
-}
-
-function offsetsForProfile(
-  profile: SweeteningProfileId,
-  instrument: InstrumentId,
-  length: number,
-  customOffsets: number[],
-) {
-  if (profile === 'custom') {
-    return Array.from({ length }, (_, index) => customOffsets[index] ?? 0);
-  }
-
-  if (profile === 'none') {
-    return Array.from({ length }, () => 0);
-  }
-
-  const preferredProfile = SWEETENING_PROFILES.find((item) => item.id === profile) ||
-    SWEETENING_PROFILES.find((item) => item.id === `sweet-${instrument}`);
-  const offsets = preferredProfile?.offsets ?? [];
-  return Array.from({ length }, (_, index) => offsets[index] ?? 0);
 }

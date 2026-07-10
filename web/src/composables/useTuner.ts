@@ -7,7 +7,9 @@ import { useSettings } from './useSettings';
 import { useTunerSession } from './useTunerSession';
 import { useTuningState } from './useTuningState';
 import { useVisualizationFrames } from './useVisualizationFrames';
+import { summarizePractice } from '../domain/practice';
 import type { DetectionFrame } from '../types/frames';
+import { decodeUserProfile } from '../settings/profileCodec';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
 
 export function useTuner() {
@@ -60,8 +62,8 @@ export function useTuner() {
     await session.start(tuning.detectionRange.value);
   }
 
-  function stop() {
-    session.stop();
+  async function stop() {
+    await session.stop();
     referenceTone.stopReferenceTone();
   }
 
@@ -87,12 +89,9 @@ export function useTuner() {
     settings.leftHanded.value = enabled;
   }
 
-  function setAudioBackend(backend: AudioBackend) {
+  async function setAudioBackend(backend: AudioBackend) {
     if (backend !== 'web' && backend !== 'native') return;
-    const shouldRestart = session.isListening.value;
-    if (shouldRestart) stop();
-    settings.audioBackend.value = backend;
-    if (shouldRestart) void start();
+    await session.setAudioBackend(backend);
   }
 
   function clearError() {
@@ -133,9 +132,21 @@ export function useTuner() {
     }, null, 2);
   }
 
+  async function importUserProfile(payload: string) {
+    if (!decodeUserProfile(payload)) return false;
+    const currentStatus = session.status.value;
+    const shouldRestart = currentStatus === 'starting' || currentStatus === 'listening';
+    if (currentStatus !== 'idle') await session.stop();
+    referenceTone.stopReferenceTone();
+    const imported = await settings.importUserProfile(payload);
+    if (shouldRestart) await start();
+    return imported;
+  }
+
   return {
     // state
     isListening: session.isListening,
+    sessionStatus: session.status,
     currentFrequency: session.currentFrequency,
     detectionFrame,
     smoothedFrequency: computed(() => detectionFrame.value.freq),
@@ -236,8 +247,10 @@ export function useTuner() {
     deleteCustomTuning: tuning.deleteCustomTuning,
     deleteInstrumentProfile: tuning.deleteInstrumentProfile,
     exportCustomTunings: tuning.exportCustomTunings,
+    exportUserProfile: settings.exportUserProfile,
     exportPracticeStats,
     importCustomTunings: tuning.importCustomTunings,
+    importUserProfile,
     clearPracticeHistory,
     markEarTraining,
     nextEarTraining: earTraining.nextChallenge,
@@ -254,49 +267,4 @@ export function useTuner() {
     formatFreq: tuning.formatFreq,
     getNoteDisplay: tuning.getNoteDisplay,
   };
-}
-
-function summarizePractice(history: PracticeHistoryEntry[]) {
-  const todayKey = localDateKey(Date.now());
-  const todayEntries = history.filter((entry) => localDateKey(entry.at) === todayKey);
-  const totalCorrect = history.filter((entry) => entry.correct).length;
-  const todayCorrect = todayEntries.filter((entry) => entry.correct).length;
-
-  return {
-    totalAttempts: history.length,
-    totalAccuracy: history.length ? Math.round((totalCorrect / history.length) * 100) : 0,
-    todayAttempts: todayEntries.length,
-    todayAccuracy: todayEntries.length ? Math.round((todayCorrect / todayEntries.length) * 100) : 0,
-    dailyStreak: calculateDailyStreak(history),
-  };
-}
-
-function calculateDailyStreak(history: PracticeHistoryEntry[]) {
-  const days = new Set(history.map((entry) => dayNumber(entry.at)));
-  if (!days.size) return 0;
-
-  const today = dayNumber(Date.now());
-  let cursor = today;
-  if (!days.has(cursor) && days.has(cursor - 1)) {
-    cursor -= 1;
-  }
-
-  let streak = 0;
-  while (days.has(cursor - streak)) {
-    streak += 1;
-  }
-  return streak;
-}
-
-function dayNumber(timestamp: number) {
-  const date = new Date(timestamp);
-  return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 86_400_000);
-}
-
-function localDateKey(timestamp: number) {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }

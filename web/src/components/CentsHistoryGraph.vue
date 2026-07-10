@@ -28,15 +28,15 @@ const polyline = computed(() => {
       <span>{{ t('history') }}</span>
       <span>{{ points.length ? `${points[points.length - 1].cents.toFixed(0)}¢` : '—' }}</span>
     </div>
-    <svg viewBox="0 0 100 40" class="h-14 w-full rounded-lg border border-slate-800 bg-[#0f1319]" preserveAspectRatio="none">
-      <line x1="0" y1="20" x2="100" y2="20" stroke="#334155" stroke-width="0.7" />
-      <line x1="0" y1="11" x2="100" y2="11" stroke="#1f2937" stroke-width="0.5" />
-      <line x1="0" y1="29" x2="100" y2="29" stroke="#1f2937" stroke-width="0.5" />
+    <svg viewBox="0 0 100 40" class="visual-surface h-14 w-full rounded-lg border" preserveAspectRatio="none">
+      <line x1="0" y1="20" x2="100" y2="20" stroke="var(--canvas-grid)" stroke-width="0.7" />
+      <line x1="0" y1="11" x2="100" y2="11" stroke="var(--border)" stroke-width="0.5" />
+      <line x1="0" y1="29" x2="100" y2="29" stroke="var(--border)" stroke-width="0.5" />
       <polyline
         v-if="polyline"
         :points="polyline"
         fill="none"
-        stroke="#4ade80"
+        stroke="var(--canvas-accent)"
         stroke-linecap="round"
         stroke-linejoin="round"
         stroke-width="1.4"

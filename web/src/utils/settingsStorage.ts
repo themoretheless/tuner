@@ -1,4 +1,5 @@
-import { Store } from '@tauri-apps/plugin-store';
+import type { Store } from '@tauri-apps/plugin-store';
+import { createUserProfile, decodeUserProfile } from '../settings/profileCodec';
 import type {
   InstrumentId,
   InstrumentPreset,
@@ -50,6 +51,8 @@ export interface PersistedSettings {
   transpose: number;
 }
 
+const PROFILE_KEY = 'userProfileV1';
+
 const isTauri = typeof globalThis !== 'undefined' &&
   Boolean((globalThis as typeof globalThis & { isTauri?: boolean }).isTauri);
 
@@ -58,6 +61,7 @@ let store: Store | null = null;
 async function getStore() {
   if (!isTauri) return null;
   if (!store) {
+    const { Store } = await import('@tauri-apps/plugin-store');
     store = await Store.load('settings.dat');
   }
   return store;
@@ -93,6 +97,8 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
   if (isTauri) {
     const s = await getStore();
     if (!s) return {};
+    const profile = decodeUserProfile(await s.get<unknown>(PROFILE_KEY));
+    if (profile) return profile.settings;
     return {
       a4: await s.get<number>('a4') ?? undefined,
       activeInstrument: await s.get<InstrumentId>('activeInstrument') ?? undefined,
@@ -123,6 +129,9 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
       transpose: await s.get<number>('transpose') ?? undefined,
     };
   }
+
+  const profile = decodeUserProfile(readJson<unknown>(PROFILE_KEY));
+  if (profile) return profile.settings;
 
   const savedA4 = readLocal('a4');
   const savedChromatic = readLocal('chromatic');
@@ -171,65 +180,14 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
 }
 
 export async function savePersistedSettings(settings: PersistedSettings) {
+  const profile = createUserProfile(settings);
   if (isTauri) {
     const s = await getStore();
     if (!s) return;
-    await s.set('a4', settings.a4);
-    await s.set('activeInstrument', settings.activeInstrument);
-    await s.set('audioBackend', settings.audioBackend);
-    await s.set('capo', settings.capo);
-    await s.set('chromatic', settings.chromatic);
-    await s.set('customInstruments', settings.customInstruments);
-    await s.set('customTemperaments', settings.customTemperaments);
-    await s.set('customTunings', settings.customTunings);
-    await s.set('displayMode', settings.displayMode);
-    await s.set('inTuneTolerance', settings.inTuneTolerance);
-    await s.set('lastTuningId', settings.lastTuningId);
-    await s.set('layoutMode', settings.layoutMode);
-    await s.set('leftHanded', settings.leftHanded);
-    await s.set('metronomeBeats', settings.metronomeBeats);
-    await s.set('metronomeBpm', settings.metronomeBpm);
-    await s.set('metronomeSubdivision', settings.metronomeSubdivision);
-    await s.set('practiceHistory', settings.practiceHistory);
-    await s.set('selectedInputDeviceId', settings.selectedInputDeviceId);
-    await s.set('showSpectrogram', settings.showSpectrogram);
-    await s.set('showSpectrum', settings.showSpectrum);
-    await s.set('showWaveform', settings.showWaveform);
-    await s.set('stringOffsets', settings.stringOffsets);
-    await s.set('sweeteningProfile', settings.sweeteningProfile);
-    await s.set('temperament', settings.temperament);
-    await s.set('temperamentRoot', settings.temperamentRoot);
-    await s.set('themeMode', settings.themeMode);
-    await s.set('transpose', settings.transpose);
+    await s.set(PROFILE_KEY, profile);
     await s.save();
     return;
   }
 
-  writeLocal('a4', settings.a4.toString());
-  writeLocal('activeInstrument', settings.activeInstrument);
-  writeLocal('audioBackend', settings.audioBackend);
-  writeLocal('capo', settings.capo.toString());
-  writeLocal('chromatic', settings.chromatic.toString());
-  writeLocal('customInstruments', JSON.stringify(settings.customInstruments));
-  writeLocal('customTemperaments', JSON.stringify(settings.customTemperaments));
-  writeLocal('customTunings', JSON.stringify(settings.customTunings));
-  writeLocal('displayMode', settings.displayMode);
-  writeLocal('inTuneTolerance', settings.inTuneTolerance.toString());
-  writeLocal('lastTuningId', settings.lastTuningId);
-  writeLocal('layoutMode', settings.layoutMode);
-  writeLocal('leftHanded', settings.leftHanded.toString());
-  writeLocal('metronomeBeats', settings.metronomeBeats.toString());
-  writeLocal('metronomeBpm', settings.metronomeBpm.toString());
-  writeLocal('metronomeSubdivision', settings.metronomeSubdivision.toString());
-  writeLocal('practiceHistory', JSON.stringify(settings.practiceHistory));
-  writeLocal('selectedInputDeviceId', settings.selectedInputDeviceId);
-  writeLocal('showSpectrogram', settings.showSpectrogram.toString());
-  writeLocal('showSpectrum', settings.showSpectrum.toString());
-  writeLocal('showWaveform', settings.showWaveform.toString());
-  writeLocal('stringOffsets', JSON.stringify(settings.stringOffsets));
-  writeLocal('sweeteningProfile', settings.sweeteningProfile);
-  writeLocal('temperament', settings.temperament);
-  writeLocal('temperamentRoot', settings.temperamentRoot);
-  writeLocal('themeMode', settings.themeMode);
-  writeLocal('transpose', settings.transpose.toString());
+  writeLocal(PROFILE_KEY, JSON.stringify(profile));
 }
