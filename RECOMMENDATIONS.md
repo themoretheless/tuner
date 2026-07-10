@@ -2,7 +2,7 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (121 open/partial and 59 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (120 open/partial and 60 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
 **Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
@@ -12,12 +12,12 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Ввести один TS `AudioInputPort` и contract tests для web/native/synthetic.
-2. Перевести web worker на stateful pitch-core/WASM с TS fallback и numeric parity.
-3. Сгенерировать Rust/TS instrument+tuning registry из одного источника.
-4. Передать tuning/A4 context в native processor и удалить compatibility alias.
+1. Добавить общий WASM/native/TS numeric parity manifest и спецификацию fallback/frame semantics.
+2. Сгенерировать Rust/TS instrument+tuning registry из одного источника.
+3. Передать tuning/A4 context в native processor и удалить compatibility alias.
+4. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
 5. Разрезать `useTuningState`, затем broad `useTuner`/global settings ownership.
-6. Добавить WAV/property/benchmark/soak/permission/device-loss suites.
+6. Добавить property/benchmark/soak/permission/device-loss suites.
 7. Ввести typed diagnostics/errors и завершить accessibility/release gates.
 8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
 
@@ -29,9 +29,9 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Partial | P0 | Complete shared frame contract | Add native tuning context and remove alias |
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
-| Partial | P0 | Unify pitch core | Rust complete; web WASM convergence remains |
+| Partial | P0 | Unify pitch core | Stateful WASM is primary; numeric fallback/frame parity remains |
 | Open | P0 | Unify music source | Generate both registries |
-| Next | P0 | Introduce TS `AudioInputPort` | Removes concrete backend branching |
+| Done | P0 | Introduce TS `AudioInputPort` | Discriminated registry and contract tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
 | Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
 | Partial | P1 | Split app controllers | Tuning/settings/root remain broad |
@@ -178,47 +178,45 @@ web/src/utils/notes.ts
 
 ## P1 Recommendations
 
-### 5. Introduce AudioInputPort
+### 5. Introduce AudioInputPort (Implemented)
 
 **Problem**
 
-`useTuner` знает про web audio and native audio одновременно. UI вынужден учитывать `usingNativeAudio` и наличие analyser.
+Исторически session orchestration знала разные lifecycle APIs web/native/synthetic adapters и ветвилась по backend name.
 
 **Recommendation**
 
-Создать audio port and adapters. Это главный шаг к weak coupling audio layer.
+Реализовано: discriminated audio port разделяет raw `audio-frame` и resolved `detection-frame` capabilities. `useTunerSession` выбирает port из registry и управляет общим lifecycle; backend-specific analyser/device capabilities остаются на web adapter.
 
 **Target Files**
 
 ```text
 web/src/ports/audioInput.ts
-web/src/adapters/audio/webAudioInput.ts
-web/src/adapters/audio/tauriNativeAudioInput.ts
-web/src/application/createTunerSession.ts
+web/src/ports/audioInput.ts
+web/src/composables/useAudioInput.ts
+web/src/composables/useNativeAudioInput.ts
+web/src/composables/useSyntheticAudioInput.ts
+web/src/composables/useTunerSession.ts
 ```
 
 **Recommended Contract**
 
 ```ts
-interface AudioInputPort {
-  readonly kind: 'web' | 'native';
-  readonly capabilities: {
-    analyser: boolean;
-    inputDeviceSelection: boolean;
-    native: boolean;
-  };
-  start(options: { range: PitchDetectionRange; deviceId?: string }): Promise<void>;
+interface AudioInputPortBase {
+  readonly id: 'web' | 'native' | 'synthetic';
+  readonly output: 'audio-frame' | 'detection-frame';
+  readonly available: ReadableValue<boolean>;
+  readonly isListening: ReadableValue<boolean>;
+  start(options: { range: PitchDetectionRange }): Promise<boolean>;
   stop(): Promise<void>;
-  setRange(range: PitchDetectionRange): Promise<void>;
-  subscribe(listener: (event: AudioInputEvent) => void): () => void;
 }
 ```
 
 **Definition Of Done**
 
-- `useTuner` не вызывает `useAudioInput` и `useNativeAudioInput` напрямую.
-- UI получает `capabilities`, а не проверяет native backend руками.
-- Добавление третьего backend требует новый adapter, а не переписывание tuning/practice UI.
+- Web/native/synthetic adapters проходят общий lifecycle contract suite.
+- Session сужает capabilities по `output`, а не вызывает backend-specific start/stop branches.
+- Добавление file/WAV backend требует новый adapter и registry row, а не переписывание tuning/practice UI.
 
 ### 6. Create TunerSessionController
 
@@ -441,18 +439,15 @@ Only migrate to workspace when current code already behaves like packages.
 - Workspace migration is mostly path/package config changes.
 - CI can run package-level checks.
 
-### 14. Consider Rust/WASM Pitch Core After Parity
+### 14. Complete Rust/WASM Parity After Primary Convergence
 
 **Problem**
 
-TS/Rust pitch duplication can drift. But moving to WASM too early may slow product iteration.
+Stateful Rust/WASM is now the primary web-worker detector and TypeScript is an explicit fallback. Their numerical behavior and final frame semantics can still drift.
 
 **Recommendation**
 
-First add fixtures and parity. Then decide:
-
-- keep TS+Rust with conformance tests;
-- or move pitch core to Rust and expose WASM.
+Add shared frequency/SNR/range fixtures consumed by Rust and browser tests. Compare cents error, misses and confidence bounds, then decide whether the fallback remains supported or is reduced to a simpler degraded mode.
 
 **Definition Of Done**
 
@@ -461,14 +456,14 @@ First add fixtures and parity. Then decide:
 
 ## Recommended Next 8 Commits
 
-1. `Move tuner lifecycle into session controller`
-2. `Add audio input port contract`
+1. `Add shared WASM/native/TS numeric fixtures`
+2. `Generate the music registry from one source`
 3. `Pass tuning context into native frame path`
-4. `Move egui readout onto DetectionFrame`
-5. `Move native callback work behind queue`
-6. `Split pitch range and smoothing modules`
-7. `Add versioned user profile schema`
-8. `Split useTuner view model slices`
+4. `Add file/WAV input adapter`
+5. `Split tuning selection from library CRUD`
+6. `Inject the settings storage port`
+7. `Add typed pipeline diagnostics`
+8. `Add real-audio and restart soak gates`
 
 This sequence attacks the current P0/P1 open items first: session lifecycle, audio-port boundaries, remaining frame-contract drift, realtime safety and core modularity. Practice extraction is still useful, but it is no longer the first architectural blocker.
 

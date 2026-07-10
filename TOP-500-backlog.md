@@ -2,7 +2,7 @@
 
 > **Canonical master Top 500.** This is a stable option/risk registry, not a list of 500 simultaneously required features. [recommendation.md](recommendation.md) is the current-problem extract, [PLAN.md](PLAN.md) decides execution order, and [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape. Rows marked `[DONE 2026-07-11]` remain here for traceability and are excluded from the current-open count.
 
-Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M24, M25, M26, M29, M39, M40, M41, M44, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
+Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
 
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
@@ -55,7 +55,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 45 | Playwright E2E for mic-permission-denied flow | P2 | 56 | r4:docs-dx | Drive fake getUserMedia, assert permission UI path renders. |
 | 46 | localize hardcoded English in-tune hint | P2 | 55 | r1:review |  |
 | 47 | Goertzel bank locked to 6 selected-string targets and their first 4 harmonics | P2 | 55 | r2:algorithms | Cheap targeted detection when string is known. |
-| 48 | WASM streaming instantiation via instantiateStreaming for pitch-core | P2 | 55 | r4:perf-bundle | When web wires WASM, compile-while-download instead of arrayBuffer fetch. |
+| 48 | WASM streaming instantiation via instantiateStreaming for pitch-core | P2 | 55 | r4:perf-bundle | wasm-bindgen loader uses `instantiateStreaming`; Playwright verifies the live WASM path. [DONE 2026-07-11] |
 | 49 | validate/clamp A4 on load | P3 | 54 | r1:review | [DONE 2026-07-11] |
 | 50 | gate FFT spectrum when viz hidden | P3 | 54 | r1:review | [DONE 2026-07-11] |
 | 51 | reuse YIN difference buffers | P3 | 54 | r1:review | [DONE 2026-07-11] |
