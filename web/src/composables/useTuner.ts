@@ -147,6 +147,7 @@ export function useTuner() {
     // state
     isListening: session.isListening,
     sessionStatus: session.status,
+    detectorBackend: session.detectorBackend,
     currentFrequency: session.currentFrequency,
     detectionFrame,
     smoothedFrequency: computed(() => detectionFrame.value.freq),

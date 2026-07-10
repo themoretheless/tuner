@@ -71,7 +71,11 @@ export function useTunerSession(options: TunerSessionOptions) {
     if (isDetectionFrameInputPort(port)) {
       return port.frame.value ?? createDetectionFrame(null, 0);
     }
-    return createDetectionFrame(pitch.smoothedFrequency.value, pitch.volume.value);
+    return createDetectionFrame(
+      pitch.smoothedFrequency.value,
+      pitch.volume.value,
+      pitch.confidence.value,
+    );
   });
   const detectedFrequency = computed(() => detectionFrame.value.freq);
 
@@ -182,6 +186,11 @@ export function useTunerSession(options: TunerSessionOptions) {
         : pitch.currentFrequency.value
     )),
     detectionFrame,
+    detectorBackend: computed(() => (
+      isDetectionFrameInputPort(activeInputPort.value)
+        ? 'native' as const
+        : pitch.detectorBackend.value
+    )),
     detectedFrequency,
     detectionRange,
     error,
@@ -208,10 +217,11 @@ export function useTunerSession(options: TunerSessionOptions) {
 function createDetectionFrame(
   freq: number | null,
   level: number,
+  confidence = freq == null ? 0 : 1,
 ): DetectionFrame {
   return {
     freq,
-    confidence: freq == null ? 0 : 1,
+    confidence: freq == null ? 0 : Math.max(0, Math.min(1, confidence)),
     rms: 0,
     level,
     cents: 0,

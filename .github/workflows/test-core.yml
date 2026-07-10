@@ -39,7 +39,7 @@ jobs:
           CARGO_INCREMENTAL: 0
 
       - name: Test pitch-core
-        run: cargo test -p pitch-core
+        run: cargo test -p pitch-core --all-features
         env:
           CARGO_INCREMENTAL: 0
 

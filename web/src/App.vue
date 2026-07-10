@@ -79,7 +79,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
         <button type="button" class="utility-button" :aria-label="t('language.toggle')" @click="toggleLang">
           {{ lang === 'ru' ? 'RU' : 'EN' }}
         </button>
-        <div data-testid="session-status" class="session-pill" :data-state="tuner.sessionStatus.value">
+        <div
+          data-testid="session-status"
+          class="session-pill"
+          :data-detector-backend="tuner.detectorBackend.value"
+          :data-state="tuner.sessionStatus.value"
+        >
           <span class="status-dot" aria-hidden="true"></span>
           <span>{{ sessionLabel }}</span>
         </div>

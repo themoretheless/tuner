@@ -1,6 +1,7 @@
 use crate::{
     compute_rms_volume, detect_pitch, downsample_for_pitch, is_likely_power_chord_native,
-    normalize_level, MpmDetector, PitchDetector, Smoother, YinDetector,
+    normalize_level, DetectorConfig, HybridPitchDetector, MpmDetector, PitchDetector, Smoother,
+    YinDetector,
 };
 use wasm_bindgen::prelude::*;
 
@@ -15,6 +16,37 @@ impl PitchDetection {
     #[wasm_bindgen(constructor)]
     pub fn new(freq: f32, confidence: f32) -> Self {
         Self { confidence, freq }
+    }
+}
+
+#[wasm_bindgen]
+pub struct WasmPitchDetector {
+    inner: HybridPitchDetector,
+}
+
+#[wasm_bindgen]
+impl WasmPitchDetector {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            inner: HybridPitchDetector::new(DetectorConfig::default()),
+        }
+    }
+
+    pub fn set_frequency_range(&mut self, min_frequency: f32, max_frequency: f32) {
+        self.inner.set_frequency_range(min_frequency, max_frequency);
+    }
+
+    pub fn detect(&mut self, buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
+        self.inner
+            .detect(buffer, sample_rate)
+            .map(|estimate| PitchDetection::new(estimate.frequency, estimate.confidence))
+    }
+}
+
+impl Default for WasmPitchDetector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -86,5 +118,27 @@ impl WasmSmoother {
 impl Default for WasmSmoother {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stateful_detector_reuses_configuration_and_honors_range() {
+        let sample_rate = 48_000.0;
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| (2.0 * std::f32::consts::PI * 440.0 * index as f32 / sample_rate).sin())
+            .collect();
+        let mut detector = WasmPitchDetector::new();
+        detector.set_frequency_range(400.0, 500.0);
+
+        let result = detector
+            .detect(&samples, sample_rate)
+            .expect("440 Hz detection");
+
+        assert!((result.freq - 440.0).abs() < 2.0);
+        assert!(result.confidence > 0.5);
     }
 }
