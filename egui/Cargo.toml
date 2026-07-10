@@ -9,6 +9,9 @@ egui = "0.27"
 cpal = "0.15"
 pitch-core = { path = "../pitch-core", default-features = false }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+audio-input = { path = "../audio-input" }
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1.7"

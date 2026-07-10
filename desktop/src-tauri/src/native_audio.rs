@@ -1,64 +1,26 @@
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream, StreamConfig};
-use pitch_core::{frequency_to_note, normalize_level};
-use serde::{Deserialize, Serialize};
-use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+mod frame;
+mod stream;
+
+use self::frame::NativeAudioRange;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, State};
+use std::time::Duration;
+use tauri::{AppHandle, State};
 
-const PITCH_WINDOW_SIZE: usize = 4096;
-const EVENT_NAME: &str = "native-audio-frame";
-
-#[derive(Clone, Copy, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NativeAudioRange {
-    min_frequency: f32,
-    max_frequency: f32,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NativeAudioFrame {
-    freq: Option<f32>,
-    frequency: Option<f32>,
-    confidence: f32,
-    rms: f32,
-    level: f32,
-    cents: f32,
-    note: String,
-    target: Option<NativeAudioNote>,
-    in_tune: bool,
-    is_power: bool,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NativeAudioNote {
-    name: String,
-    octave: i32,
-    frequency: f32,
+struct NativeAudioControl {
+    stop: mpsc::Sender<()>,
+    stopped: mpsc::Receiver<()>,
 }
 
 #[derive(Default)]
 pub struct NativeAudioState {
-    stop_signal: Mutex<Option<mpsc::Sender<()>>>,
+    control: Mutex<Option<NativeAudioControl>>,
     range: Arc<Mutex<NativeAudioRange>>,
-}
-
-impl Default for NativeAudioRange {
-    fn default() -> Self {
-        Self {
-            min_frequency: 24.0,
-            max_frequency: 1200.0,
-        }
-    }
 }
 
 #[tauri::command]
 pub fn native_audio_available() -> bool {
-    cpal::default_host().default_input_device().is_some()
+    audio_input::default_input_available()
 }
 
 #[tauri::command]
@@ -69,33 +31,36 @@ pub fn start_native_audio(
 ) -> Result<(), String> {
     set_range(&state, range);
 
-    if state
-        .stop_signal
+    let mut control = state
+        .control
         .lock()
-        .map_err(|_| "Native audio state lock failed")?
-        .is_some()
-    {
+        .map_err(|_| "Native audio state lock failed")?;
+    if control.is_some() {
         return Ok(());
     }
 
     let shared_range = state.range.clone();
-    let (stop_tx, stop_rx) = mpsc::channel::<()>();
-    let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
-
+    let (stop_tx, stop_rx) = mpsc::channel();
+    let (stopped_tx, stopped_rx) = mpsc::channel();
+    let (ready_tx, ready_rx) = mpsc::channel();
     thread::spawn(move || {
         run_audio_thread(app, shared_range, stop_rx, ready_tx);
+        let _ = stopped_tx.send(());
     });
 
     match ready_rx.recv_timeout(Duration::from_secs(2)) {
         Ok(Ok(())) => {
-            *state
-                .stop_signal
-                .lock()
-                .map_err(|_| "Native audio state lock failed")? = Some(stop_tx);
+            *control = Some(NativeAudioControl {
+                stop: stop_tx,
+                stopped: stopped_rx,
+            });
             Ok(())
         }
         Ok(Err(error)) => Err(error),
-        Err(_) => Err("Native audio backend did not start in time".to_string()),
+        Err(_) => {
+            let _ = stop_tx.send(());
+            Err("Native audio backend did not start in time".to_string())
+        }
     }
 }
 
@@ -105,125 +70,38 @@ fn run_audio_thread(
     stop_rx: mpsc::Receiver<()>,
     ready_tx: mpsc::Sender<Result<(), String>>,
 ) {
-    let result = create_input_stream(app, shared_range);
-    let stream = match result {
-        Ok(stream) => stream,
+    let mut runtime = match stream::NativeAudioRuntime::create(app, shared_range) {
+        Ok(runtime) => runtime,
         Err(error) => {
             let _ = ready_tx.send(Err(error));
             return;
         }
     };
 
-    if let Err(error) = stream.play() {
-        let _ = ready_tx.send(Err(format!("Could not start microphone stream: {error}")));
+    if let Err(error) = runtime.play() {
+        let _ = ready_tx.send(Err(error));
+        runtime.stop();
         return;
     }
 
     let _ = ready_tx.send(Ok(()));
     let _ = stop_rx.recv();
-    drop(stream);
-}
-
-fn create_input_stream(
-    app: AppHandle,
-    shared_range: Arc<Mutex<NativeAudioRange>>,
-) -> Result<Stream, String> {
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| "No input microphone found".to_string())?;
-    let supported_config = device
-        .default_input_config()
-        .map_err(|error| format!("Could not read microphone config: {error}"))?;
-    let sample_format = supported_config.sample_format();
-    let config: StreamConfig = supported_config.into();
-    let sample_rate = config.sample_rate.0 as f32;
-
-    match sample_format {
-        SampleFormat::I8 => {
-            build_typed_input_stream::<i8>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::I16 => {
-            build_typed_input_stream::<i16>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::I32 => {
-            build_typed_input_stream::<i32>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::I64 => {
-            build_typed_input_stream::<i64>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::U8 => {
-            build_typed_input_stream::<u8>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::U16 => {
-            build_typed_input_stream::<u16>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::U32 => {
-            build_typed_input_stream::<u32>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::U64 => {
-            build_typed_input_stream::<u64>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::F32 => {
-            build_typed_input_stream::<f32>(&device, &config, sample_rate, app, shared_range)
-        }
-        SampleFormat::F64 => {
-            build_typed_input_stream::<f64>(&device, &config, sample_rate, app, shared_range)
-        }
-        sample_format => Err(format!(
-            "Unsupported microphone sample format: {sample_format}"
-        )),
-    }
-}
-
-fn build_typed_input_stream<T>(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    sample_rate: f32,
-    app: AppHandle,
-    shared_range: Arc<Mutex<NativeAudioRange>>,
-) -> Result<Stream, String>
-where
-    T: Sample + SizedSample,
-    f32: FromSample<T>,
-{
-    let mut buffer = Vec::<f32>::with_capacity(PITCH_WINDOW_SIZE * 2);
-    let mut last_emit = Instant::now() - Duration::from_millis(33);
-    device
-        .build_input_stream(
-            config,
-            move |data: &[T], _| {
-                buffer.extend(data.iter().map(|sample| f32::from_sample(*sample)));
-                if buffer.len() > PITCH_WINDOW_SIZE * 2 {
-                    buffer.drain(..buffer.len() - PITCH_WINDOW_SIZE);
-                }
-                if buffer.len() < PITCH_WINDOW_SIZE
-                    || last_emit.elapsed() < Duration::from_millis(33)
-                {
-                    return;
-                }
-
-                last_emit = Instant::now();
-                let window = &buffer[buffer.len() - PITCH_WINDOW_SIZE..];
-                let range = shared_range.lock().map(|range| *range).unwrap_or_default();
-                let frame = make_native_audio_frame(window, sample_rate, range);
-                let _ = app.emit(EVENT_NAME, frame);
-            },
-            |error| eprintln!("native audio input error: {error}"),
-            None,
-        )
-        .map_err(|error| format!("Could not create microphone stream: {error}"))
+    runtime.stop();
 }
 
 #[tauri::command]
 pub fn stop_native_audio(state: State<'_, NativeAudioState>) -> Result<(), String> {
-    if let Some(stop) = state
-        .stop_signal
+    let control = state
+        .control
         .lock()
         .map_err(|_| "Native audio state lock failed")?
-        .take()
-    {
-        let _ = stop.send(());
+        .take();
+    if let Some(control) = control {
+        let _ = control.stop.send(());
+        control
+            .stopped
+            .recv_timeout(Duration::from_secs(2))
+            .map_err(|_| "Native audio backend did not stop in time")?;
     }
     Ok(())
 }
@@ -239,145 +117,6 @@ pub fn set_native_audio_range(
 
 fn set_range(state: &State<'_, NativeAudioState>, range: NativeAudioRange) {
     if let Ok(mut current) = state.range.lock() {
-        current.min_frequency = range.min_frequency.clamp(20.0, 600.0);
-        current.max_frequency = range.max_frequency.clamp(80.0, 1800.0);
-        if current.max_frequency <= current.min_frequency * 1.2 {
-            *current = NativeAudioRange::default();
-        }
-    }
-}
-
-fn make_native_audio_frame(
-    buffer: &[f32],
-    sample_rate: f32,
-    range: NativeAudioRange,
-) -> NativeAudioFrame {
-    let rms = compute_rms(buffer);
-    let level = normalize_level(rms).clamp(0.0, 1.0);
-    let detection = detect_pitch_yin(
-        buffer,
-        sample_rate,
-        range.min_frequency,
-        range.max_frequency,
-    );
-    let (freq, confidence) = detection.unwrap_or((0.0, 0.0));
-    let freq = if freq > 0.0 { Some(freq) } else { None };
-    let (note, cents) = freq
-        .map(|frequency| frequency_to_note(frequency, 440.0))
-        .unwrap_or_else(|| ("—".to_string(), 0.0));
-
-    NativeAudioFrame {
-        freq,
-        frequency: freq,
-        confidence,
-        rms,
-        level,
-        cents,
-        note,
-        target: None,
-        in_tune: freq.is_some() && cents.abs() <= 5.0,
-        is_power: false,
-    }
-}
-
-fn compute_rms(buffer: &[f32]) -> f32 {
-    (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt()
-}
-
-fn detect_pitch_yin(
-    buffer: &[f32],
-    sample_rate: f32,
-    min_frequency: f32,
-    max_frequency: f32,
-) -> Option<(f32, f32)> {
-    let size = buffer.len();
-    let half = size / 2;
-    if half < 64 {
-        return None;
-    }
-
-    let rms = (buffer.iter().map(|sample| sample * sample).sum::<f32>() / size as f32).sqrt();
-    let max_abs = buffer
-        .iter()
-        .fold(0.0_f32, |max, sample| max.max(sample.abs()));
-    if rms < 0.0025 || max_abs < 0.012 {
-        return None;
-    }
-
-    let min_tau = (sample_rate / max_frequency.max(80.0)).max(1.0) as usize;
-    let max_tau = ((sample_rate / min_frequency.max(20.0)) as usize).min(half);
-    if max_tau <= min_tau + 2 {
-        return None;
-    }
-
-    let mut diff = vec![0.0; half];
-    for tau in min_tau..max_tau {
-        let mut sum = 0.0;
-        for index in 0..half {
-            let delta = buffer[index] - buffer[index + tau];
-            sum += delta * delta;
-        }
-        diff[tau] = sum;
-    }
-
-    let mut yin = vec![0.0; half];
-    yin[0] = 1.0;
-    let mut running_sum = 0.0;
-    for tau in min_tau..max_tau {
-        running_sum += diff[tau];
-        yin[tau] = if running_sum > 0.0 {
-            diff[tau] * (tau as f32 / running_sum)
-        } else {
-            1.0
-        };
-    }
-
-    let mut estimate = None;
-    for tau in min_tau..max_tau {
-        if yin[tau] < 0.12 {
-            let mut best = tau;
-            while best + 1 < max_tau && yin[best + 1] < yin[best] {
-                best += 1;
-            }
-            estimate = Some(best);
-            break;
-        }
-    }
-
-    let (tau, confidence) = match estimate {
-        Some(tau) => (tau, (1.0 - yin[tau]).clamp(0.0, 1.0)),
-        None => {
-            let mut min_value = f32::INFINITY;
-            let mut best = min_tau;
-            for (tau, &value) in yin.iter().enumerate().take(max_tau).skip(min_tau) {
-                if value < min_value {
-                    min_value = value;
-                    best = tau;
-                }
-            }
-            if min_value > 0.35 {
-                return None;
-            }
-            (best, (1.0 - min_value).clamp(0.0, 1.0))
-        }
-    };
-
-    if tau < 2 || tau >= half - 1 {
-        return None;
-    }
-
-    let (x0, x1, x2) = (yin[tau - 1], yin[tau], yin[tau + 1]);
-    let denominator = 2.0 * x1 - x0 - x2;
-    let better_tau = if denominator.abs() > 1e-9 {
-        tau as f32 + (x2 - x0) / (2.0 * denominator)
-    } else {
-        tau as f32
-    };
-    let frequency = sample_rate / better_tau;
-
-    if frequency >= min_frequency && frequency <= max_frequency {
-        Some((frequency, confidence))
-    } else {
-        None
+        *current = range.normalized();
     }
 }

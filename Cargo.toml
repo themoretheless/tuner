@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "audio-input",
     "pitch-core",
     "egui",
     "desktop/src-tauri",

@@ -538,6 +538,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "audio-input"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2473,7 +2480,7 @@ dependencies = [
 name = "guitar-tuner"
 version = "0.1.0"
 dependencies = [
- "cpal",
+ "audio-input",
  "pitch-core",
  "serde",
  "serde_json",
@@ -2487,6 +2494,7 @@ dependencies = [
 name = "guitar-tuner-egui"
 version = "0.1.0"
 dependencies = [
+ "audio-input",
  "console_error_panic_hook",
  "cpal",
  "eframe",
