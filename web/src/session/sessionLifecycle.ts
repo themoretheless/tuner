@@ -1,4 +1,6 @@
-export type SessionBackend = 'web' | 'native' | 'synthetic';
+import type { AudioInputId } from '../ports/audioInput';
+
+export type SessionBackend = AudioInputId;
 
 export type SessionStatus = 'idle' | 'starting' | 'listening' | 'stopping' | 'error';
 

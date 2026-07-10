@@ -1,4 +1,8 @@
-import { onUnmounted, ref } from 'vue';
+import { onUnmounted, ref, type Ref } from 'vue';
+import type {
+  AudioInputStartOptions,
+  DetectionFrameInputPort,
+} from '../ports/audioInput';
 import type { PitchDetectionRange } from '../utils/pitch';
 import type { DetectionFrame } from '../types/frames';
 
@@ -9,7 +13,15 @@ type NativeAudioFrame = DetectionFrame & {
 type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 type ListenFn = <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
 
-export function useNativeAudioInput() {
+export interface NativeAudioInputAdapter extends DetectionFrameInputPort {
+  available: Ref<boolean>;
+  error: Ref<string | null>;
+  frame: Ref<DetectionFrame | null>;
+  isListening: Ref<boolean>;
+  refreshAvailability(): Promise<boolean>;
+}
+
+export function useNativeAudioInput(): NativeAudioInputAdapter {
   const available = ref(false);
   const error = ref<string | null>(null);
   const frame = ref<DetectionFrame | null>(null);
@@ -47,23 +59,25 @@ export function useNativeAudioInput() {
     return available.value;
   }
 
-  async function start(range: PitchDetectionRange) {
+  async function start(options: AudioInputStartOptions) {
     error.value = null;
     if (!await refreshAvailability() || !invokeFn || !listenFn) {
       error.value = 'Native audio backend unavailable';
-      return;
+      return false;
     }
-    if (isListening.value) return;
+    if (isListening.value) return true;
 
     try {
       unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
         frame.value = normalizeNativeFrame(event.payload);
       });
-      await invokeFn('start_native_audio', { range });
+      await invokeFn('start_native_audio', { range: options.range });
       isListening.value = true;
+      return true;
     } catch (nativeError) {
       cleanupListener();
       error.value = nativeError instanceof Error ? nativeError.message : String(nativeError);
+      return false;
     }
   }
 
@@ -80,7 +94,7 @@ export function useNativeAudioInput() {
     }
   }
 
-  async function setRange(range: PitchDetectionRange) {
+  async function setDetectionRange(range: PitchDetectionRange) {
     if (!isListening.value || !invokeFn) return;
     try {
       await invokeFn('set_native_audio_range', { range });
@@ -108,9 +122,11 @@ export function useNativeAudioInput() {
     clearError,
     error,
     frame,
+    id: 'native',
     isListening,
+    output: 'detection-frame',
     refreshAvailability,
-    setRange,
+    setDetectionRange,
     start,
     stop,
   };

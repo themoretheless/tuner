@@ -1,19 +1,32 @@
-import { onMounted, onUnmounted, ref, type Ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
+import type { AudioFrame, AudioFrameInputPort } from '../ports/audioInput';
 import { createAudioContext, errorMessage } from '../utils/audio';
 
 const DEFAULT_SAMPLE_RATE = 44100;
 
-export interface AudioFrame {
-  buffer: Float32Array<ArrayBuffer>;
-  sampleRate: number;
+export type { AudioFrame } from '../ports/audioInput';
+
+export interface WebAudioInputAdapter extends AudioFrameInputPort {
+  analyser: Ref<AnalyserNode | null>;
+  inputDevices: Ref<MediaDeviceInfo[]>;
+  refreshInputDevices(): Promise<void>;
+  sampleRate: Ref<number>;
+  selectedInputDeviceId: Ref<string>;
+  setInputDevice(deviceId: string): Promise<void>;
 }
 
-export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096) {
+export function useAudioInput(
+  selectedInputDeviceId: Ref<string>,
+  fftSize = 4096,
+): WebAudioInputAdapter {
   const isListening = ref(false);
   const error = ref<string | null>(null);
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
   const sampleRate = ref(DEFAULT_SAMPLE_RATE);
+  const available = computed(() => (
+    typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
+  ));
 
   let audioContext: AudioContext | null = null;
   let stream: MediaStream | null = null;
@@ -21,7 +34,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
   let timeDomainBuffer: Float32Array<ArrayBuffer> | null = null;
 
   async function refreshInputDevices() {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       inputDevices.value = devices.filter((device) => device.kind === 'audioinput');
@@ -40,7 +53,11 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
 
   async function start() {
     error.value = null;
-    if (isListening.value) return;
+    if (isListening.value) return true;
+    if (!available.value) {
+      error.value = 'Microphone API unavailable';
+      return false;
+    }
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -81,15 +98,17 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
       analyser.value = nextAnalyser;
       isListening.value = true;
       void refreshInputDevices();
+      return true;
     } catch (e: unknown) {
       error.value = errorMessage(e, 'Microphone access denied or unavailable');
       cleanup();
+      return false;
     }
   }
 
   function handleTrackEnded() {
     error.value = 'Microphone disconnected';
-    stop();
+    void stop();
   }
 
   function cleanup() {
@@ -111,7 +130,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     timeDomainBuffer = null;
   }
 
-  function stop() {
+  async function stop() {
     cleanup();
     isListening.value = false;
   }
@@ -123,7 +142,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
   async function setInputDevice(deviceId: string) {
     selectedInputDeviceId.value = deviceId;
     if (!isListening.value) return;
-    stop();
+    await stop();
     await start();
   }
 
@@ -149,15 +168,18 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
 
   onUnmounted(() => {
     navigator.mediaDevices?.removeEventListener?.('devicechange', refreshInputDevices);
-    stop();
+    void stop();
   });
 
   return {
     analyser,
+    available,
     clearError,
     error,
+    id: 'web',
     inputDevices,
     isListening,
+    output: 'audio-frame',
     readFrame,
     refreshInputDevices,
     sampleRate,

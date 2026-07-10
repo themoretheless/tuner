@@ -1,11 +1,20 @@
-import { computed, onUnmounted, ref } from 'vue';
-import type { AudioFrame } from './useAudioInput';
+import { computed, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
+import type { AudioFrame, AudioFrameInputPort } from '../ports/audioInput';
 import { fillSyntheticAudioBuffer, type SyntheticAudioFixture } from '../utils/syntheticAudio';
 
 const DEFAULT_FFT_SIZE = 4096;
 const DEFAULT_SAMPLE_RATE = 44100;
 
-export function useSyntheticAudioInput(fixture: SyntheticAudioFixture | null, fftSize = DEFAULT_FFT_SIZE) {
+export interface SyntheticAudioInputAdapter extends AudioFrameInputPort {
+  enabled: ComputedRef<boolean>;
+  fixture: SyntheticAudioFixture | null;
+  sampleRate: Ref<number>;
+}
+
+export function useSyntheticAudioInput(
+  fixture: SyntheticAudioFixture | null,
+  fftSize = DEFAULT_FFT_SIZE,
+): SyntheticAudioInputAdapter {
   const error = ref<string | null>(null);
   const isListening = ref(false);
   const sampleRate = ref(fixture?.sampleRate ?? DEFAULT_SAMPLE_RATE);
@@ -14,18 +23,19 @@ export function useSyntheticAudioInput(fixture: SyntheticAudioFixture | null, ff
   let buffer = new Float32Array(fftSize) as Float32Array<ArrayBuffer>;
   let sampleCursor = 0;
 
-  function start() {
+  async function start() {
     error.value = null;
     if (!fixture) {
       error.value = 'No synthetic audio fixture selected';
-      return;
+      return false;
     }
     sampleRate.value = fixture.sampleRate;
     sampleCursor = 0;
     isListening.value = true;
+    return true;
   }
 
-  function stop() {
+  async function stop() {
     isListening.value = false;
     sampleCursor = 0;
   }
@@ -48,14 +58,19 @@ export function useSyntheticAudioInput(fixture: SyntheticAudioFixture | null, ff
     error.value = null;
   }
 
-  onUnmounted(stop);
+  onUnmounted(() => {
+    void stop();
+  });
 
   return {
+    available: enabled,
     clearError,
     enabled,
     error,
     fixture,
+    id: 'synthetic',
     isListening,
+    output: 'audio-frame',
     readFrame,
     sampleRate,
     start,

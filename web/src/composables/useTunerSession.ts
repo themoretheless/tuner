@@ -4,6 +4,12 @@ import { useNativeAudioInput } from './useNativeAudioInput';
 import { usePitchLoop } from './usePitchLoop';
 import { useSyntheticAudioInput } from './useSyntheticAudioInput';
 import {
+  isAudioFrameInputPort,
+  isDetectionFrameInputPort,
+  type AudioInputPort,
+  type AudioInputPortRegistry,
+} from '../ports/audioInput';
+import {
   SessionLifecycle,
   type SessionBackend,
   type SessionLifecycleSnapshot,
@@ -25,6 +31,11 @@ export function useTunerSession(options: TunerSessionOptions) {
   const syntheticAudio = useSyntheticAudioInput(
     'syntheticFixture' in options ? options.syntheticFixture ?? null : syntheticAudioFixtureFromLocation(),
   );
+  const inputPorts: AudioInputPortRegistry = {
+    web: audio,
+    native: nativeAudio,
+    synthetic: syntheticAudio,
+  };
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
   const lifecycleSnapshot = ref<SessionLifecycleSnapshot>({
     activeBackend: null,
@@ -43,22 +54,29 @@ export function useTunerSession(options: TunerSessionOptions) {
     return usingNativeAudio.value ? 'native' : 'web';
   }
 
+  const activeInputPort = computed<AudioInputPort>(() => (
+    inputPorts[lifecycleSnapshot.value.activeBackend ?? requestedBackend()]
+  ));
+
   const pitch = usePitchLoop(
-    () => usingSyntheticAudio.value ? syntheticAudio.readFrame() : audio.readFrame(),
+    () => {
+      const port = activeInputPort.value;
+      return isAudioFrameInputPort(port) ? port.readFrame() : null;
+    },
     detectionRange,
   );
 
   const detectionFrame = computed<DetectionFrame>(() => {
-    if (usingNativeAudio.value) {
-      return nativeAudio.frame.value ?? createDetectionFrame(null, 0);
+    const port = activeInputPort.value;
+    if (isDetectionFrameInputPort(port)) {
+      return port.frame.value ?? createDetectionFrame(null, 0);
     }
     return createDetectionFrame(pitch.smoothedFrequency.value, pitch.volume.value);
   });
   const detectedFrequency = computed(() => detectionFrame.value.freq);
 
   const error = computed(() => {
-    if (usingSyntheticAudio.value) return syntheticAudio.error.value;
-    return usingNativeAudio.value ? nativeAudio.error.value : audio.error.value;
+    return activeInputPort.value.error.value;
   });
 
   const status = computed(() => {
@@ -99,33 +117,17 @@ export function useTunerSession(options: TunerSessionOptions) {
   async function startAdapter(backend: SessionBackend) {
     clearError();
     pitch.reset();
-
-    if (backend === 'synthetic') {
-      pitch.reset();
-      syntheticAudio.start();
-      if (syntheticAudio.isListening.value) {
-        pitch.start();
-      }
-      return syntheticAudio.isListening.value;
-    }
-
-    if (backend === 'native') {
-      await nativeAudio.start(detectionRange.value);
-      return nativeAudio.isListening.value;
-    }
-
-    await audio.start();
-    if (audio.isListening.value) {
+    const port = inputPorts[backend];
+    const started = await port.start({ range: detectionRange.value });
+    if (started && isAudioFrameInputPort(port)) {
       pitch.start();
     }
-    return audio.isListening.value;
+    return started && port.isListening.value;
   }
 
   async function stopAdapter(backend: SessionBackend) {
     pitch.stop();
-    if (backend === 'web') audio.stop();
-    if (backend === 'synthetic') syntheticAudio.stop();
-    if (backend === 'native') await nativeAudio.stop();
+    await inputPorts[backend].stop();
   }
 
   function stop() {
@@ -138,7 +140,9 @@ export function useTunerSession(options: TunerSessionOptions) {
 
   function setDetectionRange(range: PitchDetectionRange) {
     detectionRange.value = range;
-    void nativeAudio.setRange(range);
+    for (const port of Object.values(inputPorts)) {
+      if (isDetectionFrameInputPort(port)) void port.setDetectionRange(range);
+    }
   }
 
   async function setAudioBackend(backend: AudioBackend) {
@@ -157,16 +161,11 @@ export function useTunerSession(options: TunerSessionOptions) {
   }
 
   function clearError() {
-    audio.clearError();
-    nativeAudio.clearError();
-    syntheticAudio.clearError();
+    for (const port of Object.values(inputPorts)) port.clearError();
   }
 
   function adapterIsListening(backend: SessionBackend | null) {
-    if (backend === 'synthetic') return syntheticAudio.isListening.value;
-    if (backend === 'native') return nativeAudio.isListening.value;
-    if (backend === 'web') return audio.isListening.value;
-    return false;
+    return backend ? inputPorts[backend].isListening.value : false;
   }
 
   onUnmounted(() => {
@@ -177,7 +176,11 @@ export function useTunerSession(options: TunerSessionOptions) {
     analyser: audio.analyser,
     audioSampleRate: audio.sampleRate,
     clearError,
-    currentFrequency: computed(() => usingNativeAudio.value ? detectionFrame.value.freq : pitch.currentFrequency.value),
+    currentFrequency: computed(() => (
+      isDetectionFrameInputPort(activeInputPort.value)
+        ? detectionFrame.value.freq
+        : pitch.currentFrequency.value
+    )),
     detectionFrame,
     detectedFrequency,
     detectionRange,
@@ -202,7 +205,10 @@ export function useTunerSession(options: TunerSessionOptions) {
   };
 }
 
-function createDetectionFrame(freq: number | null, level: number): DetectionFrame {
+function createDetectionFrame(
+  freq: number | null,
+  level: number,
+): DetectionFrame {
   return {
     freq,
     confidence: freq == null ? 0 : 1,
