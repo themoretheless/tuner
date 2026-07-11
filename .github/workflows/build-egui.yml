@@ -68,7 +68,7 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             EXT=".exe"
           fi
-          cp "egui/target/${{ matrix.target }}/release/${BINARY}${EXT}" "release-artifacts/guitar-tuner-egui-${{ matrix.os }}-${{ matrix.target }}${EXT}"
+          cp "target/${{ matrix.target }}/release/${BINARY}${EXT}" "release-artifacts/guitar-tuner-egui-${{ matrix.os }}-${{ matrix.target }}${EXT}"
 
       - name: Upload egui artifacts
         uses: actions/upload-artifact@v4
