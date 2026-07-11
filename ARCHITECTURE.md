@@ -21,16 +21,16 @@ Strengths:
 
 Remaining weaknesses:
 - `useTuner.ts` is still a broad composition root and `useTuningState.ts` remains the largest web workflow controller (~340 lines).
-- Detector numeric parity is specified, but smoothing/confidence and final frame semantics are not yet unified.
+- Detector numeric parity and Rust/TypeScript smoothing traces are specified; coarse fallback confidence, power flags and full-frame WASM ownership are not yet unified.
 - Tuning data is single-source, while note/cents math still has separate TS and Rust implementations.
-- A file/WAV input adapter is still missing, and Tauri tuning context is overlaid in Vue rather than resolved by the native frame producer.
+- A file/WAV input adapter is still missing; Tauri now resolves A4/tuning/selected-target context natively through a typed revisioned configuration.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
 - Error taxonomy, diagnostics, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
 - egui persistence and the egui WASM singleton are still separate platform-specific designs.
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md), the grounded code audit in [TOP-200-current.md](TOP-200-current.md), and the full ranked Top 500 in [TOP-500-backlog.md](TOP-500-backlog.md).
 
-The current list contains 118 open/partial `R#` findings and a 62-item closure registry. The Top 500 remains a full idea/risk register; done rows are retained with `[DONE 2026-07-11]` for traceability.
+The current list contains 115 open/partial `R#` findings and a 65-item closure registry. The Top 500 remains a full idea/risk register; done rows are retained with `[DONE 2026-07-11]` for traceability.
 
 ## Implemented Dependency Shape
 
@@ -51,10 +51,24 @@ flowchart LR
   Fixtures --> WasmWorker
   WasmWorker --> Composition["useTuner composition root"]
   Tauri --> Composition
+  Composition --> FrameContext["resolved FrameContext value"]
+  FrameContext --> Tauri
   Profile["UserProfileV1 + storage adapter"] --> Composition
   Composition --> Ports["Feature ports"]
   Ports --> Views["Tuner / Library / Practice / Analysis"]
 ```
+
+## Resolved Native Frame Boundary
+
+The native path now separates configuration from streaming data:
+
+1. The web music domain resolves A4, temperament, transpose/capo, sweetening and selected-string choices into plain note targets.
+2. `FrameContext` carries only values: display targets, tuning targets, selected/idle targets and in-tune thresholds. Tauri does not import or know Vue settings concepts.
+3. Tauri validates and caps the payload, stores it with a revision, and clones target arrays only when that revision changes. The audio worker checks the revision before updating its processor.
+4. `pitch-core::FrameResolver` owns closest-target selection, note display, cents and 5/7-cent hysteresis; `TunerEngine` remains responsible for detector/smoother/spectrum orchestration.
+5. Tauri emits one canonical `DetectionFrame`; Vue uses that native frame directly. The removed top-level `frequency` alias cannot silently revive because Rust serialization and TypeScript normalization both have contract tests.
+
+This shape deliberately sends resolved targets instead of teaching Tauri about every custom temperament/profile schema. It keeps the platform adapter weakly coupled to product settings while leaving shared TS/Rust note-math convergence as an independent next migration.
 
 ## 10 Different Critics — From-Scratch Design Perspectives
 
@@ -144,7 +158,7 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 | DSP/audio | Detector modules/trait, optional spectrum and reusable buffers shipped | Stateful web WASM and benchmarks |
 | Vue | Four feature views and plain visual frames shipped | Split tuning/settings controllers |
 | Rust library | `lib.rs` is a small re-export layer over focused modules | Consider crate split only if module boundaries prove insufficient |
-| Portability | Native shells share input/core/frame contracts | Web detector and native tuning context still differ |
+| Portability | Native shells share input/core/frame contracts; Tauri consumes typed resolved context | Full-frame browser WASM and fallback confidence still differ |
 | QA | Synthetic, lifecycle, profile, core and E2E tests shipped | Real WAV, parity, property and failure suites |
 | Performance | Native callback DSP/allocations removed; hidden FFT gated | Web remains RAF-driven; spectrum frame owns a Vec |
 | Product design | Task-based views, explicit states, themes and responsive layout shipped | Diagnostics and automated visual/a11y coverage |
@@ -193,7 +207,7 @@ egui/src/
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
 - Extract magic numbers into config structs.
 
-**Status 2026-07-11: mostly done.** pitch-core, Tauri and egui use `DetectionFrame`; Vue visualizers consume plain frames; heavy views are gated/lazy; web detection runs in pitch-core/WASM. Remaining: send active tuning/A4 into native processing, remove the compatibility `frequency` alias and converge web/native frame assembly semantics.
+**Status 2026-07-11: done for the native/shared boundary.** pitch-core, Tauri and egui use `DetectionFrame`; Vue visualizers consume plain frames; heavy views are gated/lazy; web detection runs in pitch-core/WASM. `FrameResolver` owns target/cents/hysteresis, Tauri consumes active A4/temperament/tuning/selected-target context, Vue trusts native frame semantics, and the top-level `frequency` alias is gone. Full-frame browser WASM remains part of confidence/core convergence rather than this boundary.
 
 ### Phase 1 — Strengthen the Core (highest value)
 - Split `pitch-core`:
@@ -204,7 +218,7 @@ egui/src/
 - Introduce `trait PitchDetector`.
 - Improve WASM exports to a higher-level API.
 
-**Status 2026-07-11: structural split and stateful WASM detector done.** `dsp/{detector,yin,mpm,power}`, `spectrum`, `wasm`, `signal`, `smoother`, `frames`, `domain` and `engine` have focused owners; `PitchDetector` and `EngineConfig` exist; hot detector buffers are reused. Remaining: inject the detector into `TunerEngine`, expose a full-frame WASM processor and remove owned spectrum cloning.
+**Status 2026-07-11: structural split and stateful WASM detector done.** `dsp/{detector,yin,mpm,power}`, `spectrum`, `wasm`, `signal`, `smoother`, `frames`, `resolution`, `domain` and `engine` have focused owners; `PitchDetector`, `FrameResolver` and `EngineConfig` exist; hot detector buffers are reused. Remaining: inject the detector into `TunerEngine`, expose a full-frame WASM processor and remove owned spectrum cloning.
 
 ### Phase 2 — Audio Abstraction Layer
 - Define `AudioInput` trait + implementations.
@@ -243,18 +257,18 @@ egui/src/
 - AudioWorklet spike for web.
 - Better WASM packaging.
 
-**Status 2026-07-11: baseline done.** `40` Vitest tests, `10` pitch-core all-feature tests, native adapter tests, three Playwright flows, clippy/workspace tests, production build and full Tauri bundle pass. Remaining: real WAV/property/benchmark/soak/visual/permission suites and pinned WASM tooling.
+**Status 2026-07-11: baseline done.** `46` Vitest tests, `13` pitch-core all-feature tests, native context/wire tests, three Playwright flows, clippy/workspace tests, core and egui WASM checks, production build and full Tauri bundle pass. Remaining: real WAV/property/benchmark/soak/visual/permission suites and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
 - Update all docs, examples, onboarding guide.
 
-**Status 2026-07-11: documentation synchronized.** README, architecture, recommendation and Top 500 status markers use the same counts/evidence. Compatibility facades remain until native tuning-context and shared note-math migrations are complete.
+**Status 2026-07-11: documentation synchronized.** README, architecture, recommendation and Top 500 status markers use the same counts/evidence. Compatibility facades remain until shared note-math/full-frame WASM migrations are complete.
 
 ## Immediate Next Actions (Concrete)
 
-1. Pass active tuning/A4/range to Tauri native processing, unify smoothing/confidence and remove the `frequency` alias.
-2. Converge TS/Rust note and cents math on generated or WASM-backed ownership.
+1. Converge TS/Rust note and cents math on generated or WASM-backed ownership.
+2. Specify confidence semantics and expose a full-frame browser WASM processor.
 3. Add a file/WAV `AudioInputPort`, permission/device-loss E2E, criterion benchmarks and a restart soak test.
 4. Split `useTuningState.ts` into selection/target and temperament workflow controllers.
 5. Add typed diagnostics/errors, then enforce CSP/signing/checksum/dependency release gates.
@@ -562,7 +576,7 @@ The following categorized list (200 items) was created to be implementation-conc
 199. User satisfaction micro-survey (anonymous, 1-click "useful?") after 10 successful tunings.
 200. Maintain a living "What we deliberately chose not to do" section (anti-roadmap) in ARCHITECTURE.md.
 
-**Next step after the 2026-07-11 implementation pass:** do not start another horizontal feature batch. Audio ports, detector parity and generated music data are complete; finish native frame/smoothing semantics and shared note math next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
+**Next step after the 2026-07-11 implementation pass:** do not start another horizontal feature batch. Audio ports, native frame semantics, smoothing parity and generated music data are complete; finish shared note math/confidence and file/WAV input next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
 
 ### Статус интеграции бэклогов
 - [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`).
@@ -621,7 +635,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, three adapters | Add file/WAV implementation when fixture ingestion lands |
 | Partial | Tone port | `useReferenceTone.ts`, egui `AudioManager` | Define commands/capabilities without sharing platform code |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
-| Partial | Pitch domain | Native/WASM/TS share detector fixtures | Unify smoothing/confidence and full-frame semantics |
+| Partial | Pitch domain | Native/WASM/TS share detector fixtures; Rust/TS share smoothing traces; native frame context is resolved | Unify note math, fallback confidence, power flags and full-frame WASM semantics |
 | Partial | Practice workflow | `domain/practice.ts`, `useEarTraining.ts` | Move mark/challenge flow out of `useTuner` |
 | Done | Profile persistence | `settings/profileCodec.ts`, `normalizeSettings.ts` | Add migration only when V2 exists |
 | Open | Diagnostics | Scattered platform errors | Add typed categories and mic health view model |
@@ -632,7 +646,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 
 1. `[done]` Serialize `start/stop/restart/fail` with explicit session status.
 2. `[done]` Add one TS `AudioInputPort` for web/native/synthetic adapters with contract tests.
-3. `[next]` Move native tuning context and smoothing/confidence into `DetectionFrame`, then remove alias.
+3. `[done]` Move native tuning context and smoothing semantics into `DetectionFrame`, then remove alias.
 4. `[done]` Move egui readout onto the shared Rust `DetectionFrame`.
 5. `[partial]` Extract practice pure logic; move remaining challenge commands next.
 6. `[partial]` Add feature ports and custom-library controller; continue shrinking selection/temperament ownership.
@@ -1210,11 +1224,11 @@ Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M3
 
 The synchronized problem map is split by purpose:
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
-- [recommendation.md](recommendation.md) - current grounded extract: 118 open/partial and 62 closed stable `R#` references.
+- [recommendation.md](recommendation.md) - current grounded extract: 115 open/partial and 65 closed stable `R#` references.
 - [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` audit; use its evidence only after checking the status overlay because this pass supersedes many findings.
 
 Key highlights that directly block the target architecture:
-- Complete native tuning context, smoothing/frame semantics and file/WAV input (`R9`, `R17`, `R73`).
+- Complete shared note math, confidence/full-frame WASM semantics and file/WAV input (`R15`, `R17`, `R73`).
 - Split remaining web coupling surfaces (`R1`, `R6`, `R7`, `R10`, `R49`).
 - Converge note math and define shared smoothing/power semantics (`R15`, `R17-R18`, `R105-R110`).
 - Remove enabled-spectrum frame allocation and decouple web detection from paint cadence (`R26-R28`, `R76`, `R87`).

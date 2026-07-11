@@ -2,9 +2,9 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (118 open/partial and 62 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (115 open/partial and 65 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native `DetectionFrame`, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -12,8 +12,8 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Передать tuning/A4/smoothing context в native processor и удалить compatibility alias.
-2. Свести TS/Rust note+cents math к generated или WASM-backed owner.
+1. Свести TS/Rust note+cents math к generated или WASM-backed owner.
+2. Определить confidence semantics и довести browser path до full-frame WASM processor.
 3. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
 4. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
 5. Расширить shared pitch manifest реальными лицензированными WAV fixtures.
@@ -26,10 +26,10 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Status | Priority | Recommendation | Remaining Impact |
 | --- | --- | --- | --- |
 | Done baseline | P0 | Freeze behavior with tests | Extend to real audio/failure/soak, not another harness rewrite |
-| Partial | P0 | Complete shared frame contract | Add native tuning context and remove alias |
+| Done | P0 | Complete shared frame contract | Keep `FrameContext` wire tests and revisioned native configuration green |
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
-| Partial | P0 | Unify pitch core | Detector parity is gated; smoothing/full-frame semantics remain |
+| Partial | P0 | Unify pitch core | Detector and smoothing parity are gated; confidence/full-frame WASM and power flags remain |
 | Done data | P0 | Unify music source | One workspace registry feeds Rust generation and web domain data |
 | Done | P0 | Introduce TS `AudioInputPort` | Discriminated registry and contract tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
@@ -443,11 +443,11 @@ Only migrate to workspace when current code already behaves like packages.
 
 **Problem**
 
-Stateful Rust/WASM is the primary web-worker detector and TypeScript is an explicit fallback. B0-E5 detector behavior now shares ranges, harmonics, DC-offset cases and cents budgets; smoothing/confidence and final frame semantics can still drift.
+Stateful Rust/WASM is the primary web-worker detector and TypeScript is an explicit fallback. B0-E5 detector behavior shares ranges, harmonics, DC-offset cases and cents budgets; Rust and TypeScript smoothing share exact traces and clear-on-silence. Confidence meaning and full browser-frame assembly can still drift when the explicit TypeScript fallback is active.
 
 **Recommendation**
 
-Extend the current manifest with real WAV/SNR cases and separately specify smoothing/confidence frame traces. Keep the fallback only while those gates remain green.
+Extend the current manifests with real WAV/SNR cases and confidence traces, then expose a full-frame WASM processor. Keep the fallback only while those gates remain green and its degraded confidence remains explicit.
 
 **Definition Of Done**
 
@@ -456,8 +456,8 @@ Extend the current manifest with real WAV/SNR cases and separately specify smoot
 
 ## Recommended Next 8 Commits
 
-1. `Pass tuning and smoothing context into native frames`
-2. `Generate or WASM-back shared note math`
+1. `Generate or WASM-back shared note math`
+2. `Specify confidence and expose a full-frame WASM processor`
 3. `Add file/WAV input adapter`
 4. `Split tuning selection and temperament controllers`
 5. `Inject the settings storage port`

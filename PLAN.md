@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (118 open/partial, 62 closed stable `R#` items).
+- [recommendation.md](recommendation.md) - current extract (115 open/partial, 65 closed stable `R#` items).
 - [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` evidence; use its 2026-07-11 overlay before old findings.
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
@@ -35,8 +35,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 40 Vitest, 10 all-feature core tests, shared native/WASM/TS parity and three E2E flows; real WAV/property/soak still belong to M7 |
-| M1 frames | Mostly done | Rust/Tauri/egui frame adopted; native tuning context and alias remain |
+| M0 safety net | Done baseline | 46 Vitest, 13 all-feature core tests, shared pitch/smoothing parity and three E2E flows; real WAV/property/soak still belong to M7 |
+| M1 frames | Done | Rust/Tauri/egui frame adopted; typed native context, shared hysteresis/smoothing semantics and canonical wire shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice/custom-library done; broad root and selection/temperament controller remain |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers and optional spectrum |
@@ -56,7 +56,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-11:** M0 is complete for the current refactor gate: toolchain pins, `40` Vitest tests, `10` pitch-core all-feature tests, CI fmt/clippy/tests/wasm gates, generated registry parity, one B0-E5 native/WASM/TS fixture manifest, and three Playwright flows including synthetic detection and responsive Library navigation.
+**Status 2026-07-11:** M0 is complete for the current refactor gate: toolchain pins, `46` Vitest tests, `13` pitch-core all-feature tests, CI fmt/clippy/tests/wasm gates, generated registry parity, shared pitch and smoothing manifests, and three Playwright flows including synthetic detection and responsive Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -65,7 +65,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-07-11:** pitch-core, Tauri and egui now use the shared frame; Vue enriches native output with active tuning context. Remaining M1 work: pass that context to native processing and remove compatibility aliases.
+**Status 2026-07-11:** complete. `FrameResolver` owns target/cents/hysteresis, Tauri receives resolved A4/temperament/tuning/selected-target `FrameContext`, Vue trusts native output, Rust/TypeScript smoothing shares trace fixtures, and the top-level `frequency` alias is removed. Full-frame browser WASM and fallback confidence now belong to the remaining core-convergence work.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -135,8 +135,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** primary WASM, audio ports, numeric detector parity and the generated music registry are complete; move native tuning/smoothing context into the shared frame.
-- **Next:** shared note math, file/WAV adapter, then split the remaining selection/temperament/settings controllers.
+- **Now:** primary WASM detection, audio ports, contextual native frames, smoothing parity and the generated music registry are complete; converge shared note math and confidence semantics.
+- **Next:** file/WAV adapter, then split the remaining selection/temperament/settings controllers.
 - **Later:** M7 real-audio/benchmark/soak accuracy work and the remaining M8 diagnostics/a11y/release gates.
 
 ## Working conventions
