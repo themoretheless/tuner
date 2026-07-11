@@ -1,14 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue';
+import { createCustomLibraryController } from '../application/customLibraryController';
 import type { DetectedNote, Note } from '../utils/notes';
 import type { PitchDetectionRange } from '../utils/pitch';
-import {
-  createCustomTemperament,
-  createCustomTuning,
-  createInstrumentProfile,
-  normalizeImportedTunings,
-  type CustomTemperamentPayload,
-  type CustomTuningPayload,
-} from '../domain/customLibrary';
 import {
   chromaticPracticeNotes,
   defaultTuningForInstrument,
@@ -242,66 +235,6 @@ export function useTuningState(
     inTuneStable = false;
   }
 
-  function saveCustomTuning(payload: CustomTuningPayload) {
-    const tuning = createCustomTuning(payload, activeInstrument.value);
-    const nextTunings = settings.customTunings.value.filter((item) => item.id !== tuning.id);
-    settings.customTunings.value = [...nextTunings, tuning];
-    setTuning(tuning);
-  }
-
-  function deleteCustomTuning(id: string) {
-    const owningInstrument = settings.customInstruments.value.find((item) => item.defaultTuningId === id);
-    if (owningInstrument) {
-      deleteInstrumentProfile(owningInstrument.id);
-      return;
-    }
-
-    settings.customTunings.value = settings.customTunings.value.filter((item) => item.id !== id);
-    if (currentTuning.value.id === id) {
-      setTuning(resolveDefaultTuning(activeInstrument.value));
-    }
-  }
-
-  function saveInstrumentProfile(name: string) {
-    const profileStrings = strings.value.length ? strings.value : currentTuning.value.strings;
-    const created = createInstrumentProfile(name, profileStrings);
-    if (!created) return null;
-    const { profile, tuning } = created;
-
-    settings.customInstruments.value = [...settings.customInstruments.value, profile];
-    settings.customTunings.value = [...settings.customTunings.value, tuning];
-    activeInstrument.value = profile.id;
-    setTuning(tuning);
-    return profile;
-  }
-
-  function deleteInstrumentProfile(id: string) {
-    settings.customInstruments.value = settings.customInstruments.value.filter((item) => item.id !== id);
-    settings.customTunings.value = settings.customTunings.value.filter((item) => item.instrument !== id);
-    if (activeInstrument.value === id) {
-      activeInstrument.value = 'guitar';
-      setTuning(resolveDefaultTuning('guitar'));
-    }
-  }
-
-  function saveCustomTemperament(payload: CustomTemperamentPayload) {
-    const item = createCustomTemperament(payload);
-    settings.customTemperaments.value = [
-      ...settings.customTemperaments.value.filter((current) => current.id !== item.id),
-      item,
-    ];
-    temperament.value = item.id;
-    resetDetectionState();
-  }
-
-  function deleteCustomTemperament(id: string) {
-    settings.customTemperaments.value = settings.customTemperaments.value.filter((item) => item.id !== id);
-    if (temperament.value === id) {
-      temperament.value = 'equal';
-      resetDetectionState();
-    }
-  }
-
   function getRandomPracticeNote() {
     const availableStrings = strings.value.length ? strings.value : chromaticPracticeNotes(
       activeInstrument.value,
@@ -314,28 +247,6 @@ export function useTuningState(
     return availableStrings[Math.floor(Math.random() * availableStrings.length)];
   }
 
-  function exportCustomTunings() {
-    return settings.customTunings.value;
-  }
-
-  function importCustomTunings(tunings: Tuning[]) {
-    const normalized = normalizeImportedTunings(
-      tunings,
-      activeInstrument.value,
-      Date.now(),
-      new Set(instrumentOptions.value.map((instrument) => instrument.id)),
-    );
-
-    if (!normalized.length) return 0;
-
-    const importedIds = new Set(normalized.map((tuning) => tuning.id));
-    settings.customTunings.value = [
-      ...settings.customTunings.value.filter((tuning) => !importedIds.has(tuning.id)),
-      ...normalized,
-    ];
-    return normalized.length;
-  }
-
   function resolveDefaultTuning(instrument: InstrumentId) {
     return defaultTuningForInstrument(
       instrument,
@@ -343,6 +254,20 @@ export function useTuningState(
       storedTunings.value,
     );
   }
+
+  const customLibrary = createCustomLibraryController({
+    activeInstrument,
+    currentTuning,
+    customInstruments: settings.customInstruments,
+    customTemperaments: settings.customTemperaments,
+    customTunings: settings.customTunings,
+    instrumentOptions,
+    resetDetection: resetDetectionState,
+    resolveDefaultTuning,
+    setTuning,
+    strings,
+    temperament,
+  });
 
   watch([
     () => settings.loaded.value,
@@ -380,22 +305,14 @@ export function useTuningState(
     customInstruments: settings.customInstruments,
     customTemperaments: settings.customTemperaments,
     customTunings: settings.customTunings,
-    deleteCustomTemperament,
-    deleteCustomTuning,
-    deleteInstrumentProfile,
     detectedNote,
     detectionRange,
-    exportCustomTunings,
     formatFreq,
     getNoteDisplay,
     getRandomPracticeNote,
-    importCustomTunings,
     instrumentOptions,
     isChromaticMode,
     isInTune,
-    saveCustomTemperament,
-    saveCustomTuning,
-    saveInstrumentProfile,
     selectedString,
     selectedStringIndex,
     setA4,
@@ -416,5 +333,6 @@ export function useTuningState(
     temperamentRoot,
     toggleString,
     transpose,
+    ...customLibrary,
   };
 }

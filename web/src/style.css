@@ -314,6 +314,15 @@ body {
   align-items: start;
 }
 
+.library-tabs {
+  width: min(100%, 520px);
+}
+
+.library-tab-content {
+  display: grid;
+  gap: 20px;
+}
+
 .analysis-toolbar {
   min-height: 58px;
   display: flex;
@@ -911,6 +920,17 @@ summary:focus-visible {
   .analysis-toolbar .segmented {
     width: 100%;
     margin-left: 0;
+  }
+
+  .library-tabs {
+    width: 100%;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .library-tabs button {
+    min-height: 42px;
+    padding: 6px;
+    white-space: normal;
   }
 }
 
