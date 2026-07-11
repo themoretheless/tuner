@@ -4,9 +4,9 @@
 
 This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
-After this pass, **60 findings are verified closed or obsolete and 120 `R#` findings remain open/partial**. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+After this pass, **62 findings are verified closed or obsolete and 118 `R#` findings remain open/partial**. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `37` Vitest tests; `9` pitch-core tests with all features; workspace tests/clippy; Vue production typecheck/build; Playwright synthetic E2 through the WASM backend; manual `320 px` and desktop UI checks; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `40` Vitest tests; `10` pitch-core tests with all features; workspace tests/clippy; Vue production typecheck/build; three Playwright flows including shared WASM parity and `360 px` Library navigation; manual mobile/desktop UI checks; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -25,18 +25,19 @@ Notation used across docs:
 
 ## Three Iterations Delivered
 
-1. **Lifecycle and boundaries:** serialized `idle | starting | listening | stopping | error`, recoverable runtime failure, feature ports/screens, practice domain extraction, and versioned profile persistence.
-2. **DSP and realtime:** split pitch detector modules with `PitchDetector`, reusable buffers, bounded MPM range, optional spectrum, shared `audio-input`, and callback-to-worker native processing.
-3. **Product and performance:** responsive four-screen UI, light/colorblind/stage/compact modes, semantic canvas palette, lazy feature chunks, reusable worker transfer buffers, full profile transfer, and production offline service worker.
+1. **Numeric convergence:** one shared fixture manifest now gates native Rust, browser WASM and the explicit TypeScript fallback over B0-E5, ranges, harmonics, DC offset and cents budgets.
+2. **Registry DRY boundary:** `registry/music-registry.json` owns notes, 14 instruments and 33 tunings; Rust build code and web domain data are generated/derived from it instead of duplicated tables.
+3. **Workflow and design:** custom-library CRUD moved behind an injected controller, while Library became three keyboard-operable tabs verified visually and at `360 px`.
 
-Post-iteration review additionally fixed cancelled-start teardown, profile referential integrity, custom tuning ID collisions, save ordering, stereo reference-tone pitch, smoothing after silence, hidden egui FFT work, small-window scrolling, and `320 px` tab/canvas overflow.
+Post-iteration review moved the registry to workspace ownership, hardened schema validation, added roving tab focus, fixed the cold-toolchain parity timeout and rechecked mobile overflow.
 
-## Closed R Registry (60)
+## Closed R Registry (62)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
 | R2, R48, R142, R176 | Explicit serialized session lifecycle, cancellation/runtime-failure tests, visible pending states |
 | R3 | Discriminated `AudioInputPort` contract, capability narrowing, adapter registry and lifecycle contract tests for web/native/synthetic inputs |
+| R14, R16 | One generated music registry plus a shared native/WASM/TS pitch fixture manifest remove hand-maintained tuning drift and specify fallback cents tolerance |
 | R4, R25, R46, R50, R66, R71, R83, R122, R145 | Split detector/spectrum/WASM modules, optional FFT, `PitchDetector`, `EngineConfig`, reusable YIN/MPM buffers, DC centering |
 | R12, R23, R24, R29, R30, R70, R74, R79, R81, R140, R146 | Shared typed cpal adapter, bounded callback queue, worker DSP, actual sample rate, frame-gated histories and repaint |
 | R5, R8, R47, R51, R52, R62, R64, R67, R72 | egui and Vue shells decomposed; visualization, audio, reference tone and settings ownership clarified |
@@ -47,14 +48,14 @@ Post-iteration review additionally fixed cancelled-start teardown, profile refer
 
 Do not renumber the remaining entries; plans and old review notes still cite these stable IDs.
 
-## Open Problems (120 stable R-items)
+## Open Problems (118 stable R-items)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
    **Recommendation:** Turn it into a thin composition root and move lifecycle/workflow logic into controllers.
 
-6. **P1: `useTuningState.ts` remains a second god-object.** Pure tuning calculations and custom-library factories are extracted, but the composable still combines selection, chromatic/temperament workflow, CRUD and display helpers in roughly 400 lines.
-   **Recommendation:** Split pure music/domain functions from workflow controllers and UI view models.
+6. **P1: `useTuningState.ts` remains a broad controller.** Pure calculations and custom-library CRUD now have separate owners, reducing the composable to roughly 340 lines, but selection, chromatic/temperament workflow and display derivation still live together.
+   **Recommendation:** Extract selection/target resolution and temperament workflow into independently tested controllers/view models.
 
 7. **P1: `useSettings.ts` is still a global mutable settings singleton.** `UserProfileV1`, strict normalization and serialized saves now exist, but refs, watches and concrete storage selection remain module globals.
    **Recommendation:** Inject a storage port and expose a loaded settings store/value instead of module-global mutable state.
@@ -72,14 +73,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
     **Recommendation:** Keep estimates/domain targets in the engine and move display formatting plus owned visualization transport outward.
 
 ### Duplication & Drift
-14. **P0: Tuning and instrument truth is still duplicated, but drift is now guarded.** `web/src/utils/notes.ts` and `pitch-core/src/domain.rs` now have parity coverage for built-in tunings, but they are still two hand-maintained sources.
-    **Recommendation:** Move to one registry source/codegen so the parity test passes by construction.
-
 15. **P0: Note math and cents logic exist in both TS and Rust.** `frequency_to_note`, `get_cents`, closest string selection and display formatting can diverge silently.
     **Recommendation:** Add numeric equivalence tests and converge on one source of truth.
-
-16. **P1: The fallback pitch implementation is not numerically specified.** Web now uses a stateful pitch-core/WASM detector as its primary worker backend and keeps `utils/pitch.ts` only as a tested availability/runtime fallback, but shared numeric-equivalence fixtures are still missing.
-    **Recommendation:** Add a WASM/native/TS fixture manifest with cents tolerances, then keep or remove the fallback based on measured parity.
 
 17. **P1: Smoothing and confidence behavior are duplicated.** TS `FrequencySmoother`, Rust `Smoother`, native frame confidence and UI smoothing do not share a spec.
     **Recommendation:** Define one smoothing/filtering contract and test it with fixtures.
@@ -116,7 +111,7 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 32. **P1: Fake-mic E2E coverage is still shallow.** Playwright now verifies `?fixture=E2` through the UI without microphone access, but permission-denied, device loss and mocked `getUserMedia` flows are not covered yet.
     **Recommendation:** Extend Playwright with denied-permission, device-unplug and fake WAV pipeline tests.
 
-33. **P1: Core tests are improved but still synthetic-heavy.** Vitest now covers lifecycle recovery, unsafe imports/profile links, tuning domain and offline generation; Rust covers silence transitions and optional FFT; Playwright covers synthetic E2. Real recordings, permission/device-loss flows and cross-backend numeric parity remain.
+33. **P1: Core tests are improved but still synthetic-heavy.** Vitest covers lifecycle/profile/domain flows; Rust and browser WASM share cents-budget fixtures; Playwright covers synthetic E2 and responsive Library behavior. Real recordings, permission/device-loss flows, noise/SNR sweeps and soak tests remain.
     **Recommendation:** Add licensed WAV fixtures and adapter-level failure/equivalence suites.
 
 34. **P1: No benchmarks for hot DSP paths.** YIN/MPM/spectrum costs are not measured.
@@ -147,7 +142,7 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports, shared native audio, realtime worker processing, primary web WASM detection, frame adoption, core splitting, feature shells and profile schema are in place. Numeric frame parity, the shared music registry and remaining broad controllers remain.
+45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports, native realtime processing, WASM/TS numeric parity, generated music data, frame adoption, feature shells and profile schema are in place. Native frame context, shared note-math ownership and remaining broad controllers remain.
     **Recommendation:** Continue with those boundaries before adding another broad feature surface.
 
 ### More Architecture & Coupling Issues
@@ -263,10 +258,11 @@ commit and should reduce coupling between audio, DSP, state and presentation.
 | 4 | Done | egui frame adoption | egui state consumes `DetectionFrame` | Replace remaining static WASM globals later |
 | 5 | Partial | Practice controller | Pure summary/date logic extracted and tested | Move ear-training workflow out of composition root [DONE 2026-07-11] |
 | 6 | Done | Profile schema | Versioned full backup, strict normalization and serialized save | Add future `V1 -> V2` migration when schema changes [DONE 2026-07-11] |
-| 7 | Open | Music registry source | Parity test guards drift | Generate TS/Rust registries from one source [DONE 2026-07-11] |
-| 8 | Done primary | Pitch module split | Stateful pitch-core/WASM is primary in the worker; TS is explicit fallback | Add shared numeric parity and fallback diagnostics |
+| 7 | Done | Music registry source | Workspace JSON generates Rust and feeds web domain data | Keep schema validation and generated parity green [DONE 2026-07-11] |
+| 8 | Done | Pitch module convergence | Stateful WASM is primary; native/WASM/TS share cents-budget fixtures | Extend the manifest with licensed real recordings [DONE 2026-07-11] |
 | 9 | Done | Native realtime queue | Callback only downmixes into bounded recycled chunks | Add callback-drop counters/benchmarks |
 | 10 | Done | Feature shells | `App.vue` is a 113-line shell with four lazy feature surfaces | Split the remaining 400-line tuning controller |
+| 11 | Partial | Tuning workflow | Custom-library CRUD is an injected controller; Library uses focused tabs | Extract selection/temperament state from the remaining 340 lines |
 
 ### Small-Commit Rules
 
@@ -316,7 +312,7 @@ Fix: ship four responsive surfaces, semantic themes/canvases, lazy chunks, real 
 
 The canonical source is [TOP-500-backlog.md](TOP-500-backlog.md). This mirror keeps all 500 proposals in this file as requested. Rows marked `[DONE 2026-07-11]` are retained for traceability and are not part of the current open list; every unmarked row is open, partial, optional, or not yet revalidated.
 
-Verified closed master items in this pass: **M1, M2, M5, M6, M7, M13, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
+Verified closed master items in this pass: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
 
 <!-- TOP500_RECOMMENDATION:START -->
 <details open>
@@ -345,7 +341,7 @@ Verified closed master items in this pass: **M1, M2, M5, M6, M7, M13, M24, M25, 
 | M19 | P2 | 60 | r1:review | decouple detection cadence from rAF |  |
 | M20 | P2 | 60 | r1:review | CI hygiene clippy/rustfmt/deploy-freshness |  |
 | M21 | P2 | 60 | r2:distribution | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | Primary organic-discovery lever for a web tuner. |
-| M22 | P2 | 60 | r2:dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Guarantees egui and web paths agree numerically. |
+| M22 | P2 | 60 | r2:dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Native Rust, browser WASM and TS fallback share B0-E5 cents-budget fixtures. [DONE 2026-07-11] |
 | M23 | P2 | 60 | r3:observability-reliability | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | Defines deterministic UX for every failure mode instead of blank screens. |
 | M24 | P2 | 60 | r4:docs-dx | Playwright fake-WAV pipeline test asserts detected note | Feed synthetic E2 audio, assert NoteDisplay shows E. [DONE 2026-07-11] |
 | M25 | P2 | 58 | r1:review | legible sidebar text | [DONE 2026-07-11] |
@@ -831,7 +827,7 @@ Verified closed master items in this pass: **M1, M2, M5, M6, M7, M13, M24, M25, 
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - For the full requested Top 500, use [TOP-500-backlog.md](TOP-500-backlog.md). Treat [TOP-200-current.md](TOP-200-current.md) as historical evidence and revalidate old `C#` claims.
-- Next dependency order: R9/R16 numeric frame/fallback parity, R14-R15 single music source, R73 file/WAV adapter, then R1/R6/R7 controller splits.
+- Next dependency order: R9/R17 native frame/smoothing convergence, R15 shared note math, R73 file/WAV adapter, then R1/R6/R7 controller splits.
 - Every fix should reduce coupling.
 - Update this file, [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if ranking/status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
@@ -859,13 +855,16 @@ Verified closed master items in this pass: **M1, M2, M5, M6, M7, M13, M24, M25, 
 - Added explicit session lifecycle/recovery tests, feature ports/screens, strict full-profile transfer, practice/tuning domains, worker buffer reuse and real offline SW.
 - Added a discriminated `AudioInputPort` registry with contract-tested web/native/synthetic adapters and capability-based session orchestration.
 - Made stateful pitch-core/WASM the primary web-worker detector, retained a tested TS fallback, propagated confidence/backend diagnostics and verified WASM end to end in Playwright.
+- Added one B0-E5 pitch fixture manifest consumed by native Rust, browser WASM and TS fallback, with explicit cents budgets.
+- Replaced hand-maintained Rust/web tuning tables with `registry/music-registry.json` and build-time Rust generation.
+- Extracted custom-library CRUD into an injected application controller and reorganized Library into responsive keyboard tabs.
 - Completed designer review at desktop and `320 px`, fixed four-tab/canvas overflow, then passed Playwright and full Tauri `.app`/`.dmg` packaging.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
-- This file contains 120 current open/partial `R#` findings and a 60-item stable closure registry.
+- This file contains 118 current open/partial `R#` findings and a 62-item stable closure registry.
 - The historical 187-item `C#` audit remains in [TOP-200-current.md](TOP-200-current.md); it is no longer the current-open count.
-- Each of the three requested documents mirrors exactly 500 `M#` rows; 25 verified master items carry `[DONE 2026-07-11]`.
-- Highest impact now is: numeric WASM/native/TS parity, generated music registry, native frame context, remaining controller splits, real-audio reliability/performance tests, diagnostics and release hardening.
+- Each of the three requested documents mirrors exactly 500 `M#` rows; 26 verified master items carry `[DONE 2026-07-11]`.
+- Highest impact now is: native frame/smoothing semantics, shared note math, file/WAV input, remaining controller splits, real-audio reliability/performance tests, diagnostics and release hardening.
 
 Update this file when fixing. Link from issues.

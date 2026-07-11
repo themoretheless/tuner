@@ -2,7 +2,7 @@
 
 > **Canonical master Top 500.** This is a stable option/risk registry, not a list of 500 simultaneously required features. [recommendation.md](recommendation.md) is the current-problem extract, [PLAN.md](PLAN.md) decides execution order, and [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape. Rows marked `[DONE 2026-07-11]` remain here for traceability and are excluded from the current-open count.
 
-Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
+Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
 
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
@@ -29,7 +29,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 19 | decouple detection cadence from rAF | P2 | 60 | r1:review |  |
 | 20 | CI hygiene clippy/rustfmt/deploy-freshness | P2 | 60 | r1:review |  |
 | 21 | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | P2 | 60 | r2:distribution | Primary organic-discovery lever for a web tuner. |
-| 22 | WASM/native numeric-equivalence harness over a shared fixture manifest | P2 | 60 | r2:dx-quality | Guarantees egui and web paths agree numerically. |
+| 22 | WASM/native numeric-equivalence harness over a shared fixture manifest | P2 | 60 | r2:dx-quality | Native Rust, browser WASM and TS fallback share B0-E5 cents-budget fixtures. [DONE 2026-07-11] |
 | 23 | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | P2 | 60 | r3:observability-reliability | Defines deterministic UX for every failure mode instead of blank screens. |
 | 24 | Playwright fake-WAV pipeline test asserts detected note | P2 | 60 | r4:docs-dx | Feed synthetic E2 audio, assert NoteDisplay shows E. [DONE 2026-07-11] |
 | 25 | legible sidebar text | P2 | 58 | r1:review | [DONE 2026-07-11] |

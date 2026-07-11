@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (120 open/partial, 60 closed stable `R#` items).
+- [recommendation.md](recommendation.md) - current extract (118 open/partial, 62 closed stable `R#` items).
 - [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` evidence; use its 2026-07-11 overlay before old findings.
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
@@ -35,12 +35,12 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 37 Vitest, 9 all-feature core tests, parity, synthetic WASM session/E2E; real WAV/property/soak still belong to M7 |
+| M0 safety net | Done baseline | 40 Vitest, 10 all-feature core tests, shared native/WASM/TS parity and three E2E flows; real WAV/property/soak still belong to M7 |
 | M1 frames | Mostly done | Rust/Tauri/egui frame adopted; native tuning context and alias remain |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
-| M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice done; broad root/tuning controller remain |
+| M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice/custom-library done; broad root and selection/temperament controller remain |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers and optional spectrum |
-| M5 single-source domain | Partial | Stateful web WASM convergence is done; generated registry and numeric fallback parity remain |
+| M5 single-source domain | Partial | Stateful WASM, numeric fallback parity and generated tuning registry are done; shared note math remains |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
 | M7 DSP hardening | Partial | DC centering, bounded MPM/ranges and silence reset done; HPS/filter/adaptive gate/fixtures remain |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
@@ -56,7 +56,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-11:** M0 is complete for the current refactor gate: toolchain pins, `37` Vitest tests, `9` pitch-core all-feature tests, `build-web.yml` uses `.nvmrc`, `test-core.yml` gates fmt/clippy/tests/wasm, Rust `domain_snapshot` -> Vitest parity covers built-in tunings + note/cents/closest-string math, and Playwright verifies synthetic E2 through the real WASM worker without microphone access.
+**Status 2026-07-11:** M0 is complete for the current refactor gate: toolchain pins, `40` Vitest tests, `10` pitch-core all-feature tests, CI fmt/clippy/tests/wasm gates, generated registry parity, one B0-E5 native/WASM/TS fixture manifest, and three Playwright flows including synthetic detection and responsive Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -84,7 +84,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `useTuner` composes them; settings stays persistence-only.
 **Verify / DoD:** `useTuner` < ~150 LOC; each new composable single-responsibility; `vue-tsc` green; behavior preserved.
 
-**Status 2026-07-11:** explicit tested lifecycle, practice/profile/domain extraction, feature ports and four lazy screens are done. Remaining M3 work: shrink `useTuner` below a broad composition API and split `useTuningState`/global settings ownership.
+**Status 2026-07-11:** explicit lifecycle, practice/profile/custom-library extraction, feature ports and four lazy screens are done. Remaining M3 work: shrink `useTuner`, extract selection/temperament from `useTuningState`, and inject global settings ownership.
 
 ## M4 - Finish pitch-core layering **[BP]**
 **Goal:** small focused modules + a detector trait. Phase 1.
@@ -99,8 +99,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 ## M5 - Unify the domain (kill duplication)
 **Goal:** pitch-core is the only source of tunings + note math. Phase 1/2.
 **Targets:** `R14-R18`, `R65`, `R111`, `R112`, `R129`; grounded audit `C35-C37`, `C44`, `C50`, `C57`, `C59-C61`, `C176`; master `M3`, `M7`, `M11`.
-- Generate/export the TS tunings + note math from Rust (codegen at build time or WASM-backed `notes.ts`); `notes.ts` stops hand-maintaining the table.
-- Keep the JS detector only behind the explicit runtime fallback until shared numeric fixtures establish its supported tolerance (R16).
+- Tuning/instrument data now comes from `registry/music-registry.json`; Rust code is generated at build time and web derives its objects from the same schema.
+- Next converge TS note/cents math on generated or WASM-backed ownership; the JS detector remains an explicit, fixture-gated runtime fallback.
 **Verify / DoD:** M0 parity test passes **by construction** (one source); no second hand-written tuning table.
 **Risk:** medium - touches every web consumer of `notes.ts`; the M0 parity test de-risks it.
 
@@ -135,8 +135,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** primary WASM and the TS audio port are complete; add shared numeric fixtures and fallback/frame parity.
-- **Next:** generated music registry, native tuning context/alias removal, file/WAV adapter, then split the tuning/settings controllers.
+- **Now:** primary WASM, audio ports, numeric detector parity and the generated music registry are complete; move native tuning/smoothing context into the shared frame.
+- **Next:** shared note math, file/WAV adapter, then split the remaining selection/temperament/settings controllers.
 - **Later:** M7 real-audio/benchmark/soak accuracy work and the remaining M8 diagnostics/a11y/release gates.
 
 ## Working conventions

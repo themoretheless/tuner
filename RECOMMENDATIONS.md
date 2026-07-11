@@ -2,7 +2,7 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (120 open/partial and 60 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (118 open/partial and 62 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
 **Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
@@ -12,11 +12,11 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Добавить общий WASM/native/TS numeric parity manifest и спецификацию fallback/frame semantics.
-2. Сгенерировать Rust/TS instrument+tuning registry из одного источника.
-3. Передать tuning/A4 context в native processor и удалить compatibility alias.
-4. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
-5. Разрезать `useTuningState`, затем broad `useTuner`/global settings ownership.
+1. Передать tuning/A4/smoothing context в native processor и удалить compatibility alias.
+2. Свести TS/Rust note+cents math к generated или WASM-backed owner.
+3. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
+4. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
+5. Расширить shared pitch manifest реальными лицензированными WAV fixtures.
 6. Добавить property/benchmark/soak/permission/device-loss suites.
 7. Ввести typed diagnostics/errors и завершить accessibility/release gates.
 8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
@@ -29,8 +29,8 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Partial | P0 | Complete shared frame contract | Add native tuning context and remove alias |
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
-| Partial | P0 | Unify pitch core | Stateful WASM is primary; numeric fallback/frame parity remains |
-| Open | P0 | Unify music source | Generate both registries |
+| Partial | P0 | Unify pitch core | Detector parity is gated; smoothing/full-frame semantics remain |
+| Done data | P0 | Unify music source | One workspace registry feeds Rust generation and web domain data |
 | Done | P0 | Introduce TS `AudioInputPort` | Discriminated registry and contract tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
 | Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
@@ -138,7 +138,7 @@ web/src/utils/pitch.ts
 - Worker и tests проходят через public pitch API.
 - `npm run test` и `npm run build` зеленые.
 
-### 4. Split Music Core
+### 4. Split Music Core (Registry Implemented)
 
 **Problem**
 
@@ -165,7 +165,7 @@ web/src/utils/notes.ts
 **Implementation Steps**
 
 1. Сначала вынести types и note math.
-2. Затем registry data: instruments, tunings, temperaments, sweetening.
+2. Registry data для notes/instruments/tunings уже живёт в `registry/music-registry.json`; temperaments/sweetening остаются следующим data slice.
 3. Затем selection helpers: closest string, detection range hints.
 4. Потом pure `calculateTuningState`.
 5. Оставить compatibility exports.
@@ -439,15 +439,15 @@ Only migrate to workspace when current code already behaves like packages.
 - Workspace migration is mostly path/package config changes.
 - CI can run package-level checks.
 
-### 14. Complete Rust/WASM Parity After Primary Convergence
+### 14. Complete Rust/WASM Parity After Primary Convergence (Detector Implemented)
 
 **Problem**
 
-Stateful Rust/WASM is now the primary web-worker detector and TypeScript is an explicit fallback. Their numerical behavior and final frame semantics can still drift.
+Stateful Rust/WASM is the primary web-worker detector and TypeScript is an explicit fallback. B0-E5 detector behavior now shares ranges, harmonics, DC-offset cases and cents budgets; smoothing/confidence and final frame semantics can still drift.
 
 **Recommendation**
 
-Add shared frequency/SNR/range fixtures consumed by Rust and browser tests. Compare cents error, misses and confidence bounds, then decide whether the fallback remains supported or is reduced to a simpler degraded mode.
+Extend the current manifest with real WAV/SNR cases and separately specify smoothing/confidence frame traces. Keep the fallback only while those gates remain green.
 
 **Definition Of Done**
 
@@ -456,14 +456,14 @@ Add shared frequency/SNR/range fixtures consumed by Rust and browser tests. Comp
 
 ## Recommended Next 8 Commits
 
-1. `Add shared WASM/native/TS numeric fixtures`
-2. `Generate the music registry from one source`
-3. `Pass tuning context into native frame path`
-4. `Add file/WAV input adapter`
-5. `Split tuning selection from library CRUD`
-6. `Inject the settings storage port`
-7. `Add typed pipeline diagnostics`
-8. `Add real-audio and restart soak gates`
+1. `Pass tuning and smoothing context into native frames`
+2. `Generate or WASM-back shared note math`
+3. `Add file/WAV input adapter`
+4. `Split tuning selection and temperament controllers`
+5. `Inject the settings storage port`
+6. `Add typed pipeline diagnostics`
+7. `Add real-audio fixture and restart soak gates`
+8. `Add release security and accessibility gates`
 
 This sequence attacks the current P0/P1 open items first: session lifecycle, audio-port boundaries, remaining frame-contract drift, realtime safety and core modularity. Practice extraction is still useful, but it is no longer the first architectural blocker.
 
