@@ -1,8 +1,20 @@
 import { MUSIC_REGISTRY } from '../domain/musicRegistry';
+import {
+  NOTE_NAMES,
+  applyCentsOffsetFrequency,
+  closestNoteIndex,
+  formatFreq,
+  frequencyToNearestMidi,
+  getCents,
+  getNoteDisplay,
+  midiToFrequency as equalTemperedMidiToFrequency,
+  noteNameFromMidi,
+  noteNameIndex,
+  noteToMidi as generatedNoteToMidi,
+  octaveFromMidi,
+} from '../generated/noteMath';
 
-export const NOTE_NAMES = MUSIC_REGISTRY.noteNames as [
-  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
-];
+export { NOTE_NAMES, formatFreq, getCents, getNoteDisplay };
 
 export type NoteName = typeof NOTE_NAMES[number];
 export type InstrumentId = string;
@@ -148,17 +160,8 @@ export const GUITAR_STRINGS_STANDARD: Note[] = [
 
 export const TUNINGS: Tuning[] = [CHROMATIC_TUNING, ...BUILT_IN_TUNINGS];
 
-function noteNameFromMidi(midi: number): NoteName {
-  return NOTE_NAMES[((midi % 12) + 12) % 12];
-}
-
-function noteNameIndex(name: NoteName): number {
-  return NOTE_NAMES.indexOf(name);
-}
-
 function equalFrequency(name: NoteName, octave: number, a4 = 440): number {
-  const midi = (octave + 1) * 12 + noteNameIndex(name);
-  return a4 * Math.pow(2, (midi - 69) / 12);
+  return equalTemperedMidiToFrequency(generatedNoteToMidi(name, octave), a4);
 }
 
 export function normalizeTemperamentOffsets(offsets: unknown): number[] {
@@ -206,17 +209,19 @@ export function midiToFrequency(
   root: NoteName = 'A',
   temperaments: Temperament[] = TEMPERAMENTS,
 ): number {
-  const equalFrequencyForMidi = a4 * Math.pow(2, (midi - 69) / 12);
-  return equalFrequencyForMidi * Math.pow(2, temperamentOffset(noteNameFromMidi(midi), temperament, root, temperaments) / 1200);
+  const equalFrequencyForMidi = equalTemperedMidiToFrequency(midi, a4);
+  return applyCentsOffsetFrequency(
+    equalFrequencyForMidi,
+    temperamentOffset(noteNameFromMidi(midi), temperament, root, temperaments),
+  );
 }
 
 export function frequencyToMidi(freq: number, a4 = 440): number {
-  return Math.round(69 + 12 * Math.log2(freq / a4));
+  return frequencyToNearestMidi(freq, a4);
 }
 
 export function noteToMidi(note: Pick<Note, 'name' | 'octave'>): number {
-  const index = NOTE_NAMES.indexOf(note.name);
-  return (note.octave + 1) * 12 + index;
+  return generatedNoteToMidi(note.name, note.octave);
 }
 
 export function noteFromMidi(
@@ -228,7 +233,7 @@ export function noteFromMidi(
 ): Note {
   return {
     name: noteNameFromMidi(midi),
-    octave: Math.floor(midi / 12) - 1,
+    octave: octaveFromMidi(midi),
     frequency: midiToFrequency(midi, a4, temperament, root, temperaments),
   };
 }
@@ -247,7 +252,7 @@ export function noteWithA4(
 export function applyCentsOffset(note: Note, cents: number): Note {
   return {
     ...note,
-    frequency: note.frequency * Math.pow(2, cents / 1200),
+    frequency: applyCentsOffsetFrequency(note.frequency, cents),
   };
 }
 
@@ -277,44 +282,12 @@ export function frequencyToNote(
   temperaments: Temperament[] = TEMPERAMENTS,
 ): Note {
   const midi = frequencyToMidi(freq, a4);
-  let closest = noteFromMidi(midi, a4, temperament, root, temperaments);
-  let minDiff = Math.abs(Math.log2(freq / closest.frequency));
-
-  for (let candidate = midi - 2; candidate <= midi + 2; candidate++) {
-    const note = noteFromMidi(candidate, a4, temperament, root, temperaments);
-    const diff = Math.abs(Math.log2(freq / note.frequency));
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = note;
-    }
-  }
-
-  return closest;
-}
-
-export function getCents(frequency: number, targetFrequency: number): number {
-  if (!frequency || !targetFrequency) return 0;
-  return 1200 * Math.log2(frequency / targetFrequency);
+  const candidates = Array.from({ length: 5 }, (_, index) => (
+    noteFromMidi(midi + index - 2, a4, temperament, root, temperaments)
+  ));
+  return candidates[closestNoteIndex(freq, candidates) ?? 2];
 }
 
 export function findClosestString(frequency: number, strings: Note[] = GUITAR_STRINGS_STANDARD): Note {
-  if (!frequency) return strings[0];
-  let closest = strings[0];
-  let minDiff = Infinity;
-  for (const s of strings) {
-    const diff = Math.abs(Math.log2(frequency / s.frequency));
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = s;
-    }
-  }
-  return closest;
-}
-
-export function getNoteDisplay(note: Note): string {
-  return `${note.name}${note.octave}`;
-}
-
-export function formatFreq(f: number): string {
-  return f.toFixed(1);
+  return strings[closestNoteIndex(frequency, strings) ?? 0];
 }

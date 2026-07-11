@@ -1,4 +1,7 @@
-use crate::{find_closest_string, frequency_to_note, get_cents, get_note_display, Note, Tuning};
+use crate::{
+    closest_note_index, find_closest_string, frequency_to_note, get_cents, get_note_display, Note,
+    Tuning,
+};
 
 const DEFAULT_IN_TUNE_ENTER_CENTS: f32 = 5.0;
 const DEFAULT_IN_TUNE_EXIT_CENTS: f32 = 7.0;
@@ -177,15 +180,7 @@ impl FrameResolver {
 }
 
 fn closest_target(frequency: f32, targets: &[Note]) -> Option<Note> {
-    targets
-        .iter()
-        .filter(|target| valid_target(target))
-        .min_by(|left, right| {
-            let left_distance = (frequency / left.frequency).log2().abs();
-            let right_distance = (frequency / right.frequency).log2().abs();
-            left_distance.total_cmp(&right_distance)
-        })
-        .cloned()
+    closest_note_index(frequency, targets, 1.0).map(|index| targets[index].clone())
 }
 
 fn normalize_a4(a4: f32) -> f32 {

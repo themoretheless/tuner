@@ -1,7 +1,7 @@
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
     FrameContext, FrameResolver, HybridPitchDetector, PitchDetector, Smoother, SpectrumAnalyzer,
-    Tuning, GUITAR_STRINGS_STANDARD,
+    Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -62,12 +62,12 @@ impl TunerEngine {
         } else {
             spectrum_bins
         };
-        let tuning = tuning.unwrap_or_else(|| {
-            tunings.first().cloned().unwrap_or_else(|| Tuning {
-                name: "Standard (EADGBE)",
-                strings: GUITAR_STRINGS_STANDARD.to_vec(),
-            })
-        });
+        let tuning = tuning
+            .or_else(|| tunings.into_iter().next())
+            .unwrap_or_else(|| Tuning {
+                name: "Chromatic",
+                strings: Vec::new(),
+            });
         Self {
             smoother: Smoother::new(),
             detector: HybridPitchDetector::new(detector),

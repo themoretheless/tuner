@@ -1,6 +1,11 @@
 // Domain layer - pure types and math, no I/O, no DSP algorithms.
 // Can be no_std in future.
 
+use crate::generated_note_math::{
+    closest_frequency_index, format_note_display, frequency_to_nearest_midi, get_cents,
+    midi_to_frequency, note_name_from_midi, note_to_midi, octave_from_midi,
+};
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Note {
     pub name: &'static str,
@@ -16,19 +21,8 @@ pub struct Tuning {
 
 include!(concat!(env!("OUT_DIR"), "/music_registry.rs"));
 
-pub fn canonical_note_name(name: &str) -> Option<&'static str> {
-    NOTE_NAMES
-        .iter()
-        .copied()
-        .find(|candidate| *candidate == name)
-}
-
 fn equal_tempered_note(name: &'static str, octave: i32) -> Note {
-    let index = NOTE_NAMES
-        .iter()
-        .position(|&candidate| candidate == name)
-        .unwrap_or(0);
-    let midi = (octave + 1) * 12 + index as i32;
+    let midi = note_to_midi(name, octave);
     Note {
         name,
         octave,
@@ -42,64 +36,48 @@ fn equal_tempered_notes(spec: &[(&'static str, i32)]) -> Vec<Note> {
         .collect()
 }
 
-pub fn midi_to_frequency(midi: f32, a4: f32) -> f32 {
-    a4 * 2f32.powf((midi - 69.0) / 12.0)
-}
-
-pub fn frequency_to_midi(freq: f32, a4: f32) -> f32 {
-    69.0 + 12.0 * (freq / a4).log2()
-}
-
 pub fn frequency_to_note(freq: f32, a4: f32) -> (String, f32) {
-    if freq < 20.0 {
+    if !freq.is_finite() || freq < 20.0 || !a4.is_finite() || a4 <= 0.0 {
         return ("—".to_string(), 0.0);
     }
-    let midi = frequency_to_midi(freq, a4);
-    let r = midi.round() as i32;
-    let idx = ((r % 12 + 12) % 12) as usize;
-    let oct = r / 12 - 1;
-    let target = midi_to_frequency(r as f32, a4);
-    let cents = 1200.0 * (freq / target).log2();
-    (format!("{}{}", NOTE_NAMES[idx], oct), cents)
+    let midi = frequency_to_nearest_midi(freq, a4);
+    let target = Note {
+        name: note_name_from_midi(midi),
+        octave: octave_from_midi(midi),
+        frequency: midi_to_frequency(midi as f32, a4),
+    };
+    (get_note_display(&target), get_cents(freq, target.frequency))
 }
 
-pub fn get_cents(frequency: f32, target_frequency: f32) -> f32 {
-    if frequency <= 0.0 || target_frequency <= 0.0 {
-        return 0.0;
-    }
-    1200.0 * (frequency / target_frequency).log2()
+pub fn get_note_display(note: &Note) -> String {
+    format_note_display(note.name, note.octave)
+}
+
+pub fn closest_note_index(frequency: f32, targets: &[Note], scale: f32) -> Option<usize> {
+    closest_frequency_index(
+        frequency,
+        targets.iter().map(|target| target.frequency),
+        scale,
+    )
 }
 
 pub fn find_closest_string(frequency: f32, strings: &[Note], a4: f32) -> Note {
-    if frequency <= 0.0 || strings.is_empty() {
+    if !frequency.is_finite() || frequency <= 0.0 || strings.is_empty() {
         return strings.first().cloned().unwrap_or(Note {
             name: "E",
             octave: 2,
             frequency: 82.4069,
         });
     }
-    let ratio = a4 / 440.0;
-    let mut closest = strings[0].clone();
-    let mut min_diff = f32::INFINITY;
-    for s in strings {
-        let scaled = s.frequency * ratio;
-        let diff = (frequency / scaled).log2().abs();
-        if diff < min_diff {
-            min_diff = diff;
-            closest = Note {
-                name: s.name,
-                octave: s.octave,
-                frequency: scaled,
-            };
-        }
+    let ratio = if a4.is_finite() && a4 > 0.0 {
+        a4 / 440.0
+    } else {
+        1.0
+    };
+    let closest = &strings[closest_note_index(frequency, strings, ratio).unwrap_or(0)];
+    Note {
+        name: closest.name,
+        octave: closest.octave,
+        frequency: closest.frequency * ratio,
     }
-    closest
-}
-
-pub fn get_note_display(note: &Note) -> String {
-    format!("{}{}", note.name, note.octave)
-}
-
-pub fn format_freq(f: f32) -> String {
-    format!("{:.1}", f)
 }
