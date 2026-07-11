@@ -9,6 +9,7 @@ import {
   offsetsForProfile,
   tuningsForInstrument,
 } from '../domain/tuningCalculations';
+import { IN_TUNE_ENTER_CENTS, IN_TUNE_EXIT_CENTS } from '../domain/frameContext';
 import {
   INSTRUMENTS,
   NOTE_NAMES,
@@ -36,9 +37,6 @@ import {
 import { useSettings } from './useSettings';
 
 export type { CustomTemperamentPayload, CustomTuningPayload } from '../domain/customLibrary';
-
-const IN_TUNE_THRESHOLD = 5;
-const OUT_OF_TUNE_THRESHOLD = 7;
 
 export interface TuningStateOptions {
   onResetDetection?: () => void;
@@ -153,8 +151,8 @@ export function useTuningState(
     }
 
     const absoluteCents = Math.abs(cents.value);
-    if (absoluteCents < IN_TUNE_THRESHOLD) inTuneStable = true;
-    else if (absoluteCents > OUT_OF_TUNE_THRESHOLD) inTuneStable = false;
+    if (absoluteCents < IN_TUNE_ENTER_CENTS) inTuneStable = true;
+    else if (absoluteCents > IN_TUNE_EXIT_CENTS) inTuneStable = false;
     return inTuneStable;
   });
 

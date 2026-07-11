@@ -1,4 +1,4 @@
-import type { DetectionFrame } from '../types/frames';
+import type { DetectionFrame, FrameContext } from '../types/frames';
 import type { PitchDetectionRange } from '../utils/pitch';
 
 export type AudioInputId = 'web' | 'native' | 'synthetic';
@@ -35,6 +35,7 @@ export interface DetectionFrameInputPort extends AudioInputPortBase {
   readonly frame: ReadableValue<DetectionFrame | null>;
   readonly output: 'detection-frame';
   setDetectionRange(range: PitchDetectionRange): Promise<void>;
+  setFrameContext(context: FrameContext): Promise<void>;
 }
 
 export type AudioInputPort = AudioFrameInputPort | DetectionFrameInputPort;

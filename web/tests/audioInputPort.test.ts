@@ -86,6 +86,7 @@ function createDetectionPort(): DetectionFrameInputPort {
     isListening,
     output: 'detection-frame',
     async setDetectionRange() {},
+    async setFrameContext() {},
     async start() {
       isListening.value = true;
       return true;

@@ -17,7 +17,7 @@ import {
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
 import type { AudioBackend } from '../utils/settingsStorage';
 import { syntheticAudioFixtureFromLocation, type SyntheticAudioFixture } from '../utils/syntheticAudio';
-import type { DetectionFrame } from '../types/frames';
+import type { DetectionFrame, FrameContext } from '../types/frames';
 
 interface TunerSessionOptions {
   audioBackend: Ref<AudioBackend>;
@@ -149,6 +149,12 @@ export function useTunerSession(options: TunerSessionOptions) {
     }
   }
 
+  function setFrameContext(context: FrameContext) {
+    for (const port of Object.values(inputPorts)) {
+      if (isDetectionFrameInputPort(port)) void port.setFrameContext(context);
+    }
+  }
+
   async function setAudioBackend(backend: AudioBackend) {
     if (backend !== 'web' && backend !== 'native') return;
     const shouldRestart = status.value === 'starting' || status.value === 'listening';
@@ -202,6 +208,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     selectedInputDeviceId: audio.selectedInputDeviceId,
     setAudioBackend,
     setDetectionRange,
+    setFrameContext,
     setInputDevice,
     start,
     status,
