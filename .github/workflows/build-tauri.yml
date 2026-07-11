@@ -86,6 +86,10 @@ jobs:
         with:
           name: tauri-${{ matrix.os }}-${{ matrix.target }}
           path: |
-            desktop/src-tauri/target/**/bundle/**/*
+            target/**/bundle/**/*.AppImage
+            target/**/bundle/**/*.deb
+            target/**/bundle/**/*.dmg
+            target/**/bundle/**/*.exe
+            target/**/bundle/**/*.msi
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
