@@ -1,6 +1,6 @@
 # Guitar Tuner - Historical Top 187 Grounded Audit
 
-This file preserves the detailed pre-refactor evidence as stable `C#` items. It is **not the current-open list after 2026-07-11**: file paths and claims below intentionally remain as audit history. Use [recommendation.md](recommendation.md) for the current 115 open/partial and 65 closed `R#` registry, [ARCHITECTURE.md](ARCHITECTURE.md) for current boundaries, and [TOP-500-backlog.md](TOP-500-backlog.md) for all 500 options/status markers.
+This file preserves the detailed pre-refactor evidence as stable `C#` items. It is **not the current-open list after 2026-07-11**: file paths and claims below intentionally remain as audit history. Use [recommendation.md](recommendation.md) for the current 110 open/partial and 70 closed `R#` registry, [ARCHITECTURE.md](ARCHITECTURE.md) for current boundaries, and [TOP-500-backlog.md](TOP-500-backlog.md) for all 500 options/status markers.
 
 Grounded audit across 14 dimensions, ranked by tier x impact/effort, semantically deduped (collapsed 13 near-duplicate findings). Format: title - kind - I/E - where - note.
 
@@ -8,7 +8,8 @@ Tiers: P0=17 P1=58 P2=110 P3=2
 
 ## Status Notes
 
-- 2026-07-11: R9/C47/C53 native-frame follow-up is complete. `FrameResolver` owns target/cents/hysteresis, Tauri receives a revisioned A4/tuning/selected-target context, Vue trusts native semantics, Rust/TS smoothing shares traces, and the top-level `frequency` alias is gone. Remaining related work is shared note math/confidence and file/WAV input.
+- 2026-07-11: R15/C155 note-math follow-up is complete. One registry/expression generator emits Rust/TypeScript note names, MIDI/frequency/cents/closest-target and formatting primitives; deterministic property sweeps and codegen freshness gate both targets. Remaining related work is confidence/full-frame WASM and file/WAV input.
+- 2026-07-11: R9/C47/C53 native-frame follow-up is complete. `FrameResolver` owns target/cents/hysteresis, Tauri receives a revisioned A4/tuning/selected-target context, Vue trusts native semantics, Rust/TS smoothing shares traces, and the top-level `frequency` alias is gone.
 - 2026-07-11: one B0-E5 manifest now gates native Rust, browser WASM and TS fallback; `registry/music-registry.json` replaces hand-maintained Rust/web tuning tables; custom-library CRUD is an injected controller and Library uses responsive keyboard tabs.
 - 2026-07-11: web/native/synthetic inputs implement one discriminated `AudioInputPort`; the web worker uses stateful pitch-core/WASM as primary and falls back to TS on load/runtime failure.
 - 2026-07-11: three implementation iterations plus review supersede many findings below. Closed families include the session state machine/pending states, egui random tone, native callback DSP/alloc/locks, shared Tauri pitch-core path, pitch-core module/trait split, frame adoption, profile schema/import validation, offline Service Worker, semantic canvas themes and feature-shell decomposition. Do not reopen a `C#` from this file without revalidating it against current code; current dispositions live under the corresponding stable `R#` or `[DONE]` `M#` row.

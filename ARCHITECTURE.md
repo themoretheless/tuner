@@ -22,7 +22,7 @@ Strengths:
 Remaining weaknesses:
 - `useTuner.ts` is still a broad composition root and `useTuningState.ts` remains the largest web workflow controller (~340 lines).
 - Detector numeric parity and Rust/TypeScript smoothing traces are specified; coarse fallback confidence, power flags and full-frame WASM ownership are not yet unified.
-- Tuning data is single-source, while note/cents math still has separate TS and Rust implementations.
+- Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - A file/WAV input adapter is still missing; Tauri now resolves A4/tuning/selected-target context natively through a typed revisioned configuration.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
 - Error taxonomy, diagnostics, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
@@ -30,7 +30,7 @@ Remaining weaknesses:
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md), the grounded code audit in [TOP-200-current.md](TOP-200-current.md), and the full ranked Top 500 in [TOP-500-backlog.md](TOP-500-backlog.md).
 
-The current list contains 115 open/partial `R#` findings and a 65-item closure registry. The Top 500 remains a full idea/risk register; done rows are retained with `[DONE 2026-07-11]` for traceability.
+The current list contains 110 open/partial `R#` findings and a 70-item closure registry. The Top 500 remains a full idea/risk register; done rows are retained with `[DONE 2026-07-11]` for traceability.
 
 ## Implemented Dependency Shape
 
@@ -46,7 +46,10 @@ flowchart LR
   Core --> Tauri["Tauri frame/event adapter"]
   Core --> Egui["egui state + painters"]
   Registry["workspace music registry"] --> Core
-  Registry --> Composition
+  Registry --> GeneratedMath["generated Rust/TS note math"]
+  FormulaAst["language-neutral formula AST"] --> GeneratedMath
+  GeneratedMath --> Core
+  GeneratedMath --> Composition
   Fixtures["shared pitch fixtures"] --> Core
   Fixtures --> WasmWorker
   WasmWorker --> Composition["useTuner composition root"]
@@ -68,7 +71,7 @@ The native path now separates configuration from streaming data:
 4. `pitch-core::FrameResolver` owns closest-target selection, note display, cents and 5/7-cent hysteresis; `TunerEngine` remains responsible for detector/smoother/spectrum orchestration.
 5. Tauri emits one canonical `DetectionFrame`; Vue uses that native frame directly. The removed top-level `frequency` alias cannot silently revive because Rust serialization and TypeScript normalization both have contract tests.
 
-This shape deliberately sends resolved targets instead of teaching Tauri about every custom temperament/profile schema. It keeps the platform adapter weakly coupled to product settings while leaving shared TS/Rust note-math convergence as an independent next migration.
+This shape deliberately sends resolved targets instead of teaching Tauri about every custom temperament/profile schema. It keeps the platform adapter weakly coupled to product settings; generated note math now gives both sides the same primitives without making synchronous UI startup depend on WASM availability.
 
 ## 10 Different Critics — From-Scratch Design Perspectives
 
@@ -257,13 +260,13 @@ egui/src/
 - AudioWorklet spike for web.
 - Better WASM packaging.
 
-**Status 2026-07-11: baseline done.** `46` Vitest tests, `13` pitch-core all-feature tests, native context/wire tests, three Playwright flows, clippy/workspace tests, core and egui WASM checks, production build and full Tauri bundle pass. Remaining: real WAV/property/benchmark/soak/visual/permission suites and pinned WASM tooling.
+**Status 2026-07-11: baseline done.** `51` Vitest tests, `16` pitch-core all-feature tests, native context/wire tests, generated-source/property gates, three Playwright flows, clippy/workspace tests, core and egui WASM checks, production build and full Tauri bundle pass. Remaining: real WAV/benchmark/soak/visual/permission suites, broader DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
 - Update all docs, examples, onboarding guide.
 
-**Status 2026-07-11: documentation synchronized.** README, architecture, recommendation and Top 500 status markers use the same counts/evidence. Compatibility facades remain until shared note-math/full-frame WASM migrations are complete.
+**Status 2026-07-11: documentation synchronized.** README, architecture, recommendation and Top 500 status markers use the same counts/evidence. Thin note-math facades preserve consumer APIs; full-frame WASM/confidence migration remains independent.
 
 ## Immediate Next Actions (Concrete)
 
@@ -299,7 +302,7 @@ These are the current highest-scored items pulled directly from the ranked backl
 - Remove blocking Mutex usage inside audio callback (native realtime safety).
 
 **P2 (very high value):**
-- Unify tunings and note math fully into pitch-core (verify + eliminate duplication with web/src/utils/notes.ts).
+- Specify confidence semantics and expose a full-frame browser WASM processor while keeping the fallback degradation explicit.
 - Octave-error guard using subharmonic/NSDF analysis.
 - Real Service Worker + full offline PWA (currently only manifest).
 - Eliminate per-callback / per-frame heap allocations in audio paths.
@@ -407,7 +410,7 @@ The following categorized list (200 items) was created to be implementation-conc
 44. Extract `ToneGenerator` trait; unify reference + ear-training tone behind it.
 45. Keep all visualizers on plain data (DetectionFrame, SpectrumFrame, WaveformFrame) and finish the same contract for native/session outputs.
 46. Continue splitting useTuner.ts into smaller feature view models; useAudioInput/useTunerSession/useReferenceTone are started.
-47. Move note/frequency math duplication: make TS a thin client of WASM domain exports or generate from Rust.
+47. Keep note/frequency math generated from one expression source and fail CI when either checked-in target is stale. [DONE 2026-07-11]
 48. Define single `DetectionFrame` struct in pitch-core and use identically in Vue and egui.
 49. Remove direct state mutation from viz components; all data flows down as props.
 50. Turn TunerEngine into an explicit state machine (Idle / Priming / Listening / Stable).
@@ -427,7 +430,7 @@ The following categorized list (200 items) was created to be implementation-conc
 62. Enforce max 200 LOC per file guideline for new modules.
 63. Add rustfmt + clippy to CI with -- -D warnings.
 64. Add vitest or vitest + fake audio harness for JS note math and composables.
-65. Add cargo test + property tests using quickcheck or proptest for freq/note math.
+65. Keep deterministic Rust/TypeScript property sweeps for freq/note math; add fuzzing only where it finds new boundary classes. [DONE 2026-07-11]
 66. Add fixture-based snapshot tests (insta) for Detection on known WAV snippets (embed small assets or synthetic).
 67. Unify TS and Rust tuning tables via codegen or a single source of truth (JSON5 + build script).
 68. Add "no network" CI test that asserts zero external fetches in built artifacts.
@@ -576,7 +579,7 @@ The following categorized list (200 items) was created to be implementation-conc
 199. User satisfaction micro-survey (anonymous, 1-click "useful?") after 10 successful tunings.
 200. Maintain a living "What we deliberately chose not to do" section (anti-roadmap) in ARCHITECTURE.md.
 
-**Next step after the 2026-07-11 implementation pass:** do not start another horizontal feature batch. Audio ports, native frame semantics, smoothing parity and generated music data are complete; finish shared note math/confidence and file/WAV input next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
+**Next step after the 2026-07-11 implementation pass:** do not start another horizontal feature batch. Audio ports, native frame semantics, smoothing parity, generated music data and generated note math are complete; finish confidence/full-frame WASM and file/WAV input next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
 
 ### Статус интеграции бэклогов
 - [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`).
@@ -635,7 +638,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, three adapters | Add file/WAV implementation when fixture ingestion lands |
 | Partial | Tone port | `useReferenceTone.ts`, egui `AudioManager` | Define commands/capabilities without sharing platform code |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
-| Partial | Pitch domain | Native/WASM/TS share detector fixtures; Rust/TS share smoothing traces; native frame context is resolved | Unify note math, fallback confidence, power flags and full-frame WASM semantics |
+| Partial | Pitch domain | Generated note math, detector fixtures, smoothing traces and native frame context are shared | Unify fallback confidence, power flags and full-frame WASM semantics |
 | Partial | Practice workflow | `domain/practice.ts`, `useEarTraining.ts` | Move mark/challenge flow out of `useTuner` |
 | Done | Profile persistence | `settings/profileCodec.ts`, `normalizeSettings.ts` | Add migration only when V2 exists |
 | Open | Diagnostics | Scattered platform errors | Add typed categories and mic health view model |
@@ -708,7 +711,7 @@ The 2026-07-11 pass used all three loops: structural tests/review, desktop and `
 
 The canonical ranked source is [TOP-500-backlog.md](TOP-500-backlog.md). The mirror below keeps all 500 items without losing the layered design narrative. `[DONE 2026-07-11]` rows are retained for traceability and are excluded from the current-problems count.
 
-Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
+Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
 
 <!-- TOP500_ARCHITECTURE:START -->
 <details>
@@ -718,7 +721,7 @@ Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M3
 | --- | --- | --- | --- | --- |
 | M1 | P1 | review | move DSP off cpal realtime callback | [DONE 2026-07-11] |
 | M2 | P1 | review | remove blocking Mutex in audio callback | [DONE 2026-07-11] |
-| M3 | P2 | review | unify tunings and note math into pitch-core |  |
+| M3 | P2 | review | unify tunings and note math into pitch-core | Registry plus one generated formula owner feed Rust and TypeScript facades. [DONE 2026-07-11] |
 | M4 | P2 | review | octave-error guard subharmonic/NSDF |  |
 | M5 | P2 | review | real service worker / offline PWA | [DONE 2026-07-11] |
 | M6 | P2 | review | eliminate per-callback heap allocations | [DONE 2026-07-11] |
@@ -726,7 +729,7 @@ Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M3
 | M8 | P2 | review | code-sign and notarize macOS/Windows |  |
 | M9 | P2 | algorithms | Harmonic Product Spectrum octave disambiguator from the existing 2048 FFT | Reuses current FFT to kill octave errors with minimal code. |
 | M10 | P2 | review | high-pass filter rumble/mains |  |
-| M11 | P2 | review | reconcile Rust/TS frequency-to-MIDI rounding |  |
+| M11 | P2 | review | reconcile Rust/TS frequency-to-MIDI rounding | Both targets use the generated nearest-MIDI contract. [DONE 2026-07-11] |
 | M12 | P2 | algorithms | Multi-resolution dual-window analysis: long window for low strings, short for high | Fixes low-E resolution vs high-string latency tradeoff. |
 | M13 | P2 | review | stop resizeCanvas every frame | [DONE 2026-07-11] |
 | M14 | P2 | review | Tauri CSP |  |
@@ -747,7 +750,7 @@ Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M3
 | M29 | P2 | review | hardcoded 44100 in egui harmonic overlay | [DONE 2026-07-11] |
 | M30 | P2 | algorithms | Confidence-weighted late fusion of YIN, MPM, HPS and Goertzel into one estimate | Single fused estimate from existing detectors cuts octave/jitter errors cheaply. |
 | M31 | P2 | a11y-deep | Shape/texture redundancy so in-tune state never relies on color alone | WCAG non-color-reliance; trivial and broadly useful. |
-| M32 | P2 | dx-quality | Property-based test for frequencyToNote round-trip across A4 sweep | Catches note-math regressions cheaply. |
+| M32 | P2 | dx-quality | Property-based test for frequencyToNote round-trip across A4 sweep | Deterministic Rust/TS sweeps cover A4, MIDI, cents, temperament and transpose. [DONE 2026-07-11] |
 | M33 | P2 | dx-quality | cargo-deny + npm audit supply-chain gate with committed advisory baseline | Blocks vulnerable deps in CI cheaply. |
 | M34 | P2 | observability-reliability | "Test My Mic" self-diagnostic wizard with pass/fail panel | Cuts the #1 support cause (no signal) before it becomes a bug report. |
 | M35 | P2 | dx-quality | Vitest fake-mic harness driving useTuner via scripted AnalyserNode stub | Deterministic frontend tuner-logic testing. |
@@ -1224,13 +1227,13 @@ Verified master closures: **M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M3
 
 The synchronized problem map is split by purpose:
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
-- [recommendation.md](recommendation.md) - current grounded extract: 115 open/partial and 65 closed stable `R#` references.
+- [recommendation.md](recommendation.md) - current grounded extract: 110 open/partial and 70 closed stable `R#` references.
 - [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` audit; use its evidence only after checking the status overlay because this pass supersedes many findings.
 
 Key highlights that directly block the target architecture:
-- Complete shared note math, confidence/full-frame WASM semantics and file/WAV input (`R15`, `R17`, `R73`).
+- Complete confidence/full-frame WASM semantics and file/WAV input (`R17`, `R73`).
 - Split remaining web coupling surfaces (`R1`, `R6`, `R7`, `R10`, `R49`).
-- Converge note math and define shared smoothing/power semantics (`R15`, `R17-R18`, `R105-R110`).
+- Define shared confidence/power semantics and remove remaining platform policy drift (`R17-R18`, `R106-R110`).
 - Remove enabled-spectrum frame allocation and decouple web detection from paint cadence (`R26-R28`, `R76`, `R87`).
 - Add real-audio parity/failure/performance/stability suites (`R31-R38`, `R148-R165`).
 - Finish diagnostics, typed errors, accessibility and release hardening (`R22`, `R41-R44`, `R133-R147`).

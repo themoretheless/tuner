@@ -2,9 +2,9 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (115 open/partial and 65 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (110 open/partial and 70 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native `DetectionFrame`, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-11:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native `DetectionFrame`, generated note math, egui/Tauri decomposition, profile V1, practice pure logic, feature screens/ports, semantic UI, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -12,13 +12,13 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Свести TS/Rust note+cents math к generated или WASM-backed owner.
-2. Определить confidence semantics и довести browser path до full-frame WASM processor.
-3. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
-4. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
-5. Расширить shared pitch manifest реальными лицензированными WAV fixtures.
-6. Добавить property/benchmark/soak/permission/device-loss suites.
-7. Ввести typed diagnostics/errors и завершить accessibility/release gates.
+1. Определить confidence semantics и довести browser path до full-frame WASM processor.
+2. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
+3. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
+4. Расширить shared pitch manifest реальными лицензированными WAV fixtures.
+5. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
+6. Ввести typed diagnostics/errors и завершить accessibility/release gates.
+7. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
 8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
 
 ## Recommendation Matrix
@@ -30,7 +30,7 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
 | Partial | P0 | Unify pitch core | Detector and smoothing parity are gated; confidence/full-frame WASM and power flags remain |
-| Done data | P0 | Unify music source | One workspace registry feeds Rust generation and web domain data |
+| Done | P0 | Unify music/note domain | Registry data plus one formula AST generate Rust/TypeScript primitives and freshness/property gates |
 | Done | P0 | Introduce TS `AudioInputPort` | Discriminated registry and contract tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
 | Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
@@ -164,7 +164,7 @@ web/src/utils/notes.ts
 
 **Implementation Steps**
 
-1. Сначала вынести types и note math.
+1. Types и generated note math вынесены; держать compatibility facade тонким. [DONE 2026-07-11]
 2. Registry data для notes/instruments/tunings уже живёт в `registry/music-registry.json`; temperaments/sweetening остаются следующим data slice.
 3. Затем selection helpers: closest string, detection range hints.
 4. Потом pure `calculateTuningState`.
@@ -456,13 +456,13 @@ Extend the current manifests with real WAV/SNR cases and confidence traces, then
 
 ## Recommended Next 8 Commits
 
-1. `Generate or WASM-back shared note math`
-2. `Specify confidence and expose a full-frame WASM processor`
-3. `Add file/WAV input adapter`
-4. `Split tuning selection and temperament controllers`
-5. `Inject the settings storage port`
-6. `Add typed pipeline diagnostics`
-7. `Add real-audio fixture and restart soak gates`
+1. `Specify confidence and expose a full-frame WASM processor`
+2. `Add file/WAV input adapter`
+3. `Split tuning selection and temperament controllers`
+4. `Inject the settings storage port`
+5. `Add typed pipeline diagnostics`
+6. `Add real-audio fixture and restart soak gates`
+7. `Separate recyclable spectrum transport from detection frames`
 8. `Add release security and accessibility gates`
 
 This sequence attacks the current P0/P1 open items first: session lifecycle, audio-port boundaries, remaining frame-contract drift, realtime safety and core modularity. Practice extraction is still useful, but it is no longer the first architectural blocker.

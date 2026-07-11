@@ -2,7 +2,7 @@
 
 > **Canonical master Top 500.** This is a stable option/risk registry, not a list of 500 simultaneously required features. [recommendation.md](recommendation.md) is the current-problem extract, [PLAN.md](PLAN.md) decides execution order, and [ARCHITECTURE.md](ARCHITECTURE.md) explains the target shape. Rows marked `[DONE 2026-07-11]` remain here for traceability and are excluded from the current-open count.
 
-Status note 2026-07-11: verified closures are M1, M2, M5, M6, M7, M13, M22, M24, M25, M26, M29, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
+Status note 2026-07-11: verified closures are M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
 
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
@@ -10,7 +10,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 |---|------|------|-----|--------|------|
 | 1 | move DSP off cpal realtime callback | P1 | 78 | r1:review | [DONE 2026-07-11] |
 | 2 | remove blocking Mutex in audio callback | P1 | 76 | r1:review | [DONE 2026-07-11] |
-| 3 | unify tunings and note math into pitch-core | P2 | 74 | r1:review |  |
+| 3 | unify tunings and note math into pitch-core | P2 | 74 | r1:review | Registry plus one generated formula owner feed Rust and TypeScript facades. [DONE 2026-07-11] |
 | 4 | octave-error guard subharmonic/NSDF | P2 | 73 | r1:review |  |
 | 5 | real service worker / offline PWA | P2 | 72 | r1:review | [DONE 2026-07-11] |
 | 6 | eliminate per-callback heap allocations | P2 | 70 | r1:review | [DONE 2026-07-11] |
@@ -18,7 +18,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 8 | code-sign and notarize macOS/Windows | P2 | 66 | r1:review |  |
 | 9 | Harmonic Product Spectrum octave disambiguator from the existing 2048 FFT | P2 | 66 | r2:algorithms | Reuses current FFT to kill octave errors with minimal code. |
 | 10 | high-pass filter rumble/mains | P2 | 64 | r1:review |  |
-| 11 | reconcile Rust/TS frequency-to-MIDI rounding | P2 | 64 | r1:review |  |
+| 11 | reconcile Rust/TS frequency-to-MIDI rounding | P2 | 64 | r1:review | Both targets use the generated nearest-MIDI contract. [DONE 2026-07-11] |
 | 12 | Multi-resolution dual-window analysis: long window for low strings, short for high | P2 | 64 | r2:algorithms | Fixes low-E resolution vs high-string latency tradeoff. |
 | 13 | stop resizeCanvas every frame | P2 | 62 | r1:review | [DONE 2026-07-11] |
 | 14 | Tauri CSP | P2 | 62 | r1:review |  |
@@ -39,7 +39,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 29 | hardcoded 44100 in egui harmonic overlay | P2 | 58 | r1:review | [DONE 2026-07-11] |
 | 30 | Confidence-weighted late fusion of YIN, MPM, HPS and Goertzel into one estimate | P2 | 58 | r2:algorithms | Single fused estimate from existing detectors cuts octave/jitter errors cheaply. |
 | 31 | Shape/texture redundancy so in-tune state never relies on color alone | P2 | 58 | r2:a11y-deep | WCAG non-color-reliance; trivial and broadly useful. |
-| 32 | Property-based test for frequencyToNote round-trip across A4 sweep | P2 | 58 | r2:dx-quality | Catches note-math regressions cheaply. |
+| 32 | Property-based test for frequencyToNote round-trip across A4 sweep | P2 | 58 | r2:dx-quality | Deterministic Rust/TS sweeps cover A4, MIDI, cents, temperament and transpose. [DONE 2026-07-11] |
 | 33 | cargo-deny + npm audit supply-chain gate with committed advisory baseline | P2 | 58 | r2:dx-quality | Blocks vulnerable deps in CI cheaply. |
 | 34 | "Test My Mic" self-diagnostic wizard with pass/fail panel | P2 | 58 | r3:observability-reliability | Cuts the #1 support cause (no signal) before it becomes a bug report. |
 | 35 | Vitest fake-mic harness driving useTuner via scripted AnalyserNode stub | P2 | 57 | r2:dx-quality | Deterministic frontend tuner-logic testing. |
