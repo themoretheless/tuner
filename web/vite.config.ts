@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
 import ver from '../version.json'
 
 // https://vite.dev/config/
@@ -14,6 +15,9 @@ export default defineConfig({
     strictPort: true,
     // Allow Tauri to access the dev server
     host: '0.0.0.0',
+    fs: {
+      allow: [fileURLToPath(new URL('..', import.meta.url))],
+    },
   },
 
   // When building for Tauri, make sure assets work

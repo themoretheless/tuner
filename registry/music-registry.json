@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "noteNames": ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"],
+  "instruments": [
+    {"id":"guitar","name":"Guitar","defaultTuningId":"standard"},
+    {"id":"guitar-7","name":"Guitar 7-string","defaultTuningId":"guitar-7-standard"},
+    {"id":"baritone-guitar","name":"Baritone Guitar","defaultTuningId":"baritone-standard"},
+    {"id":"guitar-12","name":"Guitar 12-string","defaultTuningId":"twelve-string-standard"},
+    {"id":"bass","name":"Bass","defaultTuningId":"bass-standard"},
+    {"id":"ukulele","name":"Ukulele","defaultTuningId":"ukulele-standard"},
+    {"id":"baritone-ukulele","name":"Baritone Ukulele","defaultTuningId":"baritone-ukulele-standard"},
+    {"id":"mandolin","name":"Mandolin","defaultTuningId":"mandolin-standard"},
+    {"id":"banjo","name":"Banjo","defaultTuningId":"banjo-open-g"},
+    {"id":"violin","name":"Violin","defaultTuningId":"violin-standard"},
+    {"id":"viola","name":"Viola","defaultTuningId":"viola-standard"},
+    {"id":"cello","name":"Cello","defaultTuningId":"cello-standard"},
+    {"id":"vocal","name":"Vocal Pitch","defaultTuningId":"vocal-pitch"},
+    {"id":"chromatic","name":"Chromatic","defaultTuningId":"chromatic"}
+  ],
+  "tunings": [
+    {
+      "id": "standard",
+      "name": "Standard (EADGBE)",
+      "instrument": "guitar",
+      "strings": [["E",2],["A",2],["D",3],["G",3],["B",3],["E",4]]
+    },
+    {
+      "id": "drop-d",
+      "name": "Drop D (DADGBE)",
+      "instrument": "guitar",
+      "strings": [["D",2],["A",2],["D",3],["G",3],["B",3],["E",4]]
+    },
+    {
+      "id": "dadgad",
+      "name": "DADGAD",
+      "instrument": "guitar",
+      "strings": [["D",2],["A",2],["D",3],["G",3],["A",3],["D",4]]
+    },
+    {
+      "id": "open-g",
+      "name": "Open G (DGDGBD)",
+      "instrument": "guitar",
+      "strings": [["D",2],["G",2],["D",3],["G",3],["B",3],["D",4]]
+    },
+    {
+      "id": "open-d",
+      "name": "Open D (DADF#AD)",
+      "instrument": "guitar",
+      "strings": [["D",2],["A",2],["D",3],["F#",3],["A",3],["D",4]]
+    },
+    {
+      "id": "drop-c",
+      "name": "Drop C (CGCFAD)",
+      "instrument": "guitar",
+      "strings": [["C",2],["G",2],["C",3],["F",3],["A",3],["D",4]]
+    },
+    {
+      "id": "half-step-down",
+      "name": "Half Step Down (D# G# C# F# A# D#)",
+      "instrument": "guitar",
+      "strings": [["D#",2],["G#",2],["C#",3],["F#",3],["A#",3],["D#",4]]
+    },
+    {
+      "id": "open-e",
+      "name": "Open E (EBEG#BE)",
+      "instrument": "guitar",
+      "strings": [["E",2],["B",2],["E",3],["G#",3],["B",3],["E",4]]
+    },
+    {
+      "id": "drop-b",
+      "name": "Drop B (BF#BEG#C#)",
+      "instrument": "guitar",
+      "strings": [["B",1],["F#",2],["B",2],["E",3],["G#",3],["C#",4]]
+    },
+    {
+      "id": "open-c",
+      "name": "Open C (CGCGCE)",
+      "instrument": "guitar",
+      "strings": [["C",2],["G",2],["C",3],["G",3],["C",4],["E",4]]
+    },
+    {
+      "id": "open-a",
+      "name": "Open A (EAC#EAE)",
+      "instrument": "guitar",
+      "strings": [["E",2],["A",2],["C#",3],["E",3],["A",3],["E",4]]
+    },
+    {
+      "id": "full-step-down",
+      "name": "Full Step Down (DGCFAD)",
+      "instrument": "guitar",
+      "strings": [["D",2],["G",2],["C",3],["F",3],["A",3],["D",4]]
+    },
+    {
+      "id": "open-gm",
+      "name": "Open Gm (DGDGA#D)",
+      "instrument": "guitar",
+      "strings": [["D",2],["G",2],["D",3],["G",3],["A#",3],["D",4]]
+    },
+    {
+      "id": "nashville",
+      "name": "Nashville High Strung (EADGBE)",
+      "instrument": "guitar",
+      "strings": [["E",3],["A",3],["D",4],["G",4],["B",3],["E",4]]
+    },
+    {
+      "id": "guitar-7-standard",
+      "name": "7-string Standard (BEADGBE)",
+      "instrument": "guitar-7",
+      "strings": [["B",1],["E",2],["A",2],["D",3],["G",3],["B",3],["E",4]]
+    },
+    {
+      "id": "guitar-7-drop-a",
+      "name": "7-string Drop A (AEADGBE)",
+      "instrument": "guitar-7",
+      "strings": [["A",1],["E",2],["A",2],["D",3],["G",3],["B",3],["E",4]]
+    },
+    {
+      "id": "baritone-standard",
+      "name": "Baritone Standard (BEADF#B)",
+      "instrument": "baritone-guitar",
+      "strings": [["B",1],["E",2],["A",2],["D",3],["F#",3],["B",3]]
+    },
+    {
+      "id": "baritone-drop-a",
+      "name": "Baritone Drop A (AEADF#B)",
+      "instrument": "baritone-guitar",
+      "strings": [["A",1],["E",2],["A",2],["D",3],["F#",3],["B",3]]
+    },
+    {
+      "id": "twelve-string-standard",
+      "name": "12-string Standard (E/e A/a D/d G/g B/B E/E)",
+      "instrument": "guitar-12",
+      "strings": [["E",2],["E",3],["A",2],["A",3],["D",3],["D",4],["G",3],["G",4],["B",3],["B",3],["E",4],["E",4]]
+    },
+    {
+      "id": "bass-standard",
+      "name": "Bass Standard (EADG)",
+      "instrument": "bass",
+      "strings": [["E",1],["A",1],["D",2],["G",2]]
+    },
+    {
+      "id": "bass-drop-d",
+      "name": "Bass Drop D (DADG)",
+      "instrument": "bass",
+      "strings": [["D",1],["A",1],["D",2],["G",2]]
+    },
+    {
+      "id": "bass-half-step",
+      "name": "Bass Half Step Down (D#G#C#F#)",
+      "instrument": "bass",
+      "strings": [["D#",1],["G#",1],["C#",2],["F#",2]]
+    },
+    {
+      "id": "bass-5-string",
+      "name": "Bass 5-string (BEADG)",
+      "instrument": "bass",
+      "strings": [["B",0],["E",1],["A",1],["D",2],["G",2]]
+    },
+    {
+      "id": "bass-6-string",
+      "name": "Bass 6-string (BEADGC)",
+      "instrument": "bass",
+      "strings": [["B",0],["E",1],["A",1],["D",2],["G",2],["C",3]]
+    },
+    {
+      "id": "ukulele-standard",
+      "name": "Ukulele Standard (GCEA)",
+      "instrument": "ukulele",
+      "strings": [["G",4],["C",4],["E",4],["A",4]]
+    },
+    {
+      "id": "ukulele-low-g",
+      "name": "Ukulele Low G (GCEA)",
+      "instrument": "ukulele",
+      "strings": [["G",3],["C",4],["E",4],["A",4]]
+    },
+    {
+      "id": "baritone-ukulele-standard",
+      "name": "Baritone Ukulele (DGBE)",
+      "instrument": "baritone-ukulele",
+      "strings": [["D",3],["G",3],["B",3],["E",4]]
+    },
+    {
+      "id": "mandolin-standard",
+      "name": "Mandolin Standard (GDAE)",
+      "instrument": "mandolin",
+      "strings": [["G",3],["D",4],["A",4],["E",5]]
+    },
+    {
+      "id": "banjo-open-g",
+      "name": "Banjo Open G (gDGBD)",
+      "instrument": "banjo",
+      "strings": [["G",4],["D",3],["G",3],["B",3],["D",4]]
+    },
+    {
+      "id": "violin-standard",
+      "name": "Violin Standard (GDAE)",
+      "instrument": "violin",
+      "strings": [["G",3],["D",4],["A",4],["E",5]]
+    },
+    {
+      "id": "viola-standard",
+      "name": "Viola Standard (CGDA)",
+      "instrument": "viola",
+      "strings": [["C",3],["G",3],["D",4],["A",4]]
+    },
+    {
+      "id": "cello-standard",
+      "name": "Cello Standard (CGDA)",
+      "instrument": "cello",
+      "strings": [["C",2],["G",2],["D",3],["A",3]]
+    },
+    {
+      "id": "vocal-pitch",
+      "name": "Vocal Pitch (chromatic)",
+      "instrument": "vocal",
+      "strings": []
+    }
+  ]
+}

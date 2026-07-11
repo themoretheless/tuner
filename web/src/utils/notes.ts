@@ -1,4 +1,8 @@
-export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+import { MUSIC_REGISTRY } from '../domain/musicRegistry';
+
+export const NOTE_NAMES = MUSIC_REGISTRY.noteNames as [
+  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
+];
 
 export type NoteName = typeof NOTE_NAMES[number];
 export type InstrumentId = string;
@@ -48,22 +52,9 @@ export interface SweeteningProfile {
 
 const ZERO_OFFSETS = Array.from({ length: 12 }, () => 0);
 
-export const INSTRUMENTS: InstrumentPreset[] = [
-  { id: 'guitar', name: 'Guitar', defaultTuningId: 'standard' },
-  { id: 'guitar-7', name: 'Guitar 7-string', defaultTuningId: 'guitar-7-standard' },
-  { id: 'baritone-guitar', name: 'Baritone Guitar', defaultTuningId: 'baritone-standard' },
-  { id: 'guitar-12', name: 'Guitar 12-string', defaultTuningId: 'twelve-string-standard' },
-  { id: 'bass', name: 'Bass', defaultTuningId: 'bass-standard' },
-  { id: 'ukulele', name: 'Ukulele', defaultTuningId: 'ukulele-standard' },
-  { id: 'baritone-ukulele', name: 'Baritone Ukulele', defaultTuningId: 'baritone-ukulele-standard' },
-  { id: 'mandolin', name: 'Mandolin', defaultTuningId: 'mandolin-standard' },
-  { id: 'banjo', name: 'Banjo', defaultTuningId: 'banjo-open-g' },
-  { id: 'violin', name: 'Violin', defaultTuningId: 'violin-standard' },
-  { id: 'viola', name: 'Viola', defaultTuningId: 'viola-standard' },
-  { id: 'cello', name: 'Cello', defaultTuningId: 'cello-standard' },
-  { id: 'vocal', name: 'Vocal Pitch', defaultTuningId: 'vocal-pitch' },
-  { id: 'chromatic', name: 'Chromatic', defaultTuningId: 'chromatic' },
-];
+export const INSTRUMENTS: InstrumentPreset[] = MUSIC_REGISTRY.instruments.map((instrument) => ({
+  ...instrument,
+}));
 
 export const TEMPERAMENTS: Temperament[] = [
   {
@@ -135,15 +126,6 @@ function note(name: NoteName, octave: number): Note {
   };
 }
 
-export const GUITAR_STRINGS_STANDARD: Note[] = [
-  note('E', 2),
-  note('A', 2),
-  note('D', 3),
-  note('G', 3),
-  note('B', 3),
-  note('E', 4),
-];
-
 export const CHROMATIC_TUNING: Tuning = {
   id: 'chromatic',
   name: 'Chromatic',
@@ -152,245 +134,16 @@ export const CHROMATIC_TUNING: Tuning = {
   kind: 'chromatic',
 };
 
-export const BUILT_IN_TUNINGS: Tuning[] = [
-  {
-    id: 'standard',
-    name: 'Standard (EADGBE)',
-    strings: [...GUITAR_STRINGS_STANDARD],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'drop-d',
-    name: 'Drop D (DADGBE)',
-    strings: [note('D', 2), note('A', 2), note('D', 3), note('G', 3), note('B', 3), note('E', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'dadgad',
-    name: 'DADGAD',
-    strings: [note('D', 2), note('A', 2), note('D', 3), note('G', 3), note('A', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-g',
-    name: 'Open G (DGDGBD)',
-    strings: [note('D', 2), note('G', 2), note('D', 3), note('G', 3), note('B', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-d',
-    name: 'Open D (DADF#AD)',
-    strings: [note('D', 2), note('A', 2), note('D', 3), note('F#', 3), note('A', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'drop-c',
-    name: 'Drop C (CGCFAD)',
-    strings: [note('C', 2), note('G', 2), note('C', 3), note('F', 3), note('A', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'half-step-down',
-    name: 'Half Step Down (D# G# C# F# A# D#)',
-    strings: [note('D#', 2), note('G#', 2), note('C#', 3), note('F#', 3), note('A#', 3), note('D#', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-e',
-    name: 'Open E (EBEG#BE)',
-    strings: [note('E', 2), note('B', 2), note('E', 3), note('G#', 3), note('B', 3), note('E', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'drop-b',
-    name: 'Drop B (BF#BEG#C#)',
-    strings: [note('B', 1), note('F#', 2), note('B', 2), note('E', 3), note('G#', 3), note('C#', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-c',
-    name: 'Open C (CGCGCE)',
-    strings: [note('C', 2), note('G', 2), note('C', 3), note('G', 3), note('C', 4), note('E', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-a',
-    name: 'Open A (EAC#EAE)',
-    strings: [note('E', 2), note('A', 2), note('C#', 3), note('E', 3), note('A', 3), note('E', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'full-step-down',
-    name: 'Full Step Down (DGCFAD)',
-    strings: [note('D', 2), note('G', 2), note('C', 3), note('F', 3), note('A', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'open-gm',
-    name: 'Open Gm (DGDGA#D)',
-    strings: [note('D', 2), note('G', 2), note('D', 3), note('G', 3), note('A#', 3), note('D', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'nashville',
-    name: 'Nashville High Strung (EADGBE)',
-    strings: [note('E', 3), note('A', 3), note('D', 4), note('G', 4), note('B', 3), note('E', 4)],
-    instrument: 'guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'guitar-7-standard',
-    name: '7-string Standard (BEADGBE)',
-    strings: [note('B', 1), note('E', 2), note('A', 2), note('D', 3), note('G', 3), note('B', 3), note('E', 4)],
-    instrument: 'guitar-7',
-    kind: 'built-in',
-  },
-  {
-    id: 'guitar-7-drop-a',
-    name: '7-string Drop A (AEADGBE)',
-    strings: [note('A', 1), note('E', 2), note('A', 2), note('D', 3), note('G', 3), note('B', 3), note('E', 4)],
-    instrument: 'guitar-7',
-    kind: 'built-in',
-  },
-  {
-    id: 'baritone-standard',
-    name: 'Baritone Standard (BEADF#B)',
-    strings: [note('B', 1), note('E', 2), note('A', 2), note('D', 3), note('F#', 3), note('B', 3)],
-    instrument: 'baritone-guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'baritone-drop-a',
-    name: 'Baritone Drop A (AEADF#B)',
-    strings: [note('A', 1), note('E', 2), note('A', 2), note('D', 3), note('F#', 3), note('B', 3)],
-    instrument: 'baritone-guitar',
-    kind: 'built-in',
-  },
-  {
-    id: 'twelve-string-standard',
-    name: '12-string Standard (E/e A/a D/d G/g B/B E/E)',
-    strings: [
-      note('E', 2), note('E', 3),
-      note('A', 2), note('A', 3),
-      note('D', 3), note('D', 4),
-      note('G', 3), note('G', 4),
-      note('B', 3), note('B', 3),
-      note('E', 4), note('E', 4),
-    ],
-    instrument: 'guitar-12',
-    kind: 'built-in',
-  },
-  {
-    id: 'bass-standard',
-    name: 'Bass Standard (EADG)',
-    strings: [note('E', 1), note('A', 1), note('D', 2), note('G', 2)],
-    instrument: 'bass',
-    kind: 'built-in',
-  },
-  {
-    id: 'bass-drop-d',
-    name: 'Bass Drop D (DADG)',
-    strings: [note('D', 1), note('A', 1), note('D', 2), note('G', 2)],
-    instrument: 'bass',
-    kind: 'built-in',
-  },
-  {
-    id: 'bass-half-step',
-    name: 'Bass Half Step Down (D#G#C#F#)',
-    strings: [note('D#', 1), note('G#', 1), note('C#', 2), note('F#', 2)],
-    instrument: 'bass',
-    kind: 'built-in',
-  },
-  {
-    id: 'bass-5-string',
-    name: 'Bass 5-string (BEADG)',
-    strings: [note('B', 0), note('E', 1), note('A', 1), note('D', 2), note('G', 2)],
-    instrument: 'bass',
-    kind: 'built-in',
-  },
-  {
-    id: 'bass-6-string',
-    name: 'Bass 6-string (BEADGC)',
-    strings: [note('B', 0), note('E', 1), note('A', 1), note('D', 2), note('G', 2), note('C', 3)],
-    instrument: 'bass',
-    kind: 'built-in',
-  },
-  {
-    id: 'ukulele-standard',
-    name: 'Ukulele Standard (GCEA)',
-    strings: [note('G', 4), note('C', 4), note('E', 4), note('A', 4)],
-    instrument: 'ukulele',
-    kind: 'built-in',
-  },
-  {
-    id: 'ukulele-low-g',
-    name: 'Ukulele Low G (GCEA)',
-    strings: [note('G', 3), note('C', 4), note('E', 4), note('A', 4)],
-    instrument: 'ukulele',
-    kind: 'built-in',
-  },
-  {
-    id: 'baritone-ukulele-standard',
-    name: 'Baritone Ukulele (DGBE)',
-    strings: [note('D', 3), note('G', 3), note('B', 3), note('E', 4)],
-    instrument: 'baritone-ukulele',
-    kind: 'built-in',
-  },
-  {
-    id: 'mandolin-standard',
-    name: 'Mandolin Standard (GDAE)',
-    strings: [note('G', 3), note('D', 4), note('A', 4), note('E', 5)],
-    instrument: 'mandolin',
-    kind: 'built-in',
-  },
-  {
-    id: 'banjo-open-g',
-    name: 'Banjo Open G (gDGBD)',
-    strings: [note('G', 4), note('D', 3), note('G', 3), note('B', 3), note('D', 4)],
-    instrument: 'banjo',
-    kind: 'built-in',
-  },
-  {
-    id: 'violin-standard',
-    name: 'Violin Standard (GDAE)',
-    strings: [note('G', 3), note('D', 4), note('A', 4), note('E', 5)],
-    instrument: 'violin',
-    kind: 'built-in',
-  },
-  {
-    id: 'viola-standard',
-    name: 'Viola Standard (CGDA)',
-    strings: [note('C', 3), note('G', 3), note('D', 4), note('A', 4)],
-    instrument: 'viola',
-    kind: 'built-in',
-  },
-  {
-    id: 'cello-standard',
-    name: 'Cello Standard (CGDA)',
-    strings: [note('C', 2), note('G', 2), note('D', 3), note('A', 3)],
-    instrument: 'cello',
-    kind: 'built-in',
-  },
-  {
-    id: 'vocal-pitch',
-    name: 'Vocal Pitch (chromatic)',
-    strings: [],
-    instrument: 'vocal',
-    kind: 'built-in',
-  },
+export const BUILT_IN_TUNINGS: Tuning[] = MUSIC_REGISTRY.tunings.map((tuning) => ({
+  id: tuning.id,
+  name: tuning.name,
+  strings: tuning.strings.map(([name, octave]) => note(name as NoteName, octave)),
+  instrument: tuning.instrument,
+  kind: 'built-in',
+}));
+
+export const GUITAR_STRINGS_STANDARD: Note[] = [
+  ...(BUILT_IN_TUNINGS.find((tuning) => tuning.id === 'standard')?.strings ?? []),
 ];
 
 export const TUNINGS: Tuning[] = [CHROMATIC_TUNING, ...BUILT_IN_TUNINGS];

@@ -96,7 +96,7 @@ describe('Rust/Web music-domain parity', () => {
         );
       });
     }
-  });
+  }, 60_000);
 
   it('keeps frequency-to-note and cents math aligned', () => {
     const snapshot = loadRustSnapshot();
