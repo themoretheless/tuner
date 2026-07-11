@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "bass-b0",
+      "frequency": 30.8677,
+      "sampleRate": 48000,
+      "bufferSize": 8192,
+      "amplitude": 0.45,
+      "dcOffset": 0,
+      "harmonics": [1, 0.25, 0.12],
+      "minFrequency": 20,
+      "maxFrequency": 60,
+      "toleranceCents": 6
+    },
+    {
+      "id": "guitar-e2",
+      "frequency": 82.4069,
+      "sampleRate": 44100,
+      "bufferSize": 4096,
+      "amplitude": 0.5,
+      "dcOffset": 0,
+      "harmonics": [1, 0.3, 0.15],
+      "minFrequency": 50,
+      "maxFrequency": 120,
+      "toleranceCents": 5
+    },
+    {
+      "id": "guitar-a3-with-dc",
+      "frequency": 220,
+      "sampleRate": 48000,
+      "bufferSize": 4096,
+      "amplitude": 0.45,
+      "dcOffset": 0.04,
+      "harmonics": [1, 0.2, 0.1],
+      "minFrequency": 160,
+      "maxFrequency": 300,
+      "toleranceCents": 4
+    },
+    {
+      "id": "concert-a4",
+      "frequency": 440,
+      "sampleRate": 48000,
+      "bufferSize": 2048,
+      "amplitude": 0.5,
+      "dcOffset": 0,
+      "harmonics": [1, 0.12],
+      "minFrequency": 350,
+      "maxFrequency": 500,
+      "toleranceCents": 4
+    },
+    {
+      "id": "violin-e5",
+      "frequency": 659.2551,
+      "sampleRate": 48000,
+      "bufferSize": 2048,
+      "amplitude": 0.4,
+      "dcOffset": 0,
+      "harmonics": [1, 0.18, 0.08],
+      "minFrequency": 500,
+      "maxFrequency": 800,
+      "toleranceCents": 5
+    }
+  ]
+}
