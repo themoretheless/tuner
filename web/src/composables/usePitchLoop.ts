@@ -10,7 +10,6 @@ import {
 } from '../utils/pitch';
 import type { PitchDetectorBackend } from '../workers/pitchCoreAdapter';
 
-const DETECTION_MISS_LIMIT = 12;
 const PITCH_DETECT_INTERVAL_MS = 33;
 
 export function usePitchLoop(
@@ -24,7 +23,6 @@ export function usePitchLoop(
   const volume = ref(0);
 
   let rafId: number | null = null;
-  let missedFrames = 0;
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
   let pendingPitchRequestId: number | null = null;
@@ -74,7 +72,6 @@ export function usePitchLoop(
     currentFrequency.value = null;
     smoothedFrequency.value = null;
     volume.value = 0;
-    missedFrames = 0;
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
     smoother.reset();
@@ -85,17 +82,10 @@ export function usePitchLoop(
     currentFrequency.value = freq;
 
     if (freq == null) {
-      missedFrames += 1;
-      if (missedFrames >= DETECTION_MISS_LIMIT) {
-        smoother.reset();
-        smoothedFrequency.value = null;
-      } else {
-        smoothedFrequency.value = smoother.add(freq);
-      }
+      smoothedFrequency.value = smoother.add(null);
       return;
     }
 
-    missedFrames = 0;
     smoothedFrequency.value = smoother.add(freq);
   }
 
@@ -158,7 +148,6 @@ export function usePitchLoop(
 
   function start() {
     if (rafId != null) return;
-    missedFrames = 0;
     lastPitchDetectAt = 0;
     rafId = requestAnimationFrame(tick);
   }

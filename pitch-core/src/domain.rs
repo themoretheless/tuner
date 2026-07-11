@@ -16,6 +16,13 @@ pub struct Tuning {
 
 include!(concat!(env!("OUT_DIR"), "/music_registry.rs"));
 
+pub fn canonical_note_name(name: &str) -> Option<&'static str> {
+    NOTE_NAMES
+        .iter()
+        .copied()
+        .find(|candidate| *candidate == name)
+}
+
 fn equal_tempered_note(name: &'static str, octave: i32) -> Note {
     let index = NOTE_NAMES
         .iter()

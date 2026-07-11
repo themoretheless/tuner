@@ -26,15 +26,17 @@ impl Smoother {
     }
 
     pub fn add(&mut self, frequency: Option<f32>) -> Option<f32> {
-        if let Some(value) = frequency.filter(|value| value.is_finite() && *value > 0.0) {
-            let smoothed = self
-                .ema
-                .map_or(value, |ema| self.alpha * value + (1.0 - self.alpha) * ema);
-            self.ema = Some(smoothed);
-            self.history[self.history_cursor] = smoothed;
-            self.history_cursor = (self.history_cursor + 1) % HISTORY_CAPACITY;
-            self.history_length = (self.history_length + 1).min(HISTORY_CAPACITY);
-        }
+        let Some(value) = frequency.filter(|value| value.is_finite() && *value > 0.0) else {
+            self.reset();
+            return None;
+        };
+        let smoothed = self
+            .ema
+            .map_or(value, |ema| self.alpha * value + (1.0 - self.alpha) * ema);
+        self.ema = Some(smoothed);
+        self.history[self.history_cursor] = smoothed;
+        self.history_cursor = (self.history_cursor + 1) % HISTORY_CAPACITY;
+        self.history_length = (self.history_length + 1).min(HISTORY_CAPACITY);
 
         if self.history_length == 0 {
             return self.ema;

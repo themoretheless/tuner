@@ -234,7 +234,10 @@ export class FrequencySmoother {
   private readonly alpha = 0.4;
 
   add(freq: number | null): number | null {
-    if (freq == null || !isFinite(freq)) return this.ema;
+    if (freq == null || !isFinite(freq) || freq <= 0) {
+      this.reset();
+      return null;
+    }
 
     this.ema = this.ema == null
       ? freq
