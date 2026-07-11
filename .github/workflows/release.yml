@@ -48,7 +48,6 @@ jobs:
 
   release:
     needs: [build-web, build-tauri, build-egui]
-    if: always()  # run even if some desktop builds fail
 
     runs-on: ubuntu-latest
     steps:

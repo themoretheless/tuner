@@ -20,7 +20,7 @@ const checkOnly = process.argv.includes('--check');
 
 for (const [path, source] of targets) {
   if (checkOnly) {
-    const current = await readFile(path, 'utf8').catch(() => '');
+    const current = normalizeLineEndings(await readFile(path, 'utf8').catch(() => ''));
     if (current !== source) {
       throw new Error(`${path} is stale; run: node scripts/generate-note-math.mjs`);
     }
@@ -53,6 +53,10 @@ function expression(node, language) {
 
 function withoutOuterParentheses(value) {
   return value.startsWith('(') && value.endsWith(')') ? value.slice(1, -1) : value;
+}
+
+function normalizeLineEndings(value) {
+  return value.replaceAll('\r\n', '\n');
 }
 
 function validateNoteNames(noteNames) {
