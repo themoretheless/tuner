@@ -1,14 +1,22 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 import { canvasPalette } from '../utils/canvasPalette'
+import { useL10n } from '../stores/l10n'
+
+// Logarithmic frequency range good for guitar (50Hz-6kHz covers fundamentals + early harmonics)
+const MIN_FREQ = 50
+const MAX_FREQ = 6000
 
 const props = defineProps<{
   frame: SpectrumFrame | null
   isListening: boolean
   currentFreq?: number | null
 }>()
+
+const { t } = useL10n()
 
 const { canvas } = useCanvasRenderer({
   cssHeight: 130,
@@ -17,6 +25,30 @@ const { canvas } = useCanvasRenderer({
   draw: drawFrame,
 })
 void canvas
+
+// Frequency (Hz) of the tallest bin within [MIN_FREQ, MAX_FREQ], independent
+// of the coarser display-bar resolution, so the label reflects the true FFT peak.
+const peakFrequency = computed(() => {
+  if (!props.isListening || !props.frame) return null
+  const data = props.frame.bins
+  const binCount = data.length
+  const sr = props.frame.sampleRate || 48000
+  const nyquist = sr / 2
+  if (!binCount || nyquist <= 0) return null
+
+  const minBin = Math.max(0, Math.floor((MIN_FREQ / nyquist) * binCount))
+  const maxBin = Math.min(binCount - 1, Math.ceil((MAX_FREQ / nyquist) * binCount))
+  let peakBin = -1
+  let peakValue = 0
+  for (let bin = minBin; bin <= maxBin; bin++) {
+    if (data[bin] > peakValue) {
+      peakValue = data[bin]
+      peakBin = bin
+    }
+  }
+  if (peakBin < 0 || peakValue <= 0) return null
+  return (peakBin / binCount) * nyquist
+})
 
 function clearCanvas(frame: CanvasFrame) {
   frame.ctx.fillStyle = canvasPalette(frame).background
@@ -39,10 +71,6 @@ function drawFrame(frame: CanvasFrame) {
 
   const sr = props.frame.sampleRate || 48000
   const nyquist = sr / 2
-
-  // Logarithmic frequency range good for guitar (50Hz-6kHz covers fundamentals + early harmonics)
-  const MIN_FREQ = 50
-  const MAX_FREQ = 6000
 
   // Slightly fewer wider bars look cleaner on log scale
   const displayBins = Math.max(36, Math.min(160, Math.floor(w / 3.6)))
@@ -110,6 +138,12 @@ function drawFrame(frame: CanvasFrame) {
 
 <template>
   <div class="w-full">
+    <div class="flex justify-between text-[10px] mb-1 text-slate-500">
+      <div>{{ t('spectrum') }}</div>
+      <div v-if="peakFrequency != null" class="font-mono">
+        {{ t('spectrum.peak') }}: {{ peakFrequency.toFixed(1) }} Hz
+      </div>
+    </div>
     <canvas
       ref="canvas"
       class="visual-canvas block w-full rounded-lg border"
