@@ -80,6 +80,42 @@ export function useTuningState(
 
   let inTuneStable = false;
 
+  // Keep the current auto-detected target/note until the pitch is decisively
+  // closer to another one. Without this, a string sitting near the midpoint
+  // between two targets flips the pick on every few-cent wobble and the
+  // needle slams across the whole scale (+45 -> -45 and back).
+  const TARGET_SWITCH_MARGIN_CENTS = 15;
+  let stickyAutoTarget: Note | null = null;
+  let stickyDisplayNote: Note | null = null;
+
+  function stickyPick(frequency: number, candidate: Note, previous: Note | null): Note {
+    if (!previous || !Number.isFinite(previous.frequency) || previous.frequency <= 0) {
+      return candidate;
+    }
+    const toPrevious = Math.abs(getCents(frequency, previous.frequency));
+    const toCandidate = Math.abs(getCents(frequency, candidate.frequency));
+    return toPrevious - toCandidate <= TARGET_SWITCH_MARGIN_CENTS ? previous : candidate;
+  }
+
+  function resolveAutoTarget(frequency: number): Note {
+    const candidate = isChromaticMode.value
+      ? frequencyToNote(frequency, a4.value, temperament.value, temperamentRoot.value, temperamentOptions.value)
+      : findClosestString(frequency, strings.value);
+    // A sticky pick is only reusable while it is still a valid target for
+    // the current mode: in string mode it must still be one of the strings.
+    const previous = isChromaticMode.value
+      ? stickyAutoTarget
+      : stickyAutoTarget && strings.value.some((string) => (
+        noteId(string) === noteId(stickyAutoTarget!) &&
+        Math.abs(string.frequency - stickyAutoTarget!.frequency) < 0.01
+      ))
+        ? stickyAutoTarget
+        : null;
+    const chosen = stickyPick(frequency, candidate, previous);
+    stickyAutoTarget = chosen;
+    return chosen;
+  }
+
   const isChromaticMode = computed(() => (
     currentTuning.value.kind === 'chromatic' || currentTuning.value.strings.length === 0
   ));
@@ -116,15 +152,27 @@ export function useTuningState(
     return strings.value[selectedStringIndex.value] ?? null;
   });
 
+  // Detection dropping out clears the stickiness so the next note picks its
+  // target fresh. Sync flush: the clear must not be skipped when a null is
+  // immediately followed by a new reading in the same tick.
+  watch(detectedFrequency, (value) => {
+    if (!value) {
+      stickyAutoTarget = null;
+      stickyDisplayNote = null;
+    }
+  }, { flush: 'sync' });
+
   const detectedNote = computed<DetectedNote | null>(() => {
     const frequency = detectedFrequency.value;
     if (!frequency) return null;
 
-    const target = isChromaticMode.value
-      ? frequencyToNote(frequency, a4.value, temperament.value, temperamentRoot.value, temperamentOptions.value)
-      : selectedString.value ?? findClosestString(frequency, strings.value);
+    const target = !isChromaticMode.value && selectedString.value
+      ? selectedString.value
+      : resolveAutoTarget(frequency);
     const cents = getCents(frequency, target.frequency);
-    const note = frequencyToNote(frequency, a4.value, temperament.value, temperamentRoot.value, temperamentOptions.value);
+    const rawNote = frequencyToNote(frequency, a4.value, temperament.value, temperamentRoot.value, temperamentOptions.value);
+    const note = stickyPick(frequency, rawNote, stickyDisplayNote);
+    stickyDisplayNote = note;
 
     return { note, cents, frequency };
   });
@@ -132,11 +180,7 @@ export function useTuningState(
   const targetNote = computed<Note>(() => {
     const frequency = detectedFrequency.value;
     if (selectedString.value) return selectedString.value;
-    if (frequency) {
-      return isChromaticMode.value
-        ? frequencyToNote(frequency, a4.value, temperament.value, temperamentRoot.value, temperamentOptions.value)
-        : findClosestString(frequency, strings.value);
-    }
+    if (frequency) return resolveAutoTarget(frequency);
     return isChromaticMode.value
       ? noteWithA4({ name: temperamentRoot.value, octave: 4 }, a4.value, temperament.value, transpose.value, temperamentRoot.value, temperamentOptions.value)
       : strings.value[0];
@@ -163,6 +207,8 @@ export function useTuningState(
 
   function resetDetectionState() {
     inTuneStable = false;
+    stickyAutoTarget = null;
+    stickyDisplayNote = null;
     options.onResetDetection?.();
   }
 

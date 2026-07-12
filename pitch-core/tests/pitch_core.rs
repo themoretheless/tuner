@@ -176,13 +176,20 @@ fn detector_removes_dc_offset() {
 fn octave_crosscheck_folds_a_harmonic_lock_back_to_the_fundamental() {
     // A guitar-like tone at 110 Hz; a detector that erroneously locked onto
     // the 2nd harmonic (220 Hz) should be folded back down, because the
-    // spectrum clearly carries energy at 110 Hz and 330 Hz.
+    // spectrum clearly carries energy at 110 Hz and 330 Hz. The fold needs
+    // two consecutive frames of evidence to engage, so the first frame
+    // passes through unchanged.
     let buffer = harmonic_buffer(110.0, 48_000.0, 4096, &[1.0, 0.6, 0.4, 0.25]);
     let mut checker = OctaveDisambiguator::new();
+    let first = checker.resolve(&buffer, 48_000.0, 220.0, 30.0, 400.0);
+    assert!(
+        (first - 220.0).abs() < 1.0,
+        "expected the first frame to pass through while the fold confirms, got {first}"
+    );
     let resolved = checker.resolve(&buffer, 48_000.0, 220.0, 30.0, 400.0);
     assert!(
         (resolved - 110.0).abs() < 1.0,
-        "expected the octave-up lock to fold back to 110 Hz, got {resolved}"
+        "expected the confirmed octave-up lock to fold back to 110 Hz, got {resolved}"
     );
 }
 
@@ -193,10 +200,35 @@ fn octave_crosscheck_folds_a_subharmonic_lock_up_to_the_real_pitch() {
     // while its even ones (220, 440, 660) carry all the energy.
     let buffer = harmonic_buffer(220.0, 48_000.0, 4096, &[1.0, 0.5, 0.3]);
     let mut checker = OctaveDisambiguator::new();
+    checker.resolve(&buffer, 48_000.0, 110.0, 30.0, 400.0);
     let resolved = checker.resolve(&buffer, 48_000.0, 110.0, 30.0, 400.0);
     assert!(
         (resolved - 220.0).abs() < 1.0,
-        "expected the subharmonic lock to fold up to 220 Hz, got {resolved}"
+        "expected the confirmed subharmonic lock to fold up to 220 Hz, got {resolved}"
+    );
+}
+
+#[test]
+fn octave_crosscheck_does_not_flip_on_a_single_contradictory_frame() {
+    // Once a fold is engaged, one borderline frame must not toggle it: the
+    // readout stayed folded through the ambiguous frame instead of slamming
+    // an octave back and forth.
+    let locked = harmonic_buffer(110.0, 48_000.0, 4096, &[1.0, 0.6, 0.4, 0.25]);
+    let mut checker = OctaveDisambiguator::new();
+    checker.resolve(&locked, 48_000.0, 220.0, 30.0, 400.0);
+    checker.resolve(&locked, 48_000.0, 220.0, 30.0, 400.0);
+
+    // The fold stays engaged on further consistent frames...
+    let resolved = checker.resolve(&locked, 48_000.0, 220.0, 30.0, 400.0);
+    assert!((resolved - 110.0).abs() < 1.0);
+
+    // ...and a genuinely corrected estimate (the detector itself now says
+    // 110 Hz, whose sub-octave carries no energy) passes through unfolded
+    // on the very same frame - the fold must not halve it to 55 Hz.
+    let resolved = checker.resolve(&locked, 48_000.0, 110.0, 30.0, 400.0);
+    assert!(
+        (resolved - 110.0).abs() < 1.0,
+        "expected the corrected estimate to disengage the fold immediately, got {resolved}"
     );
 }
 
@@ -298,11 +330,11 @@ fn smoother_accepts_a_sustained_octave_change_as_a_real_note() {
         smoother.add(Some(110.0));
     }
     // A genuine octave-up note change should still win once it persists:
-    // the 3-frame fold streak lets the raw 220 Hz value through, and then
-    // the (pre-existing) median-of-5 history needs a few more frames to
-    // fully turn over before the readout settles near 220 Hz.
+    // the 8-frame fold streak lets the raw 220 Hz value through, and then
+    // the (pre-existing) EMA + median-of-5 history needs a few more frames
+    // to fully turn over before the readout settles near 220 Hz.
     let mut last = None;
-    for _ in 0..15 {
+    for _ in 0..20 {
         last = smoother.add(Some(220.0));
     }
     let settled = last.expect("smoothed value");
