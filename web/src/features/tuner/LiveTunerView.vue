@@ -4,6 +4,7 @@ import { useL10n } from '../../stores/l10n';
 import CentsGauge from '../../components/CentsGauge.vue';
 import DisplayModeSelector from '../../components/DisplayModeSelector.vue';
 import FreqReadout from '../../components/FreqReadout.vue';
+import HzGauge from '../../components/HzGauge.vue';
 import InputDeviceSelector from '../../components/InputDeviceSelector.vue';
 import LevelMeter from '../../components/LevelMeter.vue';
 import MicButton from '../../components/MicButton.vue';
@@ -53,6 +54,11 @@ function toggleMic() {
         :mode="tuner.displayMode"
         :is-in-tune="tuner.isInTune"
         :is-detected="tuner.hasDetection"
+      />
+      <HzGauge
+        :detected="tuner.detectionFrame.freq"
+        :target="tuner.targetNote.frequency"
+        :is-in-tune="tuner.isInTune"
       />
       <SpectralPeakReadout
         :frame="tuner.spectrumFrame"
