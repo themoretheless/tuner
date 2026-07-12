@@ -20,6 +20,13 @@ import type {
 
 const PITCH_DETECT_INTERVAL_MS = 33;
 
+// How many consecutive too-quiet rAF ticks to ride out before clearing the
+// readout. A decaying string hovers around the gate thresholds, and clearing
+// on the first quiet tick makes the display flicker between a value and a
+// dash at frame rate. ~8 ticks is roughly 130ms at 60fps; true silence still
+// clears quickly, a mid-decay dip does not.
+const QUIET_TICKS_BEFORE_CLEAR = 8;
+
 export function usePitchLoop(
   readFrame: () => AudioFrame | null,
   detectionRange: Ref<PitchDetectionRange> = ref(DEFAULT_PITCH_DETECTION_RANGE),
@@ -41,6 +48,7 @@ export function usePitchLoop(
   let sentContextRevision = -1;
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
+  let quietTicks = 0;
   const fallbackSmoother = new FrequencySmoother();
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
@@ -97,6 +105,7 @@ export function usePitchLoop(
     volume.value = 0;
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
+    quietTicks = 0;
     fallbackSmoother.reset();
     pitchWorker?.postMessage({ type: 'reset' });
   }
@@ -124,12 +133,25 @@ export function usePitchLoop(
     const now = performance.now();
     const signalTooQuiet = stats.rms < 0.002 || stats.maxAbs < 0.01;
     if (signalTooQuiet) {
-      pitchRequestId += 1;
-      applyFallbackEstimate(null, stats);
-    }
-    if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
-      lastPitchDetectAt = now;
-      requestPitchDetection(frame, stats);
+      // Hold the current reading through brief dips (a decaying string
+      // crossing the gate): skip detection, keep the last frame on screen,
+      // and only clear once the quiet is sustained. The one-time worker
+      // reset makes sure the next note starts from a clean smoother instead
+      // of blending with the note that just ended.
+      quietTicks += 1;
+      if (quietTicks >= QUIET_TICKS_BEFORE_CLEAR) {
+        if (quietTicks === QUIET_TICKS_BEFORE_CLEAR) {
+          pitchWorker?.postMessage({ type: 'reset' });
+        }
+        pitchRequestId += 1;
+        applyFallbackEstimate(null, stats);
+      }
+    } else {
+      quietTicks = 0;
+      if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
+        lastPitchDetectAt = now;
+        requestPitchDetection(frame, stats);
+      }
     }
 
     rafId = requestAnimationFrame(tick);

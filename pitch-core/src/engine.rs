@@ -7,6 +7,15 @@ use crate::{
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
 const DEFAULT_SPECTRUM_BINS: usize = 512;
 
+/// How many consecutive failed detections to ride out while the signal is
+/// still above the RMS gate, before the readout clears. A decaying string
+/// hovers around the detector's gates/confidence floor and detection
+/// flickers Some/None; without a hold, every flicker resets the smoother
+/// and the next reading reaches the display raw and jittery. At the ~33ms
+/// detection cadence this is roughly 200ms. True silence (RMS below the
+/// gate) still clears immediately.
+const DETECTION_HOLD_FRAMES: u8 = 6;
+
 #[derive(Clone, Debug)]
 pub struct EngineConfig {
     pub a4: f32,
@@ -37,6 +46,9 @@ pub struct TunerEngine {
     spectrum: Option<SpectrumAnalyzer>,
     spectrum_bins: usize,
     spectrum_fft_size: usize,
+    rms_gate: f32,
+    hold_streak: u8,
+    held_reading: Option<(f32, f32)>,
 }
 
 impl TunerEngine {
@@ -76,28 +88,37 @@ impl TunerEngine {
                 .then(|| SpectrumAnalyzer::new(spectrum_fft_size, spectrum_bins)),
             spectrum_bins: configured_spectrum_bins,
             spectrum_fft_size,
+            rms_gate: detector.rms_gate,
+            hold_streak: 0,
+            held_reading: None,
         }
+    }
+
+    fn clear_smoothing(&mut self) {
+        self.smoother.reset();
+        self.hold_streak = 0;
+        self.held_reading = None;
     }
 
     pub fn set_a4(&mut self, a4: f32) {
         self.resolver.set_a4(a4);
-        self.smoother.reset();
+        self.clear_smoothing();
     }
 
     pub fn set_tuning(&mut self, t: Tuning) {
         self.resolver.set_tuning(t);
-        self.smoother.reset();
+        self.clear_smoothing();
     }
 
     pub fn set_frame_context(&mut self, context: Option<FrameContext>) {
         self.resolver.set_context(context);
-        self.smoother.reset();
+        self.clear_smoothing();
     }
 
     pub fn set_detection_range(&mut self, min_frequency: f32, max_frequency: f32) {
         self.detector
             .set_frequency_range(min_frequency, max_frequency);
-        self.smoother.reset();
+        self.clear_smoothing();
         self.resolver.reset();
     }
 
@@ -119,16 +140,28 @@ impl TunerEngine {
         let level = signal::normalize_level(rms);
         let estimate = self.detector.detect(buffer, sample_rate);
         let raw_opt = estimate.map(|estimate| estimate.frequency);
-        let confidence = estimate.map_or(0.0, |estimate| estimate.confidence);
 
-        // Smooth the detected pitch to de-jitter the readout. When detection
-        // drops (silence / gate closed), clear immediately instead of lingering
-        // on the last smoothed value.
-        let freq_opt = if raw_opt.is_some() {
-            self.smoother.add(raw_opt)
+        // Smooth the detected pitch to de-jitter the readout. A failed
+        // detection while the signal is still above the gate (a decaying
+        // string flickering around the detector's thresholds) rides on the
+        // last smoothed reading for a few frames, keeping the smoother's
+        // history alive so re-acquired values stay smoothed. True silence
+        // clears immediately instead of lingering on a stale value.
+        let (freq_opt, confidence) = if let Some(estimate) = estimate {
+            self.hold_streak = 0;
+            let smoothed = self.smoother.add(raw_opt);
+            self.held_reading = smoothed.map(|frequency| (frequency, estimate.confidence));
+            (smoothed, estimate.confidence)
+        } else if rms >= self.rms_gate
+            && self.held_reading.is_some()
+            && self.hold_streak < DETECTION_HOLD_FRAMES
+        {
+            self.hold_streak += 1;
+            let (frequency, held_confidence) = self.held_reading.unwrap_or_default();
+            (Some(frequency), held_confidence)
         } else {
-            self.smoother.reset();
-            None
+            self.clear_smoothing();
+            (None, 0.0)
         };
 
         let is_power = if let Some(f) = freq_opt {
@@ -160,7 +193,7 @@ impl TunerEngine {
     }
 
     pub fn reset(&mut self) {
-        self.smoother.reset();
+        self.clear_smoothing();
         self.resolver.reset();
     }
 }

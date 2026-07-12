@@ -204,6 +204,61 @@ fn smoother_accepts_a_sustained_octave_change_as_a_real_note() {
     );
 }
 
+/// Deterministic pseudo-noise (LCG): audible level, but no periodic pitch
+/// for the detector to lock onto - models the messy tail of a decaying
+/// string where the signal is still above the gate but detection fails.
+fn noise_buffer(length: usize, amplitude: f32) -> Vec<f32> {
+    let mut state: u32 = 0x1234_5678;
+    (0..length)
+        .map(|_| {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let unit = (state >> 8) as f32 / (1 << 24) as f32;
+            (unit * 2.0 - 1.0) * amplitude
+        })
+        .collect()
+}
+
+#[test]
+fn engine_rides_out_brief_detection_dropouts_while_the_signal_persists() {
+    let sample_rate = 44_100.0;
+    let mut engine = TunerEngine::with_config(EngineConfig {
+        spectrum_bins: 0,
+        ..EngineConfig::default()
+    });
+    for _ in 0..5 {
+        engine.process(&sine_buffer(110.0, sample_rate, 4096), sample_rate);
+    }
+
+    // A decaying string: the frame is still well above the RMS gate but the
+    // detector can't lock a pitch. The readout must hold the last smoothed
+    // value instead of clearing and later re-showing a raw, jittery one.
+    let noise = noise_buffer(4096, 0.05);
+    let held = engine.process(&noise, sample_rate);
+    let held_freq = held
+        .freq
+        .expect("reading should be held through a brief dropout");
+    assert!(
+        (held_freq - 110.0).abs() < 3.0,
+        "expected the held reading to stay near 110 Hz, got {held_freq}"
+    );
+
+    // Detection coming back after the dropout stays smoothed against the
+    // preserved history - no raw jump.
+    let reacquired = engine.process(&sine_buffer(110.0, sample_rate, 4096), sample_rate);
+    let freq = reacquired.freq.expect("pitch after dropout");
+    assert!((freq - 110.0).abs() < 3.0);
+
+    // A sustained dropout eventually clears the readout.
+    let mut last = reacquired.freq;
+    for _ in 0..12 {
+        last = engine.process(&noise, sample_rate).freq;
+    }
+    assert!(
+        last.is_none(),
+        "expected a sustained dropout to clear the readout"
+    );
+}
+
 #[test]
 fn smoother_leaves_normal_pitch_bends_untouched() {
     let mut smoother = Smoother::new();
