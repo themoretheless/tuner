@@ -1,31 +1,30 @@
-import type {
-  PitchDetectionRange,
-  SignalStats,
+import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import type { DetectionFrame, FrameContext } from '../types/frames';
+import {
+  FrequencySmoother,
+  normalizeLevel,
+  type PitchDetectionRange,
+  type PitchEstimate,
+  type SignalStats,
 } from '../utils/pitch';
+import {
+  applyFrameContext,
+  readWasmFrame,
+  type StatefulWasmTunerProcessor,
+} from './pitchFrameCodec';
 
 export type PitchDetectorBackend = 'typescript' | 'wasm';
+export type DetectionFrameSemantics = 'resolved' | 'unresolved';
 
-export interface WorkerPitchDetection {
+export interface WorkerPitchFrame {
   backend: PitchDetectorBackend;
-  confidence: number;
-  frequency: number | null;
-}
-
-interface WasmPitchDetection {
-  readonly confidence: number;
-  readonly freq: number;
-  free(): void;
-}
-
-interface StatefulWasmPitchDetector {
-  detect(buffer: Float32Array, sampleRate: number): WasmPitchDetection | undefined;
-  free(): void;
-  set_frequency_range(minFrequency: number, maxFrequency: number): void;
+  frame: DetectionFrame;
+  semantics: DetectionFrameSemantics;
 }
 
 export interface PitchCoreWasmModule {
   default(): Promise<unknown> | unknown;
-  WasmPitchDetector: new () => StatefulWasmPitchDetector;
+  TunerProcessor: new () => StatefulWasmTunerProcessor;
 }
 
 export type PitchCoreModuleLoader = (moduleUrl: string) => Promise<PitchCoreWasmModule>;
@@ -34,15 +33,16 @@ export type FallbackPitchDetector = (
   sampleRate: number,
   stats: SignalStats,
   range: PitchDetectionRange,
-) => number | null;
+) => PitchEstimate | null;
 
 export class PitchCoreAdapter {
-  private detectorPromise: Promise<StatefulWasmPitchDetector | null> | null = null;
   private readonly fallback: FallbackPitchDetector;
+  private readonly fallbackSmoother = new FrequencySmoother();
   private lastMaxFrequency: number | null = null;
   private lastMinFrequency: number | null = null;
   private readonly loadModule: PitchCoreModuleLoader;
   private readonly moduleUrl: string;
+  private processorPromise: Promise<StatefulWasmTunerProcessor | null> | null = null;
 
   constructor(
     moduleUrl: string,
@@ -54,94 +54,106 @@ export class PitchCoreAdapter {
     this.fallback = fallback;
   }
 
-  async detect(
+  async process(
     buffer: Float32Array,
     sampleRate: number,
     stats: SignalStats,
     range: PitchDetectionRange,
-  ): Promise<WorkerPitchDetection> {
-    const detector = await this.getDetector();
-    if (!detector) return this.fallbackDetection(buffer, sampleRate, stats, range);
+    frameContext?: FrameContext,
+  ): Promise<WorkerPitchFrame> {
+    const rangeChanged = this.updateRange(range);
+    const processor = await this.getProcessor();
+    if (!processor) return this.fallbackFrame(buffer, sampleRate, stats, range);
 
     try {
-      if (
-        range.minFrequency !== this.lastMinFrequency
-        || range.maxFrequency !== this.lastMaxFrequency
-      ) {
-        detector.set_frequency_range(range.minFrequency, range.maxFrequency);
-        this.lastMinFrequency = range.minFrequency;
-        this.lastMaxFrequency = range.maxFrequency;
+      if (rangeChanged) {
+        processor.set_frequency_range(range.minFrequency, range.maxFrequency);
       }
+      if (frameContext) applyFrameContext(processor, frameContext);
 
-      const detection = detector.detect(buffer, sampleRate);
-      if (!detection) return { backend: 'wasm', confidence: 0, frequency: null };
+      const wasmFrame = processor.process(buffer, sampleRate);
       try {
-        const detectedFrequency = Number(detection.freq);
-        const frequency = Number.isFinite(detectedFrequency) && detectedFrequency > 0
-          ? detectedFrequency
-          : null;
+        this.fallbackSmoother.reset();
         return {
           backend: 'wasm',
-          confidence: frequency == null ? 0 : clamp01(Number(detection.confidence)),
-          frequency,
+          frame: readWasmFrame(wasmFrame),
+          semantics: 'resolved',
         };
       } finally {
-        detection.free();
+        wasmFrame.free();
       }
     } catch {
-      this.disableDetector(detector);
-      return this.fallbackDetection(buffer, sampleRate, stats, range);
+      this.disableProcessor(processor);
+      return this.fallbackFrame(buffer, sampleRate, stats, range);
     }
   }
 
   async dispose(): Promise<void> {
-    const pending = this.detectorPromise;
-    this.detectorPromise = null;
+    const pending = this.processorPromise;
+    this.processorPromise = null;
     this.lastMinFrequency = null;
     this.lastMaxFrequency = null;
-    const detector = await pending?.catch(() => null);
-    detector?.free();
+    this.fallbackSmoother.reset();
+    const processor = await pending?.catch(() => null);
+    processor?.free();
   }
 
-  private getDetector() {
-    if (!this.detectorPromise) this.detectorPromise = this.initializeDetector();
-    return this.detectorPromise;
+  async reset(): Promise<void> {
+    this.fallbackSmoother.reset();
+    const processor = await this.processorPromise?.catch(() => null);
+    processor?.reset();
   }
 
-  private async initializeDetector(): Promise<StatefulWasmPitchDetector | null> {
+  private getProcessor() {
+    if (!this.processorPromise) this.processorPromise = this.initializeProcessor();
+    return this.processorPromise;
+  }
+
+  private async initializeProcessor(): Promise<StatefulWasmTunerProcessor | null> {
     if (!this.moduleUrl) return null;
     try {
       const module = await this.loadModule(this.moduleUrl);
       await module.default();
-      return new module.WasmPitchDetector();
+      return new module.TunerProcessor();
     } catch {
       return null;
     }
   }
 
-  private disableDetector(detector: StatefulWasmPitchDetector) {
-    this.detectorPromise = Promise.resolve(null);
-    this.lastMinFrequency = null;
-    this.lastMaxFrequency = null;
-    detector.free();
+  private disableProcessor(processor: StatefulWasmTunerProcessor) {
+    this.processorPromise = Promise.resolve(null);
+    this.fallbackSmoother.reset();
+    processor.free();
   }
 
-  private fallbackDetection(
+  private fallbackFrame(
     buffer: Float32Array,
     sampleRate: number,
     stats: SignalStats,
     range: PitchDetectionRange,
-  ): WorkerPitchDetection {
-    const frequency = this.fallback(buffer, sampleRate, stats, range);
+  ): WorkerPitchFrame {
+    const estimate = this.fallback(buffer, sampleRate, stats, range);
+    const frequency = this.fallbackSmoother.add(estimate?.frequency ?? null);
     return {
       backend: 'typescript',
-      confidence: frequency == null ? 0 : 1,
-      frequency,
+      frame: createUnresolvedDetectionFrame({
+        confidence: frequency == null ? 0 : estimate?.confidence,
+        freq: frequency,
+        level: normalizeLevel(stats.rms),
+        rms: stats.rms,
+      }),
+      semantics: 'unresolved',
     };
   }
-}
 
-function clamp01(value: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
+  private updateRange(range: PitchDetectionRange) {
+    const changed = range.minFrequency !== this.lastMinFrequency
+      || range.maxFrequency !== this.lastMaxFrequency;
+    if (changed) {
+      this.lastMinFrequency = range.minFrequency;
+      this.lastMaxFrequency = range.maxFrequency;
+      this.fallbackSmoother.reset();
+    }
+    return changed;
+  }
 }

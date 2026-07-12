@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
 import { useTunerSession } from '../src/composables/useTunerSession';
+import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
 import type { AudioBackend } from '../src/utils/settingsStorage';
 
@@ -59,7 +60,8 @@ describe('useTunerSession', () => {
     expect(session.isListening.value).toBe(true);
     expect(session.volume.value).toBeGreaterThan(0);
     expect(session.detectionFrame.value.level).toBeGreaterThan(0);
-    expect(session.detectionFrame.value.confidence).toBe(1);
+    expect(session.detectionFrame.value.confidence).toBeGreaterThanOrEqual(MIN_USABLE_PITCH_CONFIDENCE);
+    expect(session.detectionFrame.value.confidence).toBeLessThanOrEqual(1);
     expect(session.detectedFrequency.value).not.toBeNull();
     expect(session.detectionFrame.value.freq).toBe(session.detectedFrequency.value);
     expect(Math.abs(session.detectedFrequency.value! - 82.4069)).toBeLessThan(1.5);

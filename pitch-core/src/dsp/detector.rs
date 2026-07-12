@@ -3,6 +3,12 @@ use super::{MpmDetector, YinDetector};
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
 const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
 
+/// Lowest normalized periodicity score that may update the tuner readout.
+///
+/// Confidence is a signal-quality score, not a probability: `0.0` means no
+/// usable periodic estimate and `1.0` means an ideal periodic frame.
+pub const MIN_USABLE_CONFIDENCE: f32 = 0.5;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PitchEstimate {
     pub confidence: f32,
@@ -18,6 +24,7 @@ impl PitchEstimate {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DetectorConfig {
     pub max_frequency: f32,
+    pub min_confidence: f32,
     pub min_frequency: f32,
     pub peak_gate: f32,
     pub rms_gate: f32,
@@ -29,6 +36,7 @@ impl Default for DetectorConfig {
         Self {
             min_frequency: DEFAULT_MIN_FREQUENCY,
             max_frequency: DEFAULT_MAX_FREQUENCY,
+            min_confidence: MIN_USABLE_CONFIDENCE,
             peak_gate: 0.012,
             rms_gate: 0.0025,
             yin_threshold: 0.12,
@@ -49,6 +57,20 @@ impl DetectorConfig {
             self.min_frequency = min_frequency;
             self.max_frequency = max_frequency;
         }
+    }
+
+    pub fn with_min_confidence(mut self, min_confidence: f32) -> Self {
+        self.set_min_confidence(min_confidence);
+        self
+    }
+
+    pub fn set_min_confidence(&mut self, min_confidence: f32) {
+        self.min_confidence = normalize_confidence(min_confidence, MIN_USABLE_CONFIDENCE);
+    }
+
+    pub(crate) fn accepts_confidence(&self, confidence: f32) -> bool {
+        confidence.is_finite()
+            && confidence >= normalize_confidence(self.min_confidence, MIN_USABLE_CONFIDENCE)
     }
 }
 
@@ -72,6 +94,8 @@ impl Default for HybridPitchDetector {
 
 impl HybridPitchDetector {
     pub fn new(config: DetectorConfig) -> Self {
+        let mut config = config;
+        config.set_min_confidence(config.min_confidence);
         Self {
             cleaned: Vec::new(),
             config,
@@ -121,14 +145,25 @@ impl PitchDetector for HybridPitchDetector {
         let estimate = self
             .yin
             .detect_centered(&cleaned, sample_rate)
-            .or_else(|| self.mpm.detect_centered(&cleaned, sample_rate));
+            .or_else(|| self.mpm.detect_centered(&cleaned, sample_rate))
+            .filter(|estimate| self.config.accepts_confidence(estimate.confidence));
         self.cleaned = cleaned;
         estimate
     }
 
     fn set_config(&mut self, config: DetectorConfig) {
-        self.config = config;
-        self.yin.set_config(config);
-        self.mpm.set_config(config);
+        let mut normalized = config;
+        normalized.set_min_confidence(config.min_confidence);
+        self.config = normalized;
+        self.yin.set_config(normalized);
+        self.mpm.set_config(normalized);
+    }
+}
+
+fn normalize_confidence(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        fallback
     }
 }

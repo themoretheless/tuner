@@ -35,7 +35,7 @@ export function useTuner() {
   }));
   const detectionFrame = computed<DetectionFrame>(() => {
     const baseFrame = session.detectionFrame.value;
-    if (session.usingNativeAudio.value) return baseFrame;
+    if (session.detectionFrameResolved.value) return baseFrame;
     return {
       ...baseFrame,
       cents: tuning.detectedNote.value ? tuning.cents.value : 0,

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import manifest from '../../fixtures/pitch-parity.json';
-import { computeSignalStats, detectPitch } from '../src/utils/pitch';
+import {
+  computeSignalStats,
+  detectPitchEstimate,
+  MIN_USABLE_PITCH_CONFIDENCE,
+} from '../src/utils/pitch';
 
 interface PitchFixture {
   id: string;
@@ -13,16 +17,19 @@ interface PitchFixture {
   harmonics: number[];
   minFrequency: number;
   maxFrequency: number;
+  minimumConfidence: number;
   toleranceCents: number;
 }
 
 describe('TypeScript pitch fallback parity', () => {
   it('matches the shared native/WASM fixture manifest', () => {
-    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.confidenceModel).toBe('normalized-periodicity-v1');
+    expect(manifest.minimumUsableConfidence).toBe(MIN_USABLE_PITCH_CONFIDENCE);
 
     for (const fixture of manifest.fixtures as PitchFixture[]) {
       const samples = renderFixture(fixture);
-      const detected = detectPitch(
+      const detected = detectPitchEstimate(
         samples,
         fixture.sampleRate,
         computeSignalStats(samples),
@@ -33,8 +40,11 @@ describe('TypeScript pitch fallback parity', () => {
       );
 
       expect(detected, `${fixture.id} should produce a detection`).not.toBeNull();
+      expect(detected!.confidence, `${fixture.id} confidence`).toBeGreaterThanOrEqual(
+        fixture.minimumConfidence,
+      );
       expect(
-        centsError(detected!, fixture.frequency),
+        centsError(detected!.frequency, fixture.frequency),
         `${fixture.id} cents error`,
       ).toBeLessThanOrEqual(fixture.toleranceCents);
     }

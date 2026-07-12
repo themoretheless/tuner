@@ -18,6 +18,8 @@ import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../util
 import type { AudioBackend } from '../utils/settingsStorage';
 import { syntheticAudioFixtureFromLocation, type SyntheticAudioFixture } from '../utils/syntheticAudio';
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import { createDefaultFrameContext } from '../domain/frameContext';
+import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 
 interface TunerSessionOptions {
   audioBackend: Ref<AudioBackend>;
@@ -37,6 +39,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     synthetic: syntheticAudio,
   };
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
+  const frameContext = ref<FrameContext>(createDefaultFrameContext());
   const lifecycleSnapshot = ref<SessionLifecycleSnapshot>({
     activeBackend: null,
     status: 'idle',
@@ -64,20 +67,21 @@ export function useTunerSession(options: TunerSessionOptions) {
       return isAudioFrameInputPort(port) ? port.readFrame() : null;
     },
     detectionRange,
+    frameContext,
   );
 
   const detectionFrame = computed<DetectionFrame>(() => {
     const port = activeInputPort.value;
     if (isDetectionFrameInputPort(port)) {
-      return port.frame.value ?? createDetectionFrame(null, 0);
+      return port.frame.value ?? createUnresolvedDetectionFrame();
     }
-    return createDetectionFrame(
-      pitch.smoothedFrequency.value,
-      pitch.volume.value,
-      pitch.confidence.value,
-    );
+    return pitch.detectionFrame.value;
   });
   const detectedFrequency = computed(() => detectionFrame.value.freq);
+  const detectionFrameResolved = computed(() => (
+    isDetectionFrameInputPort(activeInputPort.value)
+      || pitch.frameSemantics.value === 'resolved'
+  ));
 
   const error = computed(() => {
     return activeInputPort.value.error.value;
@@ -150,6 +154,7 @@ export function useTunerSession(options: TunerSessionOptions) {
   }
 
   function setFrameContext(context: FrameContext) {
+    frameContext.value = context;
     for (const port of Object.values(inputPorts)) {
       if (isDetectionFrameInputPort(port)) void port.setFrameContext(context);
     }
@@ -192,6 +197,7 @@ export function useTunerSession(options: TunerSessionOptions) {
         : pitch.currentFrequency.value
     )),
     detectionFrame,
+    detectionFrameResolved,
     detectorBackend: computed(() => (
       isDetectionFrameInputPort(activeInputPort.value)
         ? 'native' as const
@@ -218,23 +224,5 @@ export function useTunerSession(options: TunerSessionOptions) {
     usingSyntheticAudio,
     volume,
     webAudioListening: audio.isListening,
-  };
-}
-
-function createDetectionFrame(
-  freq: number | null,
-  level: number,
-  confidence = freq == null ? 0 : 1,
-): DetectionFrame {
-  return {
-    freq,
-    confidence: freq == null ? 0 : Math.max(0, Math.min(1, confidence)),
-    rms: 0,
-    level,
-    cents: 0,
-    note: '—',
-    target: null,
-    inTune: false,
-    isPower: false,
   };
 }

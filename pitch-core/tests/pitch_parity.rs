@@ -1,10 +1,12 @@
-use pitch_core::{DetectorConfig, HybridPitchDetector, PitchDetector};
+use pitch_core::{DetectorConfig, HybridPitchDetector, PitchDetector, MIN_USABLE_CONFIDENCE};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PitchParityManifest {
     schema_version: u32,
+    confidence_model: String,
+    minimum_usable_confidence: f32,
     fixtures: Vec<PitchFixture>,
 }
 
@@ -20,6 +22,7 @@ struct PitchFixture {
     harmonics: Vec<f32>,
     min_frequency: f32,
     max_frequency: f32,
+    minimum_confidence: f32,
     tolerance_cents: f32,
 }
 
@@ -30,7 +33,9 @@ fn native_detector_matches_shared_pitch_fixtures() {
         "/../fixtures/pitch-parity.json"
     )))
     .expect("valid pitch parity manifest");
-    assert_eq!(manifest.schema_version, 1);
+    assert_eq!(manifest.schema_version, 2);
+    assert_eq!(manifest.confidence_model, "normalized-periodicity-v1");
+    assert_eq!(manifest.minimum_usable_confidence, MIN_USABLE_CONFIDENCE);
 
     for fixture in manifest.fixtures {
         let samples = render_fixture(&fixture);
@@ -49,6 +54,13 @@ fn native_detector_matches_shared_pitch_fixtures() {
             fixture.id,
             fixture.frequency,
             detection.frequency,
+        );
+        assert!(
+            detection.confidence >= fixture.minimum_confidence,
+            "{} confidence was {:.3}, expected at least {:.3}",
+            fixture.id,
+            detection.confidence,
+            fixture.minimum_confidence,
         );
     }
 }

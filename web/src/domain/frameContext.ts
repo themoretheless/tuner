@@ -76,6 +76,18 @@ export function createDefaultFrameContext() {
   });
 }
 
+export function cloneFrameContext(context: FrameContext): FrameContext {
+  return {
+    a4: context.a4,
+    displayTargets: context.displayTargets.map(copyRequiredNote),
+    idleTarget: copyNote(context.idleTarget),
+    inTuneEnterCents: context.inTuneEnterCents,
+    inTuneExitCents: context.inTuneExitCents,
+    selectedTarget: copyNote(context.selectedTarget),
+    tuningTargets: context.tuningTargets.map(copyRequiredNote),
+  };
+}
+
 function copyNote(note: Note | null | undefined): Note | null {
   return note ? copyRequiredNote(note) : null;
 }

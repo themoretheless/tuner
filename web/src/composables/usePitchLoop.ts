@@ -1,34 +1,47 @@
-import { onUnmounted, ref, watch, type Ref } from 'vue';
+import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
+import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import { cloneFrameContext } from '../domain/frameContext';
 import type { AudioFrame } from '../ports/audioInput';
+import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
-  detectPitch,
   FrequencySmoother,
   computeSignalStats,
+  detectPitchEstimate,
   normalizeLevel,
   type PitchDetectionRange,
+  type PitchEstimate,
+  type SignalStats,
 } from '../utils/pitch';
-import type { PitchDetectorBackend } from '../workers/pitchCoreAdapter';
+import type {
+  DetectionFrameSemantics,
+  PitchDetectorBackend,
+} from '../workers/pitchCoreAdapter';
 
 const PITCH_DETECT_INTERVAL_MS = 33;
 
 export function usePitchLoop(
   readFrame: () => AudioFrame | null,
   detectionRange: Ref<PitchDetectionRange> = ref(DEFAULT_PITCH_DETECTION_RANGE),
+  frameContext?: Ref<FrameContext>,
 ) {
-  const currentFrequency = ref<number | null>(null);
-  const confidence = ref(0);
+  const detectionFrame = ref<DetectionFrame>(createUnresolvedDetectionFrame());
   const detectorBackend = ref<PitchDetectorBackend>('typescript');
-  const smoothedFrequency = ref<number | null>(null);
+  const frameSemantics = ref<DetectionFrameSemantics>('unresolved');
   const volume = ref(0);
+  const confidence = computed(() => detectionFrame.value.confidence);
+  const currentFrequency = computed(() => detectionFrame.value.freq);
+  const smoothedFrequency = currentFrequency;
 
+  let contextRevision = 0;
   let rafId: number | null = null;
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
   let pendingPitchRequestId: number | null = null;
+  let sentContextRevision = -1;
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
-  const smoother = new FrequencySmoother();
+  const fallbackSmoother = new FrequencySmoother();
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
   function ensurePitchWorker() {
@@ -36,25 +49,35 @@ export function usePitchLoop(
     if (pitchWorker) return pitchWorker;
 
     pitchWorker = new Worker(new URL('../workers/pitchWorker.ts', import.meta.url), { type: 'module' });
+    sentContextRevision = -1;
     pitchWorker.onmessage = (event: MessageEvent<{
       backend: PitchDetectorBackend;
       buffer: ArrayBuffer;
-      confidence: number;
+      frame: DetectionFrame;
       id: number;
-      frequency: number | null;
+      semantics: DetectionFrameSemantics;
     }>) => {
       workerTransferBuffer = event.data.buffer;
       if (event.data.id !== pendingPitchRequestId) return;
       pendingPitchRequestId = null;
       if (event.data.id !== pitchRequestId) return;
       detectorBackend.value = event.data.backend;
-      applyDetectedFrequency(event.data.frequency, event.data.confidence);
+      frameSemantics.value = event.data.semantics;
+      fallbackSmoother.reset();
+      detectionFrame.value = event.data.frame;
+      volume.value = event.data.frame.level;
     };
     pitchWorker.onerror = () => {
       pendingPitchRequestId = null;
       detectorBackend.value = 'typescript';
+      frameSemantics.value = 'unresolved';
+      detectionFrame.value = createUnresolvedDetectionFrame({ level: volume.value });
+      fallbackSmoother.reset();
+      pitchRequestId += 1;
       pitchWorker?.terminate();
       pitchWorker = null;
+      sentContextRevision = -1;
+      workerTransferBuffer = null;
     };
     return pitchWorker;
   }
@@ -63,30 +86,29 @@ export function usePitchLoop(
     pitchWorker?.terminate();
     pitchWorker = null;
     pendingPitchRequestId = null;
+    sentContextRevision = -1;
     workerTransferBuffer = null;
     pitchRequestId += 1;
   }
 
   function reset() {
-    confidence.value = 0;
-    currentFrequency.value = null;
-    smoothedFrequency.value = null;
+    detectionFrame.value = createUnresolvedDetectionFrame();
+    frameSemantics.value = 'unresolved';
     volume.value = 0;
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
-    smoother.reset();
+    fallbackSmoother.reset();
+    pitchWorker?.postMessage({ type: 'reset' });
   }
 
-  function applyDetectedFrequency(freq: number | null, nextConfidence = freq == null ? 0 : 1) {
-    confidence.value = freq == null ? 0 : Math.max(0, Math.min(1, nextConfidence));
-    currentFrequency.value = freq;
-
-    if (freq == null) {
-      smoothedFrequency.value = smoother.add(null);
-      return;
-    }
-
-    smoothedFrequency.value = smoother.add(freq);
+  function applyFallbackEstimate(estimate: PitchEstimate | null, stats: SignalStats) {
+    const frequency = fallbackSmoother.add(estimate?.frequency ?? null);
+    detectionFrame.value = createUnresolvedDetectionFrame({
+      confidence: frequency == null ? 0 : estimate?.confidence,
+      freq: frequency,
+      level: normalizeLevel(stats.rms),
+      rms: stats.rms,
+    });
   }
 
   function tick() {
@@ -103,8 +125,9 @@ export function usePitchLoop(
     const signalTooQuiet = stats.rms < 0.002 || stats.maxAbs < 0.01;
     if (signalTooQuiet) {
       pitchRequestId += 1;
-      applyDetectedFrequency(null);
-    } else if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
+      applyFallbackEstimate(null, stats);
+    }
+    if (now - lastPitchDetectAt >= PITCH_DETECT_INTERVAL_MS) {
       lastPitchDetectAt = now;
       requestPitchDetection(frame, stats);
     }
@@ -112,7 +135,7 @@ export function usePitchLoop(
     rafId = requestAnimationFrame(tick);
   }
 
-  function requestPitchDetection(frame: AudioFrame, stats: ReturnType<typeof computeSignalStats>) {
+  function requestPitchDetection(frame: AudioFrame, stats: SignalStats) {
     const worker = ensurePitchWorker();
     const range = {
       minFrequency: detectionRange.value.minFrequency,
@@ -120,7 +143,8 @@ export function usePitchLoop(
     };
     if (!worker) {
       detectorBackend.value = 'typescript';
-      applyDetectedFrequency(detectPitch(frame.buffer, frame.sampleRate, stats, range));
+      frameSemantics.value = 'unresolved';
+      applyFallbackEstimate(detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range), stats);
       return;
     }
     if (pendingPitchRequestId != null) return;
@@ -133,17 +157,33 @@ export function usePitchLoop(
       : new ArrayBuffer(byteLength);
     new Float32Array(buffer).set(frame.buffer);
     workerTransferBuffer = null;
-    worker.postMessage({
-      id: pitchRequestId,
-      buffer,
-      range,
-      sampleRate: frame.sampleRate,
-      stats: {
-        rms: stats.rms,
-        maxAbs: stats.maxAbs,
-      },
-      wasmModuleUrl,
-    }, [buffer]);
+    const shouldSendContext = frameContext && sentContextRevision !== contextRevision;
+    try {
+      worker.postMessage({
+        type: 'process',
+        id: pitchRequestId,
+        buffer,
+        frameContext: shouldSendContext ? cloneFrameContext(frameContext.value) : undefined,
+        range,
+        sampleRate: frame.sampleRate,
+        stats: {
+          rms: stats.rms,
+          maxAbs: stats.maxAbs,
+        },
+        wasmModuleUrl,
+      }, [buffer]);
+      if (shouldSendContext) sentContextRevision = contextRevision;
+    } catch {
+      pendingPitchRequestId = null;
+      detectorBackend.value = 'typescript';
+      frameSemantics.value = 'unresolved';
+      worker.onerror = null;
+      worker.terminate();
+      pitchWorker = null;
+      sentContextRevision = -1;
+      workerTransferBuffer = null;
+      applyFallbackEstimate(detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range), stats);
+    }
   }
 
   function start() {
@@ -165,11 +205,19 @@ export function usePitchLoop(
     disposePitchWorker();
   });
   watch(detectionRange, reset, { deep: true });
+  if (frameContext) {
+    watch(frameContext, () => {
+      contextRevision += 1;
+      reset();
+    }, { deep: true });
+  }
 
   return {
     confidence,
     currentFrequency,
+    detectionFrame,
     detectorBackend,
+    frameSemantics,
     smoothedFrequency,
     start,
     stop,

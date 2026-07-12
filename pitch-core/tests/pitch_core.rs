@@ -28,6 +28,15 @@ fn yin_detects_440_hz() {
         .expect("440 Hz should be detected");
     assert!((estimate.frequency - 440.0).abs() < 2.0);
     assert!(estimate.confidence > 0.5);
+
+    let mut strict = YinDetector::new(
+        DetectorConfig::default()
+            .with_frequency_range(30.0, 1_200.0)
+            .with_min_confidence(1.0),
+    );
+    assert!(strict
+        .detect(&sine_buffer(440.0, 44_100.0, 2048), 44_100.0)
+        .is_none());
 }
 
 #[test]
@@ -38,6 +47,15 @@ fn mpm_detects_440_hz() {
         .detect(&sine_buffer(440.0, 44_100.0, 2048), 44_100.0)
         .expect("440 Hz should be detected");
     assert!((estimate.frequency - 440.0).abs() < 2.0);
+
+    let mut strict = MpmDetector::new(
+        DetectorConfig::default()
+            .with_frequency_range(30.0, 1_200.0)
+            .with_min_confidence(1.0),
+    );
+    assert!(strict
+        .detect(&sine_buffer(440.0, 44_100.0, 2048), 44_100.0)
+        .is_none());
 }
 
 #[test]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFrameContext } from '../src/domain/frameContext';
+import { cloneFrameContext, createFrameContext } from '../src/domain/frameContext';
 import { TEMPERAMENTS, noteWithA4 } from '../src/utils/notes';
 
 describe('FrameContext', () => {
@@ -40,5 +40,24 @@ describe('FrameContext', () => {
 
     expect(context.tuningTargets).toEqual([]);
     expect(context.idleTarget).toMatchObject({ name: 'D', octave: 4 });
+  });
+
+  it('clones worker context without retaining reactive object identities', () => {
+    const context = createFrameContext({
+      a4: 440,
+      isChromaticMode: false,
+      selectedString: { frequency: 110, name: 'A', octave: 2 },
+      strings: [{ frequency: 110, name: 'A', octave: 2 }],
+      temperament: 'equal',
+      temperamentOptions: TEMPERAMENTS,
+      temperamentRoot: 'A',
+      transpose: 0,
+    });
+
+    const clone = cloneFrameContext(context);
+    expect(clone).toEqual(context);
+    expect(clone).not.toBe(context);
+    expect(clone.displayTargets[0]).not.toBe(context.displayTargets[0]);
+    expect(clone.selectedTarget).not.toBe(context.selectedTarget);
   });
 });
