@@ -27,6 +27,7 @@ function createLiveTunerPort(root: TunerRoot) {
     selectedString: root.selectedString,
     selectedStringIndex: root.selectedStringIndex,
     sessionStatus: root.sessionStatus,
+    spectrumFrame: root.spectrumFrame,
     strings: root.strings,
     targetNote: root.targetNote,
     usingNativeAudio: root.usingNativeAudio,
