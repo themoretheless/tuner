@@ -149,5 +149,9 @@ function drawFrame(frame: CanvasFrame) {
       class="visual-canvas block w-full rounded-lg border"
       :class="{ 'opacity-40': !isListening }"
     />
+    <div class="flex justify-between text-[10px] mt-1 text-slate-500 font-mono">
+      <div>{{ MIN_FREQ }} Hz</div>
+      <div>{{ MAX_FREQ }} Hz</div>
+    </div>
   </div>
 </template>
