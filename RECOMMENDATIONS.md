@@ -2,7 +2,7 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (109 open/partial and 71 closed stable `R#` items), [TOP-200-current.md](TOP-200-current.md) preserves historical detailed `C#` evidence, and [TOP-500-backlog.md](TOP-500-backlog.md) is the full ranked Top 500 with verified `[DONE]` markers. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (109 open/partial and 71 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
 **Status 2026-07-12:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 

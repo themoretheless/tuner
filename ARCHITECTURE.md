@@ -29,7 +29,7 @@ Remaining weaknesses:
 - Error taxonomy, diagnostics, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
 - egui persistence and the egui WASM singleton are still separate platform-specific designs.
 
-See the canonical current open-problems extract in [recommendation.md](recommendation.md), the grounded code audit in [TOP-200-current.md](TOP-200-current.md), and the full ranked Top 500 in [TOP-500-backlog.md](TOP-500-backlog.md).
+See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
 
 The current list contains 109 open/partial `R#` findings and a 71-item closure registry. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
 
@@ -287,7 +287,7 @@ Any code change should be judged by: "Does this increase or decrease coupling be
 
 ## Integrated Ideas, Suggestions and Improvements (June/July 2026)
 
-All prior raw idea material from [TOP-500-backlog.md](TOP-500-backlog.md) and [IDEAS-round4-500.md](IDEAS-round4-500.md) has been reviewed and **влито** (integrated) here. The separate files remain active reference sources: `TOP-500-backlog.md` is the master ranked Top 500, `TOP-200-current.md` is the latest grounded code audit, and this section is the architecture-aligned living view.
+All prior raw idea material from [TOP-500-backlog.md](TOP-500-backlog.md) and [IDEAS-round4-500.md](IDEAS-round4-500.md) has been reviewed and **влито** (integrated) here. `TOP-500-backlog.md` is now the single reference source for the master ranked `M#` registry and historical grounded `C#` audit; this section remains the architecture-aligned living view.
 
 - The numbered 200-item categorized list below captures focused, architecture-aligned, implementation-ready proposals (many overlap with or were inspired by the backlogs).
 - High-value items from the ranked Master Top 500 are extracted and prioritized at the top.
@@ -582,8 +582,7 @@ The following categorized list (200 items) was created to be implementation-conc
 **Next step after the 2026-07-12 implementation pass:** do not start another horizontal feature batch. Audio ports, native/browser frame semantics, confidence/smoothing parity, generated music data and generated note math are complete; add file/WAV input next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
 
 ### Статус интеграции бэклогов
-- [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`).
-- [TOP-200-current.md](TOP-200-current.md) — latest grounded current audit (`C#`).
+- [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`) plus historical grounded audit (`C#`).
 - [recommendation.md](recommendation.md) — stable current-problem extract cited by [PLAN.md](PLAN.md) (`R#`).
 - Высокоприоритетные пункты из них **влиты** наверх этого раздела.
 - 200 детализированных предложений — actionable слой поверх master backlog.
@@ -1226,9 +1225,8 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 ## Current Top Problems (Synchronized)
 
 The synchronized problem map is split by purpose:
-- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
+- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) plus historical detailed `C#` evidence; revalidate old audit claims against the current status overlay.
 - [recommendation.md](recommendation.md) - current grounded extract: 109 open/partial and 71 closed stable `R#` references.
-- [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` audit; use its evidence only after checking the status overlay because this pass supersedes many findings.
 
 Key highlights that directly block the target architecture:
 - Add deterministic file/WAV input (`R73`).
@@ -1238,11 +1236,10 @@ Key highlights that directly block the target architecture:
 - Add real-audio parity/failure/performance/stability suites (`R31-R38`, `R148-R165`).
 - Finish diagnostics, typed errors, accessibility and release hardening (`R22`, `R41-R44`, `R133-R147`).
 
-When closing any of these open problems, update [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if rank/status changes, this file, [README.md](README.md), and if the execution order changes, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+When closing any of these open problems, update [recommendation.md](recommendation.md), the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` status changes, this file, [README.md](README.md), and if the execution order changes, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
 
 Recommended reading order:
 1. This file for actual boundaries and target dependency direction.
 2. [recommendation.md](recommendation.md) for the current open/closed `R#` registry.
-3. [TOP-500-backlog.md](TOP-500-backlog.md) for all 500 product/engineering options and `[DONE]` markers.
-4. [TOP-200-current.md](TOP-200-current.md) for detailed historical evidence, checked against current status.
-5. [PLAN.md](PLAN.md) for the next dependency-ordered execution slice.
+3. [TOP-500-backlog.md](TOP-500-backlog.md) for all 500 product/engineering options, `[DONE]` markers and detailed historical `C#` evidence checked against current status.
+4. [PLAN.md](PLAN.md) for the next dependency-ordered execution slice.

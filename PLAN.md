@@ -6,8 +6,7 @@ into dependency-ordered milestones with a definition of done. README.md links he
 
 This is the **single source of truth for execution order**. The other docs stay as references:
 - [recommendation.md](recommendation.md) - current extract (109 open/partial, 71 closed stable `R#` items).
-- [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` evidence; use its 2026-07-11 overlay before old findings.
-- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
+- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) and historical detailed `C#` evidence; revalidate old findings against the status overlay.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
 
@@ -144,5 +143,5 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.
 - Every PR answers: *does this decrease coupling between audio / dsp / state / presentation?*
-- When a milestone closes recommendation items, update [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if rank/status changes, and [ARCHITECTURE.md](ARCHITECTURE.md) status.
+- When a milestone closes recommendation items, update [recommendation.md](recommendation.md), the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` rank or status changes, and [ARCHITECTURE.md](ARCHITECTURE.md) status.
 - Prefer behavior-preserving extractions over rewrites; land each milestone green before starting the next.

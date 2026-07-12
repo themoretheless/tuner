@@ -13,14 +13,13 @@ Synced documents:
 - [README.md](README.md) summarizes the same debt for users and contributors.
 - [PLAN.md](PLAN.md) is the execution-order source of truth.
 - [RECOMMENDATIONS.md](RECOMMENDATIONS.md) turns the same debt into detailed refactor recommendations.
-- [TOP-500-backlog.md](TOP-500-backlog.md) is the master ranked Top 500 (`M#`).
-- [TOP-200-current.md](TOP-200-current.md) is the latest grounded current audit (`C#`).
+- [TOP-500-backlog.md](TOP-500-backlog.md) is the unified master ranked Top 500 (`M#`) and historical grounded audit (`C#`).
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
 Notation used across docs:
 - `R#` - stable recommendation item from this file.
-- `C#` - detailed current-audit item from [TOP-200-current.md](TOP-200-current.md).
+- `C#` - detailed historical audit item in [TOP-500-backlog.md](TOP-500-backlog.md#historical-grounded-audit-c).
 - `M#` - ranked master Top-500 item from [TOP-500-backlog.md](TOP-500-backlog.md).
 
 ## Latest Three Iterations Delivered
@@ -814,10 +813,10 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
-- For the full requested Top 500, use [TOP-500-backlog.md](TOP-500-backlog.md). Treat [TOP-200-current.md](TOP-200-current.md) as historical evidence and revalidate old `C#` claims.
+- For the full requested Top 500 and historical evidence, use [TOP-500-backlog.md](TOP-500-backlog.md); revalidate old `C#` claims before acting on them.
 - Next dependency order: R73 file/WAV adapter, then R1/R6/R7 controller splits.
 - Every fix should reduce coupling.
-- Update this file, [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if ranking/status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
+- Update this file, the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` ranking or status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
 
 **Next audit:** after significant layer work or in 2-3 months.
@@ -855,7 +854,7 @@ Fully fixed items should be removed from future audits; partially fixed items ab
 
 ## Summary
 - This file contains 109 current open/partial `R#` findings and a 71-item stable closure registry.
-- The historical 187-item `C#` audit remains in [TOP-200-current.md](TOP-200-current.md); it is no longer the current-open count.
+- The historical 187-item `C#` audit is preserved inside [TOP-500-backlog.md](TOP-500-backlog.md); it is not the current-open count.
 - Each of the three requested documents mirrors exactly 500 `M#` rows; 29 verified master items carry dated `[DONE]` markers.
 - Highest impact now is: file/WAV input, remaining controller splits, real-audio reliability/performance tests, diagnostics and release hardening.
 

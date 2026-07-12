@@ -30,7 +30,7 @@
 ## Current Audit / Technical Debt
 
 Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md). После трёх итераций и review там **109 открытых/частичных `R#` пунктов**; **71 закрытый или устаревший** вынесен из текущего списка в closure registry.
-Полный ranked **Top 500**: [TOP-500-backlog.md](TOP-500-backlog.md).
+Единый ranked **Top 500 (`M#`) и historical grounded audit (`C#`)**: [TOP-500-backlog.md](TOP-500-backlog.md).
 Все 500 строк также сохранены ниже в README и зеркалах документов. `[DONE YYYY-MM-DD]` означает проверенное закрытие; это реестр идей и рисков, а не утверждение, что 500 независимых функций уже выпущены.
 
 Главные проблемы:
@@ -88,8 +88,7 @@ Tuner/
 ├── egui/                # Pure native offline (egui + cpal, no webview)
 ├── ARCHITECTURE.md      # План рефакторинга + интегрированные бэклоги идей и приоритеты
 ├── recommendation.md    # Стабильный current extract открытых проблем (R#)
-├── TOP-200-current.md   # Последний grounded-аудит текущего кода (C#)
-├── TOP-500-backlog.md   # Полный ranked Top 500 (M#)
+├── TOP-500-backlog.md   # Ranked Top 500 (M#) + historical grounded audit (C#)
 ├── PLAN.md              # Порядок выполнения и DoD
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
 └── README.md
@@ -278,7 +277,7 @@ npx tauri icon ./icon.png
 
 ## Текущий архитектурный статус
 
-Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
+Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
 M0 safety net закрыт для текущего refactor gate: `52` Vitest tests, `17` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и четыре Playwright flow.
 
@@ -853,7 +852,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 ## Технический долг и что сделано плохо
 
-Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, находится в [TOP-500-backlog.md](TOP-500-backlog.md). Исторический детальный аудит сохранён в [TOP-200-current.md](TOP-200-current.md). Текущий source of truth: [recommendation.md](recommendation.md), где **109** пунктов открыто/частично и **71** закрыт/устарел.
+Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, и исторический детальный `C#` audit находятся в одном [TOP-500-backlog.md](TOP-500-backlog.md). Текущий source of truth: [recommendation.md](recommendation.md), где **109** пунктов открыто/частично и **71** закрыт/устарел.
 
 Ключевые проблемы на сегодня (выборка):
 - `useTuner.ts`, `useTuningState.ts` и global `useSettings.ts` остаются broad controllers/composition surfaces.
@@ -867,4 +866,4 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 Полный master Top 500 — в [TOP-500-backlog.md](TOP-500-backlog.md). Текущие `R#` проблемы — в [recommendation.md](recommendation.md).
 
-Когда фиксим — обновляем [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) при изменении ранга/статуса, [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+Когда фиксим — обновляем [recommendation.md](recommendation.md), единый [TOP-500-backlog.md](TOP-500-backlog.md) при изменении `M#`/`C#` статуса, [ARCHITECTURE.md](ARCHITECTURE.md), этот README и, если меняется порядок работ, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
