@@ -14,9 +14,10 @@
 - Shared Rust `pitch-core` с разделёнными YIN/MPM/hybrid detector, spectrum, engine, frames и WASM surface.
 - Общий `audio-input` crate для Tauri и egui: typed cpal formats, mono downmix, bounded recycled chunks и DSP вне realtime callback.
 - Discriminated TS `AudioInputPort` и registry для web/native/synthetic adapters; session зависит от capabilities, а не concrete composables.
-- Stateful pitch-core/WASM detector является primary web-worker backend; TS detector остаётся проверенным fallback.
+- Full-frame pitch-core/WASM `TunerProcessor` является primary web-worker backend и владеет smoothing/resolution; TS detector остаётся проверенным fallback.
+- Worker помечает кадр как `resolved` или `unresolved`, поэтому presentation не определяет полноту кадра по имени backend-а.
 - `registry/music-registry.json` является единым источником 14 инструментов и 33 строев для Rust и web.
-- Shared B0-E5 fixtures измеряют native/WASM/TS точность в центах; Library CRUD вынесен в controller и разбит на рабочие вкладки.
+- Shared B0-E5 fixtures измеряют native/WASM/TS точность в центах и normalized-periodicity confidence; Library CRUD вынесен в controller и разбит на рабочие вкладки.
 - Vue 3 web UI с четырьмя рабочими экранами: Tuner, Library, Practice и Analysis; тяжёлые экраны грузятся отдельными чанками.
 - Явный session lifecycle `idle | starting | listening | stopping | error` с сериализацией start/stop/restart и восстановлением после runtime-ошибки.
 - Пресеты инструментов и строев, A4, capo, transpose, temperaments, custom tunings, practice history, metronome, themes.
@@ -28,13 +29,13 @@
 
 ## Current Audit / Technical Debt
 
-Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md). После трёх итераций и review там **110 открытых/частичных `R#` пунктов**; **70 закрытых или устаревших** вынесены из текущего списка в closure registry.
+Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md). После трёх итераций и review там **109 открытых/частичных `R#` пунктов**; **71 закрытый или устаревший** вынесен из текущего списка в closure registry.
 Полный ranked **Top 500**: [TOP-500-backlog.md](TOP-500-backlog.md).
-Все 500 строк также сохранены ниже в README и зеркалах документов. `[DONE 2026-07-11]` означает проверенное закрытие; это реестр идей и рисков, а не утверждение, что 500 независимых функций уже выпущены.
+Все 500 строк также сохранены ниже в README и зеркалах документов. `[DONE YYYY-MM-DD]` означает проверенное закрытие; это реестр идей и рисков, а не утверждение, что 500 независимых функций уже выпущены.
 
 Главные проблемы:
 - Instrument/tuning registry и note/cents math имеют единые registry/expression owners; Rust и TypeScript получают проверяемые generated-модули.
-- Native/WASM/TS detector parity и Rust/TS smoothing traces формализованы; confidence у explicit TS fallback и full-frame WASM ownership ещё различаются.
+- Primary browser WASM и native используют один полный `DetectionFrame`; TS fallback измеряет ту же normalized-periodicity confidence, а backend остаётся явным. Power flag fallback-а всё ещё намеренно ограничен.
 - Custom-library CRUD извлечён, но `useTuningState.ts` всё ещё broad controller (~340 строк), а `useTuner.ts` остаётся broad composition root.
 - Web/native/synthetic adapters уже реализуют один TS `AudioInputPort`; native получает A4/tuning/selected-target `FrameContext`, но file/WAV adapter пока отсутствует.
 - Spectrum больше не считается, когда скрыт, но включённый Rust frame всё ещё клонирует `Vec<f32>`.
@@ -45,11 +46,11 @@
 
 ## Три итерации и review
 
-1. **Generated domain owner:** единый expression AST и music registry генерируют Rust/TypeScript note names, MIDI/frequency/cents, closest-target и formatting primitives.
-2. **Facade migration:** `notes.ts` сохраняет temperament/tuning API, но делегирует примитивы; property sweeps покрывают A4, MIDI, cents, temperaments и capo/transpose.
-3. **Dependency/release review:** генератор отвязан от `domain::Note`, egui переведён на общие formatters, а stale generated output блокируется в CI/build/test.
+1. **Confidence contract:** Rust и TypeScript используют normalized-periodicity score `0..1`, единый usable threshold и fixture minimums.
+2. **Full-frame ownership:** browser worker получает revisioned `FrameContext`, а `TunerProcessor` возвращает уже сглаженный и разрешённый кадр с target/cents/inTune/power.
+3. **Lifecycle review:** TS fallback получил измеряемый confidence, двойной smoothing удалён, worker processor явно сбрасывается между сессиями.
 
-После трёх проходов отдельное review устранило временный цикл generated/domain, добилось идемпотентности codegen под `rustfmt` и усилило invalid-input contracts. Проверки: `51` Vitest, `16` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, core+egui WASM checks, production Vue build, три Playwright flow и полный Tauri `.app`/`.dmg` build.
+После трёх проходов отдельное review поймало и устранило перенос stale smoothing state через stop/restart. Проверки: `52` Vitest, `17` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, обе WASM-цели, production Vue build, четыре Playwright flow и полный Tauri `.app`/`.dmg` bundle.
 
 ## Возможности
 
@@ -279,12 +280,12 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md) и [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `51` Vitest tests, `16` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch и smoothing manifests, synthetic session harness и три Playwright flow.
+M0 safety net закрыт для текущего refactor gate: `52` Vitest tests, `17` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и четыре Playwright flow.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
-- `pitch-core` разделён на `domain`, `frames`, `resolution`, `signal`, `smoother`, `engine`, `dsp/{detector,yin,mpm,power}`, `spectrum` и `wasm`;
-- web держит тонкий note/temperament facade и explicit pitch fallback; note math генерируется из одного owner, но confidence/full-frame ownership ещё не единый;
+- `pitch-core` разделён на `domain`, `frames`, `resolution`, `signal`, `smoother`, `engine`, `dsp/{detector,yin,mpm,power}`, `spectrum` и `wasm/{frame,processor}` с совместимой low-level оболочкой;
+- web держит тонкий note/temperament facade и explicit pitch fallback; full-frame primary WASM владеет detector/smoothing/resolution, а fallback confidence проверяется тем же manifest;
 - Tauri native audio принимает revisioned `FrameContext`, сам разрешает `note/target/cents/inTune` и отдаёт canonical `DetectionFrame` без top-level `frequency` alias;
 - egui пока не в feature parity с web UI.
 
@@ -292,7 +293,6 @@ M0 safety net закрыт для текущего refactor gate: `51` Vitest te
 
 ## Следующие улучшения (рекомендуемые)
 
-- Определить общие confidence semantics и full-frame WASM ownership.
 - Разделить оставшийся `useTuningState.ts` на selection/target и temperament controllers.
 - Добавить file/WAV `AudioInputPort` и device-loss recovery tests поверх готового общего контракта.
 - Добавить criterion/soak/visual-regression suites, DSP fuzzing и реальные лицензированные записи инструментов.
@@ -314,7 +314,7 @@ M0 safety net закрыт для текущего refactor gate: `51` Vitest te
 
 Мы проектировали **как будто с нуля**, уделяя особое внимание слабой зацепленности между аудио, вычислениями и UI.
 
-Основные native/core/session/UI границы, contextual native frame, smoothing parity, music registry и generated note math выполнены. Дальше — confidence/full-frame WASM, file/WAV input и оставшиеся контроллеры по фазам из ARCHITECTURE.md.
+Основные native/core/session/UI границы, contextual full-frame WASM/native ownership, confidence/smoothing parity, music registry и generated note math выполнены. Дальше — file/WAV input и оставшиеся контроллеры по фазам из ARCHITECTURE.md.
 
 ## Идеи и предложения (Top 500)
 
@@ -368,7 +368,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M19 | P2 | review | decouple detection cadence from rAF |  |
 | M20 | P2 | review | CI hygiene clippy/rustfmt/deploy-freshness |  |
 | M21 | P2 | distribution | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | Primary organic-discovery lever for a web tuner. |
-| M22 | P2 | dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Native Rust, browser WASM and TS fallback share B0-E5 cents-budget fixtures. [DONE 2026-07-11] |
+| M22 | P2 | dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Native Rust, full-frame browser WASM and TS fallback share B0-E5 cents/confidence fixtures. [DONE 2026-07-12] |
 | M23 | P2 | observability-reliability | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | Defines deterministic UX for every failure mode instead of blank screens. |
 | M24 | P2 | docs-dx | Playwright fake-WAV pipeline test asserts detected note | Feed synthetic E2 audio, assert NoteDisplay shows E. [DONE 2026-07-11] |
 | M25 | P2 | review | legible sidebar text | [DONE 2026-07-11] |
@@ -853,12 +853,12 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 ## Технический долг и что сделано плохо
 
-Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, находится в [TOP-500-backlog.md](TOP-500-backlog.md). Исторический детальный аудит сохранён в [TOP-200-current.md](TOP-200-current.md). Текущий source of truth: [recommendation.md](recommendation.md), где **110** пунктов открыто/частично и **70** закрыты/устарели.
+Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, находится в [TOP-500-backlog.md](TOP-500-backlog.md). Исторический детальный аудит сохранён в [TOP-200-current.md](TOP-200-current.md). Текущий source of truth: [recommendation.md](recommendation.md), где **109** пунктов открыто/частично и **71** закрыт/устарел.
 
 Ключевые проблемы на сегодня (выборка):
 - `useTuner.ts`, `useTuningState.ts` и global `useSettings.ts` остаются broad controllers/composition surfaces.
 - Native adapters общие и realtime-safe; web/native/synthetic реализуют единый TS `AudioInputPort`, но file/WAV adapter ещё нужен.
-- Web/Tauri/egui используют pitch-core для primary detection, TS fallback проверяется теми же cents-budget fixtures, а Rust/TS smoothing проходит общий trace manifest; coarse fallback confidence ещё расходится.
+- Web/Tauri/egui используют pitch-core для primary detection; full-frame browser WASM владеет smoothing/resolution, а TS fallback проверяется теми же cents/confidence fixtures и общим smoothing trace manifest.
 - Таблицы строев и note/cents primitives генерируются из canonical registry/expression sources; stale output блокируется проверкой.
 - Нужны real WAV/benchmark/soak/permission/device-loss/visual regression tests и более широкий DSP fuzzing.
 - Diagnostics, typed errors, automated a11y и release hardening ещё не закрыты.

@@ -1,12 +1,12 @@
 # Recommendations & Current Problems Backlog
 
-**Current state audit (synced 2026-07-11, after three implementation iterations and review)**
+**Current state audit (synced 2026-07-12, after three implementation iterations and review)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
-After this pass, **70 findings are verified closed or obsolete and 110 `R#` findings remain open/partial**. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+After this pass, **71 findings are verified closed or obsolete and 109 `R#` findings remain open/partial**. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `51` Vitest tests; `16` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; three Playwright flows including shared WASM parity and `360 px` Library navigation; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `52` Vitest tests; `17` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; four Playwright flows including shared confidence parity, full-frame WASM, synthetic detection and `360 px` Library navigation; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -25,13 +25,13 @@ Notation used across docs:
 
 ## Latest Three Iterations Delivered
 
-1. **Generated domain owner:** one language-neutral expression tree and the music registry generate Rust and TypeScript note names, MIDI/frequency/cents math, closest-target selection and display formatting.
-2. **Facade migration and properties:** `notes.ts` keeps temperament/tuning composition but delegates primitives; deterministic sweeps cover A4=415-465, MIDI 21-120, cents offsets, temperaments and capo/transpose.
-3. **Coupling and release review:** generated Rust primitives no longer depend on `domain::Note`, egui uses shared formatters, stale generated files fail CI/build/test, and the full workspace/WASM/E2E/Tauri gate is rerun.
+1. **Confidence contract:** Rust and TypeScript define confidence as normalized periodicity quality, share the `0.5` usable threshold through the parity manifest, and assert minimum confidence for B0-E5 fixtures.
+2. **Full-frame browser owner:** WASM `TunerProcessor` owns detector, smoothing, level, power flag and target/cents/hysteresis resolution; the worker receives `FrameContext` only when its revision changes.
+3. **Fallback and lifecycle review:** TypeScript fallback reports measured confidence with its own trace-compatible smoother; review added an explicit worker reset so stopped sessions cannot leak stale smoothing state into restart.
 
-Post-iteration review removed the temporary generated-module/domain dependency cycle, made codegen idempotent under `rustfmt`, and hardened invalid A4/frequency contracts.
+Post-iteration review verified the generated ABI in a real browser, removed double smoothing from the primary path, and fixed stale worker state across stop/restart.
 
-## Closed R Registry (70)
+## Closed R Registry (71)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
@@ -40,6 +40,7 @@ Post-iteration review removed the temporary generated-module/domain dependency c
 | R9, R150, R164 | Typed A4/tuning/selected-target `FrameContext`, native-owned frame resolution, A4=442 coverage, shared smoothing traces and exact canonical wire-shape tests without the top-level `frequency` alias |
 | R14, R16 | One generated music registry plus a shared native/WASM/TS pitch fixture manifest remove hand-maintained tuning drift and specify fallback cents tolerance |
 | R15, R105, R116, R117 | One code generator owns note names, MIDI/frequency/cents/closest-target formulas and note/frequency formatting; Rust, web and egui consume generated primitives or thin domain facades |
+| R17 | Normalized-periodicity confidence is fixture-gated in Rust/TS; browser WASM exposes a full `DetectionFrame`, receives revisioned context and owns smoothing/resolution; presentation branches on explicit `resolved/unresolved` semantics rather than backend identity |
 | R35 | Deterministic Rust and TypeScript property sweeps cover reference pitches, MIDI range, cents offsets, temperaments and capo/transpose, with invalid-input contracts |
 | R4, R25, R46, R50, R66, R71, R83, R122, R145 | Split detector/spectrum/WASM modules, optional FFT, `PitchDetector`, `EngineConfig`, reusable YIN/MPM buffers, DC centering |
 | R12, R23, R24, R29, R30, R70, R74, R79, R81, R140, R146 | Shared typed cpal adapter, bounded callback queue, worker DSP, actual sample rate, frame-gated histories and repaint |
@@ -51,7 +52,7 @@ Post-iteration review removed the temporary generated-module/domain dependency c
 
 Do not renumber the remaining entries; plans and old review notes still cite these stable IDs.
 
-## Open Problems (110 stable R-items)
+## Open Problems (109 stable R-items)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
@@ -73,11 +74,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
     **Recommendation:** Keep estimates/domain targets in the engine and move display formatting plus owned visualization transport outward.
 
 ### Duplication & Drift
-17. **P1: Confidence behavior is still duplicated across the fallback boundary.** Rust and TypeScript smoothing now share exact EMA/median traces and clear-on-silence semantics, while native and primary WASM detection share Rust confidence. The explicit TypeScript detector fallback still reports coarse binary confidence and the browser does not consume a full-frame WASM processor.
-    **Recommendation:** Specify confidence traces/meaning, expose a full-frame WASM processor, and keep the TypeScript fallback only while its degraded confidence is explicit and tested.
-
-18. **P1: Power-chord and harmonic heuristics are not unified.** Core, web and UI paths can disagree on power-chord indication.
-    **Recommendation:** Return power/harmonic flags from shared core with stable tests.
+18. **P1: Power-chord capability still degrades across the fallback boundary.** Native and primary browser WASM return the shared core flag, while explicit TypeScript fallback reports `isPower=false`.
+    **Recommendation:** Port the shared heuristic or model the missing flag as an explicit backend capability with stable tests.
 
 19. **P1: Spectrum/waveform drawing code is duplicated across Vue and egui.** Both platforms reinvent data scaling, history limits, colors and harmonic markers.
     **Recommendation:** Share data transforms and keep painters platform-specific but dumb.
@@ -102,8 +100,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
     **Recommendation:** Cache dimensions/DPR and skip backing-store checks unless `ResizeObserver` or DPR changes.
 
 ### Testing & Verification
-31. **P0: Rust/Web domain equivalence harness is partial.** Built-in tuning, note/cents and closest-string parity now runs from a Rust snapshot inside Vitest, but pitch-path and Tauri/egui equivalence are not covered yet.
-    **Recommendation:** Extend shared fixtures to pitch detection, native events and egui/session outputs.
+31. **P0: Rust/Web domain equivalence harness is partial.** Built-in tuning/note parity and native/WASM/TS pitch/confidence fixtures are gated, but Tauri/egui session-output equivalence is not covered yet.
+    **Recommendation:** Extend shared fixtures to native events, egui/session outputs and real recordings.
 
 32. **P1: Fake-mic E2E coverage is still shallow.** Playwright now verifies `?fixture=E2` through the UI without microphone access, but permission-denied, device loss and mocked `getUserMedia` flows are not covered yet.
     **Recommendation:** Extend Playwright with denied-permission, device-unplug and fake WAV pipeline tests.
@@ -136,8 +134,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports, native realtime processing, contextual frame adoption, generated note math, WASM/TS detector and smoothing parity, feature shells and profile schema are in place. Shared confidence/full-frame ownership and remaining broad controllers remain.
-    **Recommendation:** Continue with those boundaries before adding another broad feature surface.
+45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, feature shells and profile schema are in place. File input and remaining broad controllers remain.
+    **Recommendation:** Continue with file/WAV input and controller boundaries before adding another broad feature surface.
 
 ### More Architecture & Coupling Issues
 
@@ -158,7 +156,7 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 
 ### Performance & Efficiency Issues
 75. Spectrum bars in egui are drawn with per-frame math and allocations inside the paint closure.
-76. `usePitchLoop` still couples RAF scheduling, signal stats, worker dispatch and smoothing; history has moved out, but cadence remains paint-driven.
+76. `usePitchLoop` still couples RAF scheduling, signal stats and worker dispatch; primary smoothing moved into WASM and fallback smoothing is isolated, but cadence remains paint-driven.
 78. Histogram drawing in CentsHistory likely redraws full history every frame.
 80. Spectrogram uses 80 freq bins hard limit and redraws all history every time.
 82. SharedAudio in web is created lazily but never suspended properly when tab hidden for long.
@@ -191,7 +189,7 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 118. Multiple places clamp cents manually ( /50.0 * w etc).
 119. Power chord detection has native and wasm wrappers that may differ slightly.
 120. Storage keys in egui save() are strings without constants.
-121. The old `useTuner` tick moved to `usePitchLoop`, but that composable still owns scheduling, signal gating, worker lifecycle and smoothing in one controller.
+121. The old `useTuner` tick moved to `usePitchLoop`, but that composable still owns scheduling, signal gating and worker lifecycle; only fallback smoothing remains local.
 123. Vue computed for stringsWithCents, targetNote etc. recompute similar math.
 125. onUnmounted and stop() both try to clean some of the same things.
 126. URL parsing and persisted load have similar "try find tuning" code.
@@ -300,7 +298,7 @@ Fix: make generated Rust depend only on primitives/registry data, adapt `Note` i
 
 ## Full Top 500 Mirror
 
-The canonical source is [TOP-500-backlog.md](TOP-500-backlog.md). This mirror keeps all 500 proposals in this file as requested. Rows marked `[DONE 2026-07-11]` are retained for traceability and are not part of the current open list; every unmarked row is open, partial, optional, or not yet revalidated.
+The canonical source is [TOP-500-backlog.md](TOP-500-backlog.md). This mirror keeps all 500 proposals in this file as requested. Rows with dated `[DONE]` markers are retained for traceability and are not part of the current open list; every unmarked row is open, partial, optional, or not yet revalidated.
 
 Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
 
@@ -331,7 +329,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 | M19 | P2 | 60 | r1:review | decouple detection cadence from rAF |  |
 | M20 | P2 | 60 | r1:review | CI hygiene clippy/rustfmt/deploy-freshness |  |
 | M21 | P2 | 60 | r2:distribution | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | Primary organic-discovery lever for a web tuner. |
-| M22 | P2 | 60 | r2:dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Native Rust, browser WASM and TS fallback share B0-E5 cents-budget fixtures. [DONE 2026-07-11] |
+| M22 | P2 | 60 | r2:dx-quality | WASM/native numeric-equivalence harness over a shared fixture manifest | Native Rust, full-frame browser WASM and TS fallback share B0-E5 cents/confidence fixtures. [DONE 2026-07-12] |
 | M23 | P2 | 60 | r3:observability-reliability | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | Defines deterministic UX for every failure mode instead of blank screens. |
 | M24 | P2 | 60 | r4:docs-dx | Playwright fake-WAV pipeline test asserts detected note | Feed synthetic E2 audio, assert NoteDisplay shows E. [DONE 2026-07-11] |
 | M25 | P2 | 58 | r1:review | legible sidebar text | [DONE 2026-07-11] |
@@ -817,7 +815,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - For the full requested Top 500, use [TOP-500-backlog.md](TOP-500-backlog.md). Treat [TOP-200-current.md](TOP-200-current.md) as historical evidence and revalidate old `C#` claims.
-- Next dependency order: the remaining R17 confidence/full-frame WASM work, R73 file/WAV adapter, then R1/R6/R7 controller splits.
+- Next dependency order: R73 file/WAV adapter, then R1/R6/R7 controller splits.
 - Every fix should reduce coupling.
 - Update this file, [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if ranking/status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
@@ -852,12 +850,13 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Added a typed cross-boundary `FrameContext`, extracted Rust `FrameResolver`, made native frames authoritative for A4/temperament/selected-target semantics, and replaced separate range mutation with one revisioned native configuration service.
 - Added shared Rust/TypeScript smoothing traces with immediate silence reset, removed the top-level `frequency` compatibility alias, hardened frame/range normalization, and passed the full workspace/WASM/Playwright/Tauri release gate.
 - Added registry/expression-driven Rust/TypeScript note-math generation, migrated web/core/egui facades, gated stale output in CI and added deterministic A4/MIDI/cents/temperament/capo property sweeps.
+- Added normalized-periodicity confidence semantics, a high-level full-frame WASM `TunerProcessor`, revisioned browser `FrameContext`, measured TS fallback confidence and explicit worker reset on session restart.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
-- This file contains 110 current open/partial `R#` findings and a 70-item stable closure registry.
+- This file contains 109 current open/partial `R#` findings and a 71-item stable closure registry.
 - The historical 187-item `C#` audit remains in [TOP-200-current.md](TOP-200-current.md); it is no longer the current-open count.
-- Each of the three requested documents mirrors exactly 500 `M#` rows; 29 verified master items carry `[DONE 2026-07-11]`.
-- Highest impact now is: confidence/full-frame WASM semantics, file/WAV input, remaining controller splits, real-audio reliability/performance tests, diagnostics and release hardening.
+- Each of the three requested documents mirrors exactly 500 `M#` rows; 29 verified master items carry dated `[DONE]` markers.
+- Highest impact now is: file/WAV input, remaining controller splits, real-audio reliability/performance tests, diagnostics and release hardening.
 
 Update this file when fixing. Link from issues.
