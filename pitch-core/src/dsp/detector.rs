@@ -1,4 +1,4 @@
-use super::{MpmDetector, YinDetector};
+use super::{MpmDetector, OctaveDisambiguator, YinDetector};
 
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
 const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
@@ -83,6 +83,7 @@ pub struct HybridPitchDetector {
     cleaned: Vec<f32>,
     config: DetectorConfig,
     mpm: MpmDetector,
+    octave: OctaveDisambiguator,
     yin: YinDetector,
 }
 
@@ -100,6 +101,7 @@ impl HybridPitchDetector {
             cleaned: Vec::new(),
             config,
             mpm: MpmDetector::new(config),
+            octave: OctaveDisambiguator::new(),
             yin: YinDetector::new(config),
         }
     }
@@ -146,7 +148,20 @@ impl PitchDetector for HybridPitchDetector {
             .yin
             .detect_centered(&cleaned, sample_rate)
             .or_else(|| self.mpm.detect_centered(&cleaned, sample_rate))
-            .filter(|estimate| self.config.accepts_confidence(estimate.confidence));
+            .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
+            // Time-domain estimates can lock onto a harmonic/subharmonic;
+            // cross-check against the frame's actual spectral content and
+            // fold octave errors back before anything downstream sees them.
+            .map(|estimate| PitchEstimate {
+                frequency: self.octave.resolve(
+                    &cleaned,
+                    sample_rate,
+                    estimate.frequency,
+                    self.config.min_frequency,
+                    self.config.max_frequency,
+                ),
+                ..estimate
+            });
         self.cleaned = cleaned;
         estimate
     }

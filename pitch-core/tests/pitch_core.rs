@@ -19,6 +19,21 @@ fn sine_buffer_with_offset(
         .collect()
 }
 
+/// A periodic tone at `fundamental` with the given per-harmonic gains
+/// (`gains[0]` scales the fundamental, `gains[1]` the 2nd harmonic, ...).
+fn harmonic_buffer(fundamental: f32, sample_rate: f32, length: usize, gains: &[f32]) -> Vec<f32> {
+    (0..length)
+        .map(|index| {
+            let phase = 2.0 * std::f32::consts::PI * fundamental * index as f32 / sample_rate;
+            gains
+                .iter()
+                .enumerate()
+                .map(|(harmonic, gain)| (phase * (harmonic + 1) as f32).sin() * gain)
+                .sum()
+        })
+        .collect()
+}
+
 #[test]
 fn yin_detects_440_hz() {
     let mut detector =
@@ -155,6 +170,99 @@ fn detector_removes_dc_offset() {
     let buffer = sine_buffer_with_offset(110.0, 44_100.0, 2048, 1.0, 0.6);
     let (frequency, _) = detect_pitch(&buffer, 44_100.0).expect("pitch should survive DC bias");
     assert!((frequency - 110.0).abs() < 2.0);
+}
+
+#[test]
+fn octave_crosscheck_folds_a_harmonic_lock_back_to_the_fundamental() {
+    // A guitar-like tone at 110 Hz; a detector that erroneously locked onto
+    // the 2nd harmonic (220 Hz) should be folded back down, because the
+    // spectrum clearly carries energy at 110 Hz and 330 Hz.
+    let buffer = harmonic_buffer(110.0, 48_000.0, 4096, &[1.0, 0.6, 0.4, 0.25]);
+    let mut checker = OctaveDisambiguator::new();
+    let resolved = checker.resolve(&buffer, 48_000.0, 220.0, 30.0, 400.0);
+    assert!(
+        (resolved - 110.0).abs() < 1.0,
+        "expected the octave-up lock to fold back to 110 Hz, got {resolved}"
+    );
+}
+
+#[test]
+fn octave_crosscheck_folds_a_subharmonic_lock_up_to_the_real_pitch() {
+    // A tone at 220 Hz; a detector that erroneously reported 110 Hz should
+    // be folded up, because 110 Hz's odd harmonics (110, 330, 550) are empty
+    // while its even ones (220, 440, 660) carry all the energy.
+    let buffer = harmonic_buffer(220.0, 48_000.0, 4096, &[1.0, 0.5, 0.3]);
+    let mut checker = OctaveDisambiguator::new();
+    let resolved = checker.resolve(&buffer, 48_000.0, 110.0, 30.0, 400.0);
+    assert!(
+        (resolved - 220.0).abs() < 1.0,
+        "expected the subharmonic lock to fold up to 220 Hz, got {resolved}"
+    );
+}
+
+#[test]
+fn octave_crosscheck_keeps_a_correct_estimate() {
+    let mut checker = OctaveDisambiguator::new();
+
+    let rich = harmonic_buffer(110.0, 48_000.0, 4096, &[1.0, 0.6, 0.4, 0.25]);
+    let resolved = checker.resolve(&rich, 48_000.0, 110.0, 30.0, 400.0);
+    assert!(
+        (resolved - 110.0).abs() < 1.0,
+        "expected a correct harmonic-rich estimate to pass through, got {resolved}"
+    );
+
+    let pure = sine_buffer(220.0, 48_000.0, 4096);
+    let resolved = checker.resolve(&pure, 48_000.0, 220.0, 30.0, 400.0);
+    assert!(
+        (resolved - 220.0).abs() < 1.0,
+        "expected a correct pure-sine estimate to pass through, got {resolved}"
+    );
+}
+
+#[test]
+fn octave_crosscheck_trusts_periodicity_when_the_fundamental_is_weak() {
+    // A low string through a high-pass-filtered mic: the fundamental at
+    // ~82 Hz is weak and the 2nd harmonic dominates. The spectral *peak*
+    // sits at 165 Hz, but the pitch is still 82 Hz - the odd harmonics
+    // (82, 247, 412) prove it. The cross-check must NOT "fix" this.
+    let buffer = harmonic_buffer(82.4, 48_000.0, 4096, &[0.15, 1.0, 0.8, 0.6, 0.4]);
+    let mut checker = OctaveDisambiguator::new();
+    let resolved = checker.resolve(&buffer, 48_000.0, 82.4, 30.0, 400.0);
+    assert!(
+        (resolved - 82.4).abs() < 1.0,
+        "expected the weak-fundamental estimate to be kept at 82.4 Hz, got {resolved}"
+    );
+}
+
+#[test]
+fn octave_crosscheck_respects_the_configured_frequency_range() {
+    // Even with spectral evidence for 110 Hz, the fold-down must not
+    // produce a frequency below the detector's configured minimum.
+    let buffer = harmonic_buffer(110.0, 48_000.0, 4096, &[1.0, 0.6, 0.4]);
+    let mut checker = OctaveDisambiguator::new();
+    let resolved = checker.resolve(&buffer, 48_000.0, 220.0, 150.0, 400.0);
+    assert!(
+        (resolved - 220.0).abs() < 1.0,
+        "expected no fold below the configured minimum, got {resolved}"
+    );
+}
+
+#[test]
+fn hybrid_detector_still_finds_fundamentals_of_harmonic_rich_tones() {
+    // End-to-end sanity: the cross-check wired into HybridPitchDetector must
+    // not disturb correct detections on realistic harmonic-rich guitar tones.
+    let mut detector = HybridPitchDetector::default();
+    for expected in [82.4069_f32, 110.0, 146.8324, 196.0, 246.9417, 329.6276] {
+        let buffer = harmonic_buffer(expected, 48_000.0, 4096, &[1.0, 0.5, 0.3, 0.2]);
+        let estimate = detector
+            .detect(&buffer, 48_000.0)
+            .unwrap_or_else(|| panic!("no detection for {expected} Hz"));
+        assert!(
+            (estimate.frequency - expected).abs() < 2.0,
+            "expected {expected} Hz, got {}",
+            estimate.frequency
+        );
+    }
 }
 
 #[test]
