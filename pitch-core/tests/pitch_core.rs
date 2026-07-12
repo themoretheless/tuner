@@ -156,3 +156,67 @@ fn detector_removes_dc_offset() {
     let (frequency, _) = detect_pitch(&buffer, 44_100.0).expect("pitch should survive DC bias");
     assert!((frequency - 110.0).abs() < 2.0);
 }
+
+#[test]
+fn smoother_folds_a_single_frame_octave_error_back_to_the_stable_reading() {
+    let mut smoother = Smoother::new();
+    for _ in 0..4 {
+        smoother.add(Some(110.0));
+    }
+    // A one-off misdetection at 2x the settled reading (e.g. a stray YIN/MPM
+    // harmonic lock) should be folded back, not yank the readout to 220 Hz.
+    let during_conflict = smoother.add(Some(220.0)).expect("smoothed value");
+    assert!(
+        (during_conflict - 110.0).abs() < 5.0,
+        "expected the transient octave-up reading to be folded near 110 Hz, got {during_conflict}"
+    );
+
+    // Same for a one-off half-frequency misdetection.
+    let mut smoother = Smoother::new();
+    for _ in 0..4 {
+        smoother.add(Some(220.0));
+    }
+    let during_conflict = smoother.add(Some(110.0)).expect("smoothed value");
+    assert!(
+        (during_conflict - 220.0).abs() < 5.0,
+        "expected the transient octave-down reading to be folded near 220 Hz, got {during_conflict}"
+    );
+}
+
+#[test]
+fn smoother_accepts_a_sustained_octave_change_as_a_real_note() {
+    let mut smoother = Smoother::new();
+    for _ in 0..4 {
+        smoother.add(Some(110.0));
+    }
+    // A genuine octave-up note change should still win once it persists:
+    // the 3-frame fold streak lets the raw 220 Hz value through, and then
+    // the (pre-existing) median-of-5 history needs a few more frames to
+    // fully turn over before the readout settles near 220 Hz.
+    let mut last = None;
+    for _ in 0..15 {
+        last = smoother.add(Some(220.0));
+    }
+    let settled = last.expect("smoothed value");
+    assert!(
+        (settled - 220.0).abs() < 5.0,
+        "expected a sustained octave change to settle near 220 Hz, got {settled}"
+    );
+}
+
+#[test]
+fn smoother_leaves_normal_pitch_bends_untouched() {
+    let mut smoother = Smoother::new();
+    // A vibrato/bend sweep from 110 Hz up to ~116 Hz (a few percent, nowhere
+    // near an octave ratio) should track smoothly, not get folded - run
+    // enough frames for the median-of-5 history to reflect the new values.
+    let mut last = 110.0;
+    for step in 0..10 {
+        let target = 110.0 + (step as f32).min(6.0) * 1.0;
+        last = smoother.add(Some(target)).expect("smoothed value");
+    }
+    assert!(
+        (last - 116.0).abs() < 3.0,
+        "expected the smoother to track a normal pitch bend, got {last}"
+    );
+}
