@@ -12,19 +12,35 @@
 
 /// Power at the sub-octave's odd multiples (0.5f, 1.5f, 2.5f) must exceed
 /// this fraction of the power at the estimate's own harmonics (f, 2f, 3f)
-/// before the estimate is folded down to f/2. True fundamentals put no
-/// energy at those in-between frequencies, so anything past window leakage
-/// (Hann sidelobes are below -31 dB, i.e. under 0.001 in power) is a real
+/// before a fold down to f/2 engages. True fundamentals put no energy at
+/// those in-between frequencies, so anything past window leakage (Hann
+/// sidelobes are below -31 dB, i.e. under 0.001 in power) is a real
 /// subharmonic series; 0.3 leaves a wide safety margin.
-const FOLD_DOWN_EVIDENCE_RATIO: f32 = 0.3;
+const FOLD_DOWN_ENTER_RATIO: f32 = 0.3;
+
+/// Once a fold down is active it stays active until the sub-octave
+/// evidence drops below this weaker ratio. The gap between enter and exit
+/// keeps borderline frames from toggling the fold on and off, which would
+/// slam the readout across a whole octave every few frames.
+const FOLD_DOWN_EXIT_RATIO: f32 = 0.15;
 
 /// Power at the estimate's odd multiples (f, 3f, 5f) must fall below this
-/// fraction of the power at its even multiples (2f, 4f, 6f) before the
-/// estimate is folded up to 2f. Kept small on purpose: a weak-but-present
-/// fundamental (e.g. a low string through a high-pass-filtered mic) still
-/// has clear odd-harmonic energy and must keep the periodicity-based
-/// estimate, which is exactly where YIN beats a naive spectral peak.
-const FOLD_UP_EVIDENCE_RATIO: f32 = 0.15;
+/// fraction of the power at its even multiples (2f, 4f, 6f) before a fold
+/// up to 2f engages. Kept small on purpose: a weak-but-present fundamental
+/// (e.g. a low string through a high-pass-filtered mic) still has clear
+/// odd-harmonic energy and must keep the periodicity-based estimate, which
+/// is exactly where YIN beats a naive spectral peak.
+const FOLD_UP_ENTER_RATIO: f32 = 0.15;
+
+/// An active fold up disengages once odd-harmonic evidence recovers past
+/// this ratio (see [`FOLD_DOWN_EXIT_RATIO`] for why enter/exit differ).
+const FOLD_UP_EXIT_RATIO: f32 = 0.3;
+
+/// A fold engages only after its evidence holds for this many consecutive
+/// frames, so one borderline frame cannot yank the readout an octave.
+/// Disengaging is immediate (the enter/exit ratio gap provides the
+/// hysteresis on that side).
+const FOLD_CONFIRM_FRAMES: u8 = 2;
 
 /// Probes per parity group. Three odd and three even multiples are enough
 /// to separate the octave hypotheses without probing into the noise floor.
@@ -34,12 +50,24 @@ const PROBES_PER_GROUP: usize = 3;
 /// responses degrade approaching Nyquist.
 const MAX_PROBE_NYQUIST_FRACTION: f32 = 0.45;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum FoldDirection {
+    None,
+    Down,
+    Up,
+}
+
 /// Cross-checks a time-domain pitch estimate against the frame's actual
 /// spectral content and folds octave errors (2x / 0.5x locks) back to the
-/// supported octave. Owns a scratch buffer so per-frame use does not
-/// allocate after warm-up.
+/// supported octave. Stateful: a fold needs consecutive-frame confirmation
+/// to engage and weaker evidence to disengage, so borderline frames cannot
+/// flip the decision back and forth. Owns a scratch buffer so per-frame
+/// use does not allocate after warm-up.
 pub struct OctaveDisambiguator {
     windowed: Vec<f32>,
+    active: FoldDirection,
+    pending: FoldDirection,
+    pending_streak: u8,
 }
 
 impl Default for OctaveDisambiguator {
@@ -52,7 +80,18 @@ impl OctaveDisambiguator {
     pub fn new() -> Self {
         Self {
             windowed: Vec::new(),
+            active: FoldDirection::None,
+            pending: FoldDirection::None,
+            pending_streak: 0,
         }
+    }
+
+    /// Clears the fold state. Call when the signal drops (gate closed) so a
+    /// fold engaged on the previous note cannot carry over to the next one.
+    pub fn reset(&mut self) {
+        self.active = FoldDirection::None;
+        self.pending = FoldDirection::None;
+        self.pending_streak = 0;
     }
 
     /// Returns `frequency` unchanged when the spectrum supports it, `frequency / 2`
@@ -80,22 +119,75 @@ impl OctaveDisambiguator {
         }
         self.apply_hann_window(buffer);
 
-        let odd_of_half = self.parity_power(sample_rate, frequency * 0.5, 1);
-        let base_harmonics = self.group_power(sample_rate, frequency, [1.0, 2.0, 3.0]);
-        if frequency * 0.5 >= min_frequency
-            && odd_of_half > 0.0
-            && odd_of_half > FOLD_DOWN_EVIDENCE_RATIO * base_harmonics
-        {
-            return frequency * 0.5;
+        let desired = self.desired_fold(sample_rate, frequency, min_frequency, max_frequency);
+
+        if desired == self.active {
+            self.pending = FoldDirection::None;
+            self.pending_streak = 0;
+        } else if desired == FoldDirection::None {
+            // Disengage immediately: the enter/exit ratio gap already keeps
+            // borderline frames from getting here.
+            self.active = FoldDirection::None;
+            self.pending = FoldDirection::None;
+            self.pending_streak = 0;
+        } else {
+            if self.pending == desired {
+                self.pending_streak = self.pending_streak.saturating_add(1);
+            } else {
+                self.pending = desired;
+                self.pending_streak = 1;
+            }
+            if self.pending_streak >= FOLD_CONFIRM_FRAMES {
+                self.active = desired;
+                self.pending = FoldDirection::None;
+                self.pending_streak = 0;
+            }
         }
 
-        let odd = self.parity_power(sample_rate, frequency, 1);
-        let even = self.parity_power(sample_rate, frequency, 2);
-        if frequency * 2.0 <= max_frequency && even > 0.0 && odd < FOLD_UP_EVIDENCE_RATIO * even {
-            return frequency * 2.0;
+        match self.active {
+            FoldDirection::Down => frequency * 0.5,
+            FoldDirection::Up => frequency * 2.0,
+            FoldDirection::None => frequency,
+        }
+    }
+
+    /// What the current frame's spectral evidence says the fold should be,
+    /// with hysteresis: an active fold uses the weaker exit ratio, an
+    /// inactive one the stricter enter ratio.
+    fn desired_fold(
+        &self,
+        sample_rate: f32,
+        frequency: f32,
+        min_frequency: f32,
+        max_frequency: f32,
+    ) -> FoldDirection {
+        if frequency * 0.5 >= min_frequency {
+            let odd_of_half = self.parity_power(sample_rate, frequency * 0.5, 1);
+            let base_harmonics = self.group_power(sample_rate, frequency, [1.0, 2.0, 3.0]);
+            let ratio = if self.active == FoldDirection::Down {
+                FOLD_DOWN_EXIT_RATIO
+            } else {
+                FOLD_DOWN_ENTER_RATIO
+            };
+            if odd_of_half > 0.0 && odd_of_half > ratio * base_harmonics {
+                return FoldDirection::Down;
+            }
         }
 
-        frequency
+        if frequency * 2.0 <= max_frequency {
+            let odd = self.parity_power(sample_rate, frequency, 1);
+            let even = self.parity_power(sample_rate, frequency, 2);
+            let ratio = if self.active == FoldDirection::Up {
+                FOLD_UP_EXIT_RATIO
+            } else {
+                FOLD_UP_ENTER_RATIO
+            };
+            if even > 0.0 && odd < ratio * even {
+                return FoldDirection::Up;
+            }
+        }
+
+        FoldDirection::None
     }
 
     /// Sum of spectral power at `fundamental` times each multiplier, skipping

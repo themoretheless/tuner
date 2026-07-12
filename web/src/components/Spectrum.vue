@@ -4,11 +4,16 @@ import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
 import { canvasPalette } from '../utils/canvasPalette'
+import {
+  SPECTRAL_PEAK_MAX_FREQ,
+  SPECTRAL_PEAK_MIN_FREQ,
+  spectralPeakFrequency,
+} from '../utils/spectralPeak'
 import { useL10n } from '../stores/l10n'
 
 // Logarithmic frequency range good for guitar (50Hz-6kHz covers fundamentals + early harmonics)
-const MIN_FREQ = 50
-const MAX_FREQ = 6000
+const MIN_FREQ = SPECTRAL_PEAK_MIN_FREQ
+const MAX_FREQ = SPECTRAL_PEAK_MAX_FREQ
 
 const props = defineProps<{
   frame: SpectrumFrame | null
@@ -29,25 +34,8 @@ void canvas
 // Frequency (Hz) of the tallest bin within [MIN_FREQ, MAX_FREQ], independent
 // of the coarser display-bar resolution, so the label reflects the true FFT peak.
 const peakFrequency = computed(() => {
-  if (!props.isListening || !props.frame) return null
-  const data = props.frame.bins
-  const binCount = data.length
-  const sr = props.frame.sampleRate || 48000
-  const nyquist = sr / 2
-  if (!binCount || nyquist <= 0) return null
-
-  const minBin = Math.max(0, Math.floor((MIN_FREQ / nyquist) * binCount))
-  const maxBin = Math.min(binCount - 1, Math.ceil((MAX_FREQ / nyquist) * binCount))
-  let peakBin = -1
-  let peakValue = 0
-  for (let bin = minBin; bin <= maxBin; bin++) {
-    if (data[bin] > peakValue) {
-      peakValue = data[bin]
-      peakBin = bin
-    }
-  }
-  if (peakBin < 0 || peakValue <= 0) return null
-  return (peakBin / binCount) * nyquist
+  if (!props.isListening) return null
+  return spectralPeakFrequency(props.frame)
 })
 
 function clearCanvas(frame: CanvasFrame) {

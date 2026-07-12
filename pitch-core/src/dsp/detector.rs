@@ -141,6 +141,9 @@ impl HybridPitchDetector {
 impl PitchDetector for HybridPitchDetector {
     fn detect(&mut self, buffer: &[f32], sample_rate: f32) -> Option<PitchEstimate> {
         if !self.prepare_centered(buffer) {
+            // Gate closed: drop any fold engaged on the previous note so it
+            // cannot carry over to the next one.
+            self.octave.reset();
             return None;
         }
         let cleaned = std::mem::take(&mut self.cleaned);

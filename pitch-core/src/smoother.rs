@@ -8,9 +8,12 @@ const OCTAVE_RATIO_TOLERANCE: f32 = 0.06;
 
 /// Consecutive frames a "looks like an octave error" reading must persist
 /// before it is accepted as a real note change instead of folded back.
-/// At the ~33ms detection cadence this is roughly 100-130ms, fast enough
-/// for a deliberate octave jump, long enough to reject single-frame flukes.
-const OCTAVE_CONFLICT_STREAK_LIMIT: u8 = 3;
+/// At the ~33ms detection cadence this is roughly 270ms. Deliberately
+/// generous: harmonic-lock bursts on a real string routinely last 4-8
+/// frames and slammed the readout a whole octave when the limit was 3,
+/// while a genuine octave change almost always passes through silence
+/// (which resets the smoother and accepts the new note immediately).
+const OCTAVE_CONFLICT_STREAK_LIMIT: u8 = 8;
 
 pub struct Smoother {
     alpha: f32,
