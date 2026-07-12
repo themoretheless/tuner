@@ -11,7 +11,7 @@ function createLiveTunerPort(root: TunerRoot) {
     cents: root.cents,
     currentNoteDisplay: root.currentNoteDisplay,
     currentTuning: root.currentTuning,
-    detectedNote: root.detectedNote,
+    hasDetection: root.hasDetection,
     detectionFrame: root.detectionFrame,
     displayMode: root.displayMode,
     error: root.error,

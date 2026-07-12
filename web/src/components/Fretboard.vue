@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Note } from '../utils/notes'
+import { getCents, type Note } from '../utils/notes'
 
 const props = defineProps<{
   strings: Note[]
@@ -17,9 +17,7 @@ const NUM_FRETS = 12
 const highlightedFrets = computed(() => {
   return props.strings.map((s) => {
     if (!props.targetFreq) return -1
-    const ratio = props.targetFreq / s.frequency
-    const semitones = 12 * Math.log2(ratio)
-    return Math.round(semitones)
+    return Math.round(getCents(props.targetFreq, s.frequency) / 100)
   })
 })
 </script>

@@ -4,11 +4,16 @@ import type {
   DetectionFrameInputPort,
 } from '../ports/audioInput';
 import type { PitchDetectionRange } from '../utils/pitch';
-import type { DetectionFrame } from '../types/frames';
-
-type NativeAudioFrame = DetectionFrame & {
-  frequency?: number | null;
-};
+import type { DetectionFrame, FrameContext } from '../types/frames';
+import {
+  cloneNativeAudioConfiguration,
+  createNativeAudioConfiguration,
+  normalizeNativeFrame,
+  withNativeAudioRange,
+  withNativeFrameContext,
+  type NativeAudioConfiguration,
+  type NativeAudioFramePayload,
+} from '../platform/nativeAudioContract';
 
 type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
 type ListenFn = <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
@@ -30,6 +35,10 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
   let invokeFn: InvokeFn | null = null;
   let listenFn: ListenFn | null = null;
   let unlisten: (() => void) | null = null;
+  let configuration: NativeAudioConfiguration = createNativeAudioConfiguration();
+  let configurationSync: Promise<void> | null = null;
+  let configurationRevision = 0;
+  let syncedConfigurationRevision = 0;
 
   async function loadApi() {
     if (invokeFn && listenFn) return true;
@@ -60,19 +69,28 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
   }
 
   async function start(options: AudioInputStartOptions) {
+    updateRange(options.range);
     error.value = null;
     if (!await refreshAvailability() || !invokeFn || !listenFn) {
       error.value = 'Native audio backend unavailable';
       return false;
     }
-    if (isListening.value) return true;
+    if (isListening.value) {
+      await syncConfiguration();
+      return true;
+    }
 
     try {
-      unlisten = await listenFn<NativeAudioFrame>('native-audio-frame', (event) => {
+      unlisten = await listenFn<NativeAudioFramePayload>('native-audio-frame', (event) => {
         frame.value = normalizeNativeFrame(event.payload);
       });
-      await invokeFn('start_native_audio', { range: options.range });
+      const startRevision = configurationRevision;
+      await invokeFn('start_native_audio', {
+        config: cloneNativeAudioConfiguration(configuration),
+      });
+      syncedConfigurationRevision = startRevision;
       isListening.value = true;
+      if (configurationRevision !== startRevision) await syncConfiguration();
       return true;
     } catch (nativeError) {
       cleanupListener();
@@ -85,6 +103,7 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     cleanupListener();
     isListening.value = false;
     frame.value = null;
+    await configurationSync;
     if (invokeFn) {
       try {
         await invokeFn('stop_native_audio');
@@ -95,12 +114,55 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
   }
 
   async function setDetectionRange(range: PitchDetectionRange) {
-    if (!isListening.value || !invokeFn) return;
-    try {
-      await invokeFn('set_native_audio_range', { range });
-    } catch {
-      // Keep the active stream; the next restart will apply the range.
-    }
+    updateRange(range);
+    await syncConfiguration();
+  }
+
+  async function setFrameContext(context: FrameContext) {
+    configuration = withNativeFrameContext(configuration, context);
+    configurationRevision += 1;
+    await syncConfiguration();
+  }
+
+  function updateRange(range: PitchDetectionRange) {
+    configuration = withNativeAudioRange(configuration, range);
+    configurationRevision += 1;
+  }
+
+  function syncConfiguration() {
+    if (
+      !isListening.value
+      || !invokeFn
+      || syncedConfigurationRevision === configurationRevision
+    ) return Promise.resolve();
+    if (configurationSync) return configurationSync;
+
+    const invoke = invokeFn;
+    let failed = false;
+    configurationSync = (async () => {
+      while (
+        isListening.value
+        && syncedConfigurationRevision !== configurationRevision
+      ) {
+        const revision = configurationRevision;
+        const snapshot = cloneNativeAudioConfiguration(configuration);
+        try {
+          await invoke('configure_native_audio', { config: snapshot });
+          syncedConfigurationRevision = revision;
+        } catch {
+          failed = true;
+          return;
+        }
+      }
+    })().finally(() => {
+      configurationSync = null;
+      if (
+        !failed
+        && isListening.value
+        && syncedConfigurationRevision !== configurationRevision
+      ) void syncConfiguration();
+    });
+    return configurationSync;
   }
 
   function cleanupListener() {
@@ -127,27 +189,8 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     output: 'detection-frame',
     refreshAvailability,
     setDetectionRange,
+    setFrameContext,
     start,
     stop,
   };
-}
-
-function normalizeNativeFrame(payload: NativeAudioFrame): DetectionFrame {
-  const rawFrequency = Number(payload.freq ?? payload.frequency);
-  const freq = Number.isFinite(rawFrequency) && rawFrequency > 0 ? rawFrequency : null;
-  return {
-    freq,
-    confidence: clamp01(Number(payload.confidence) || 0),
-    rms: Math.max(0, Number(payload.rms) || 0),
-    level: clamp01(Number(payload.level) || 0),
-    cents: Number(payload.cents) || 0,
-    note: typeof payload.note === 'string' ? payload.note : '—',
-    target: payload.target ?? null,
-    inTune: Boolean(payload.inTune),
-    isPower: Boolean(payload.isPower),
-  };
-}
-
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
 }

@@ -5,9 +5,8 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (118 open/partial, 62 closed stable `R#` items).
-- [TOP-200-current.md](TOP-200-current.md) - historical detailed `C#` evidence; use its 2026-07-11 overlay before old findings.
-- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`).
+- [recommendation.md](recommendation.md) - current extract (109 open/partial, 71 closed stable `R#` items).
+- [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) and historical detailed `C#` evidence; revalidate old findings against the status overlay.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
 
@@ -31,16 +30,16 @@ If not, it doesn't belong in this plan.
 Each milestone is independently shippable and verified with `cargo test -p pitch-core`,
 `vue-tsc --noEmit`, and `cargo check` on egui. Behavior-preserving milestones are marked **[BP]**.
 
-## Status Overlay (2026-07-11)
+## Status Overlay (2026-07-12)
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 40 Vitest, 10 all-feature core tests, shared native/WASM/TS parity and three E2E flows; real WAV/property/soak still belong to M7 |
-| M1 frames | Mostly done | Rust/Tauri/egui frame adopted; native tuning context and alias remain |
+| M0 safety net | Done baseline | 52 Vitest, 17 all-feature core tests, generated note-math properties, shared pitch/confidence/smoothing parity and four E2E flows; real WAV/soak still belong to M7 |
+| M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice/custom-library done; broad root and selection/temperament controller remain |
-| M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers and optional spectrum |
-| M5 single-source domain | Partial | Stateful WASM, numeric fallback parity and generated tuning registry are done; shared note math remains |
+| M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
+| M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
 | M7 DSP hardening | Partial | DC centering, bounded MPM/ranges and silence reset done; HPS/filter/adaptive gate/fixtures remain |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
@@ -56,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-11:** M0 is complete for the current refactor gate: toolchain pins, `40` Vitest tests, `10` pitch-core all-feature tests, CI fmt/clippy/tests/wasm gates, generated registry parity, one B0-E5 native/WASM/TS fixture manifest, and three Playwright flows including synthetic detection and responsive Library navigation.
+**Status 2026-07-12:** M0 is complete for the current refactor gate: toolchain pins, `52` Vitest tests, `17` pitch-core all-feature tests, CI fmt/clippy/tests/wasm/codegen gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, and four Playwright flows including full-frame WASM, synthetic detection and responsive Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -65,7 +64,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-07-11:** pitch-core, Tauri and egui now use the shared frame; Vue enriches native output with active tuning context. Remaining M1 work: pass that context to native processing and remove compatibility aliases.
+**Status 2026-07-12:** complete. `FrameResolver` owns target/cents/hysteresis; Tauri and browser WASM receive A4/temperament/tuning/selected-target `FrameContext`; Vue trusts resolved primary output; Rust/TypeScript smoothing and confidence are fixture-gated; the top-level `frequency` alias is removed.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -94,15 +93,17 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `EngineConfig` value type for the scattered magic numbers (2048, 0.12, gates).
 **Verify / DoD:** `cargo test` green; files < ~200 LOC; `clippy -D warnings` clean.
 
-**Status 2026-07-11:** complete: detector/yin/mpm/power, spectrum and WASM modules are split; `PitchDetector` and `EngineConfig` exist; detector buffers are reused and spectrum is demand-gated.
+**Status 2026-07-12:** complete: detector/yin/mpm/power, spectrum and WASM modules are split; `PitchDetector`, `EngineConfig` and full-frame `TunerProcessor` exist; detector buffers are reused and spectrum is demand-gated.
 
 ## M5 - Unify the domain (kill duplication)
-**Goal:** pitch-core is the only source of tunings + note math. Phase 1/2.
+**Goal:** one checked source owns tunings + note math for pitch-core and web. Phase 1/2.
 **Targets:** `R14-R18`, `R65`, `R111`, `R112`, `R129`; grounded audit `C35-C37`, `C44`, `C50`, `C57`, `C59-C61`, `C176`; master `M3`, `M7`, `M11`.
 - Tuning/instrument data now comes from `registry/music-registry.json`; Rust code is generated at build time and web derives its objects from the same schema.
-- Next converge TS note/cents math on generated or WASM-backed ownership; the JS detector remains an explicit, fixture-gated runtime fallback.
+- `scripts/generate-note-math.mjs` owns a language-neutral formula AST and emits dependency-free Rust/TypeScript primitives; `notes.ts` and `domain.rs` are thin composition facades.
 **Verify / DoD:** M0 parity test passes **by construction** (one source); no second hand-written tuning table.
 **Risk:** medium - touches every web consumer of `notes.ts`; the M0 parity test de-risks it.
+
+**Status 2026-07-12:** complete. Codegen freshness gates build/test/CI; deterministic Rust/TypeScript sweeps cover A4, MIDI, cents, temperaments and transpose/capo. Confidence/full-frame WASM convergence is also complete under M1/M4.
 
 ## M6 - Native realtime safety + egui decomposition
 **Goal:** no DSP/alloc/lock on the cpal callback; data-driven painters. Phase 4 (P1).
@@ -135,12 +136,12 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** primary WASM, audio ports, numeric detector parity and the generated music registry are complete; move native tuning/smoothing context into the shared frame.
-- **Next:** shared note math, file/WAV adapter, then split the remaining selection/temperament/settings controllers.
+- **Now:** full-frame primary WASM/native ownership, audio ports, confidence/smoothing parity, generated music data and note math are complete; add the file/WAV adapter.
+- **Next:** split the remaining selection/temperament/settings controllers.
 - **Later:** M7 real-audio/benchmark/soak accuracy work and the remaining M8 diagnostics/a11y/release gates.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.
 - Every PR answers: *does this decrease coupling between audio / dsp / state / presentation?*
-- When a milestone closes recommendation items, update [recommendation.md](recommendation.md), [TOP-200-current.md](TOP-200-current.md), [TOP-500-backlog.md](TOP-500-backlog.md) if rank/status changes, and [ARCHITECTURE.md](ARCHITECTURE.md) status.
+- When a milestone closes recommendation items, update [recommendation.md](recommendation.md), the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` rank or status changes, and [ARCHITECTURE.md](ARCHITECTURE.md) status.
 - Prefer behavior-preserving extractions over rewrites; land each milestone green before starting the next.

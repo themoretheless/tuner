@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "alpha": 0.4,
+  "historyCapacity": 5,
+  "traces": [
+    {
+      "id": "steady-rise",
+      "inputs": [100, 110, 120, 130, 140, 150, 160],
+      "outputs": [100, 102, 104, 107.2, 110.4, 118.24, 126.944]
+    },
+    {
+      "id": "silence-resets",
+      "inputs": [110, 112, null, 220, 218],
+      "outputs": [110, 110.4, null, 220, 219.6]
+    }
+  ]
+}

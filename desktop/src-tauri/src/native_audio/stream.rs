@@ -1,6 +1,6 @@
-use super::frame::{NativeAudioRange, NativeFrameProcessor, EVENT_NAME};
+use super::config::SharedNativeAudioSettings;
+use super::frame::{NativeFrameProcessor, EVENT_NAME};
 use audio_input::{InputConfig, InputStream};
-use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
 pub(crate) struct NativeAudioRuntime {
@@ -10,15 +10,25 @@ pub(crate) struct NativeAudioRuntime {
 impl NativeAudioRuntime {
     pub(crate) fn create(
         app: AppHandle,
-        shared_range: Arc<Mutex<NativeAudioRange>>,
+        shared_settings: SharedNativeAudioSettings,
     ) -> Result<Self, String> {
-        let initial_range = shared_range.lock().map(|range| *range).unwrap_or_default();
-        let mut processor = NativeFrameProcessor::new(initial_range);
+        let (mut revision, initial_config) = shared_settings
+            .lock()
+            .map(|settings| settings.snapshot())
+            .unwrap_or_default();
+        let mut processor = NativeFrameProcessor::new(initial_config);
         let input = InputStream::open(
             InputConfig::default(),
             move |samples, sample_rate| {
-                let range = shared_range.lock().map(|range| *range).unwrap_or_default();
-                let frame = processor.process(samples, sample_rate, range);
+                let changed = shared_settings
+                    .lock()
+                    .ok()
+                    .and_then(|settings| settings.snapshot_after(revision));
+                if let Some((next_revision, config)) = changed {
+                    revision = next_revision;
+                    processor.update_config(config);
+                }
+                let frame = processor.process(samples, sample_rate);
                 let _ = app.emit(EVENT_NAME, frame);
             },
             |error| eprintln!("native audio input error: {error}"),

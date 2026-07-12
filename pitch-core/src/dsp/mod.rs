@@ -3,7 +3,9 @@ mod mpm;
 mod power;
 mod yin;
 
-pub use detector::{DetectorConfig, HybridPitchDetector, PitchDetector, PitchEstimate};
+pub use detector::{
+    DetectorConfig, HybridPitchDetector, PitchDetector, PitchEstimate, MIN_USABLE_CONFIDENCE,
+};
 pub use mpm::MpmDetector;
 pub use yin::YinDetector;
 

@@ -2,7 +2,7 @@ use crate::audio::AudioManager;
 use crate::state::{SharedTunerState, TunerViewState};
 use crate::visualization::VisualizationHistory;
 use eframe::egui;
-use pitch_core::{get_tunings, EngineConfig, TunerEngine, Tuning};
+use pitch_core::{format_freq, get_note_display, get_tunings, EngineConfig, TunerEngine, Tuning};
 use std::sync::{Arc, Mutex};
 
 pub(crate) struct App {
@@ -177,7 +177,7 @@ impl App {
                 .strong(),
         );
         if let Some(frequency) = state.frequency {
-            ui.label(format!("{frequency:.1} Hz"));
+            ui.label(format!("{} Hz", format_freq(frequency)));
         }
         ui.label(format!(
             "{:.1} cents  ·  confidence {:.0}%",
@@ -227,7 +227,7 @@ impl App {
             let mut changed = false;
             for string in &mut tuning.strings {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{}{}", string.name, string.octave));
+                    ui.label(get_note_display(string));
                     changed |= ui
                         .add(egui::Slider::new(&mut string.frequency, 20.0..=1_200.0).text("Hz"))
                         .changed();

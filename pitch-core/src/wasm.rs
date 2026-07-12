@@ -1,3 +1,9 @@
+mod frame;
+mod processor;
+
+pub use frame::WasmDetectionFrame;
+pub use processor::WasmTunerProcessor;
+
 use crate::{
     compute_rms_volume, detect_pitch, downsample_for_pitch, is_likely_power_chord_native,
     normalize_level, DetectorConfig, HybridPitchDetector, MpmDetector, PitchDetector, Smoother,
@@ -129,7 +135,7 @@ mod tests {
     fn stateful_detector_reuses_configuration_and_honors_range() {
         let sample_rate = 48_000.0;
         let samples: Vec<f32> = (0..4096)
-            .map(|index| (2.0 * std::f32::consts::PI * 440.0 * index as f32 / sample_rate).sin())
+            .map(|index| (std::f32::consts::TAU * 440.0 * index as f32 / sample_rate).sin())
             .collect();
         let mut detector = WasmPitchDetector::new();
         detector.set_frequency_range(400.0, 500.0);

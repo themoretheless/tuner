@@ -42,7 +42,7 @@ function toggleMic() {
         :confidence="tuner.detectionFrame.confidence"
         :display="tuner.currentNoteDisplay"
         :is-power-chord="tuner.detectionFrame.isPower"
-        :is-detected="!!tuner.detectedNote"
+        :is-detected="tuner.hasDetection"
         :target-name="tuner.getNoteDisplay(tuner.targetNote)"
         :target-freq="tuner.targetNote.frequency"
         :format-freq="tuner.formatFreq"
@@ -51,7 +51,7 @@ function toggleMic() {
         :cents="tuner.cents"
         :mode="tuner.displayMode"
         :is-in-tune="tuner.isInTune"
-        :is-detected="!!tuner.detectedNote"
+        :is-detected="tuner.hasDetection"
       />
       <DisplayModeSelector :mode="tuner.displayMode" @change="tuner.setDisplayMode" />
     </div>

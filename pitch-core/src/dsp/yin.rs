@@ -142,7 +142,9 @@ impl PitchDetector for YinDetector {
             return None;
         }
         let cleaned = std::mem::take(&mut self.cleaned);
-        let estimate = self.detect_centered(&cleaned, sample_rate);
+        let estimate = self
+            .detect_centered(&cleaned, sample_rate)
+            .filter(|estimate| self.config.accepts_confidence(estimate.confidence));
         self.cleaned = cleaned;
         estimate
     }

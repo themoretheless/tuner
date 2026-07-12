@@ -12,6 +12,16 @@ export interface DetectionFrame {
   isPower: boolean;
 }
 
+export interface FrameContext {
+  a4: number;
+  displayTargets: Note[];
+  idleTarget: Note | null;
+  inTuneEnterCents: number;
+  inTuneExitCents: number;
+  selectedTarget: Note | null;
+  tuningTargets: Note[];
+}
+
 export interface WaveformFrame {
   samples: Float32Array<ArrayBuffer>;
   sampleRate: number;

@@ -7,6 +7,11 @@ export interface PitchDetectionRange {
   maxFrequency: number;
 }
 
+export interface PitchEstimate {
+  confidence: number;
+  frequency: number;
+}
+
 export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
   minFrequency: 24,
   maxFrequency: 1200,
@@ -15,6 +20,10 @@ export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
 const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
 const MIN_RMS = 0.0025;
 const MIN_PEAK = 0.012;
+
+// Confidence is normalized periodicity quality, not a probability. Frames
+// below this score do not update the readout in either the Rust or TS path.
+export const MIN_USABLE_PITCH_CONFIDENCE = 0.5;
 
 export interface SignalStats {
   rms: number;
@@ -66,12 +75,12 @@ export function normalizePitchDetectionRange(range: Partial<PitchDetectionRange>
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
-export function detectPitchYIN(
+export function detectPitchYINEstimate(
   buffer: Float32Array,
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
-): number | null {
+): PitchEstimate | null {
   const size = buffer.length;
   const half = Math.floor(size / 2);
   const detectionRange = normalizePitchDetectionRange(range);
@@ -86,8 +95,9 @@ export function detectPitchYIN(
 
   const { yin, diff } = ensureYinBuffers(size);
 
-  // 1. Difference function (limited range)
-  for (let tau = minTau; tau < maxTau; tau++) {
+  // 1. Difference function. CMNDF needs the full prefix even though target
+  // selection is range-limited; this matches the Rust confidence scale.
+  for (let tau = 1; tau < maxTau; tau++) {
     let sum = 0;
     for (let i = 0; i < half; i++) {
       const delta = buffer[i] - buffer[i + tau];
@@ -96,18 +106,19 @@ export function detectPitchYIN(
     diff[tau] = sum;
   }
 
-  // 2. Cumulative mean normalized difference (limited)
+  // 2. Cumulative mean normalized difference
   yin[0] = 1;
   let runningSum = 0;
-  for (let tau = minTau; tau < maxTau; tau++) {
+  for (let tau = 1; tau < maxTau; tau++) {
     runningSum += diff[tau];
-    yin[tau] = diff[tau] * (tau / runningSum);
+    yin[tau] = runningSum > 0 ? diff[tau] * (tau / runningSum) : 1;
   }
 
   // 3. Absolute threshold + find first dip below threshold (limited)
+  const adaptiveThreshold = YIN_THRESHOLD * (1 - 0.35 * Math.min(1, stats.rms * 15));
   let tauEstimate = -1;
   for (let tau = minTau; tau < maxTau; tau++) {
-    if (yin[tau] < YIN_THRESHOLD) {
+    if (yin[tau] < adaptiveThreshold) {
       // search for local minimum
       while (tau + 1 < maxTau && yin[tau + 1] < yin[tau]) {
         tau++;
@@ -147,7 +158,18 @@ export function detectPitchYIN(
   const freq = sampleRate / betterTau;
 
   if (freq < detectionRange.minFrequency || freq > detectionRange.maxFrequency) return null;
-  return freq;
+  const confidence = Math.max(0, Math.min(1, 1 - yin[tauEstimate]));
+  if (confidence < MIN_USABLE_PITCH_CONFIDENCE) return null;
+  return { confidence, frequency: freq };
+}
+
+export function detectPitchYIN(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
+  return detectPitchYINEstimate(buffer, sampleRate, stats, range)?.frequency ?? null;
 }
 
 // Legacy improved autocorrelation (kept for comparison / fallback)
@@ -160,12 +182,12 @@ function ensureBuffers(size: number) {
   return { corr: corrBuffer, win: windowBuffer };
 }
 
-export function autoCorrelate(
+export function autoCorrelateEstimate(
   buffer: Float32Array,
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
-): number | null {
+): PitchEstimate | null {
   const SIZE = buffer.length;
   const detectionRange = normalizePitchDetectionRange(range);
   const minLag = Math.max(1, Math.floor(sampleRate / detectionRange.maxFrequency));
@@ -198,6 +220,8 @@ export function autoCorrelate(
     if (corr[lag] > bestVal) { bestVal = corr[lag]; bestLag = lag; }
   }
   if (bestLag < 4) return null;
+  const confidence = Math.max(0, Math.min(1, bestVal / Math.max(corr[0], Number.EPSILON)));
+  if (confidence < MIN_USABLE_PITCH_CONFIDENCE) return null;
 
   let period = bestLag;
   if (bestLag > 1 && bestLag < corrSize - 1) {
@@ -207,24 +231,44 @@ export function autoCorrelate(
   }
 
   const freq = sampleRate / period;
-  return (freq >= detectionRange.minFrequency && freq <= detectionRange.maxFrequency) ? freq : null;
+  return (freq >= detectionRange.minFrequency && freq <= detectionRange.maxFrequency)
+    ? { confidence, frequency: freq }
+    : null;
+}
+
+export function autoCorrelate(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
+  return autoCorrelateEstimate(buffer, sampleRate, stats, range)?.frequency ?? null;
 }
 
 /** Main detector - prefers YIN */
+export function detectPitchEstimate(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): PitchEstimate | null {
+  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
+
+  // Try YIN first
+  const yinResult = detectPitchYINEstimate(buffer, sampleRate, stats, range);
+  if (yinResult != null) return yinResult;
+
+  // Fallback to autocorrelation
+  return autoCorrelateEstimate(buffer, sampleRate, stats, range);
+}
+
 export function detectPitch(
   buffer: Float32Array,
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
 ): number | null {
-  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
-
-  // Try YIN first
-  const yinResult = detectPitchYIN(buffer, sampleRate, stats, range);
-  if (yinResult != null) return yinResult;
-
-  // Fallback to autocorrelation
-  return autoCorrelate(buffer, sampleRate, stats, range);
+  return detectPitchEstimate(buffer, sampleRate, stats, range)?.frequency ?? null;
 }
 
 export class FrequencySmoother {
@@ -234,7 +278,10 @@ export class FrequencySmoother {
   private readonly alpha = 0.4;
 
   add(freq: number | null): number | null {
-    if (freq == null || !isFinite(freq)) return this.ema;
+    if (freq == null || !isFinite(freq) || freq <= 0) {
+      this.reset();
+      return null;
+    }
 
     this.ema = this.ema == null
       ? freq

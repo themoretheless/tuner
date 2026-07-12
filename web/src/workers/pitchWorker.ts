@@ -1,25 +1,34 @@
 import {
   computeSignalStats,
-  detectPitch,
+  detectPitchEstimate,
+  normalizeLevel,
   type PitchDetectionRange,
   type SignalStats,
 } from '../utils/pitch';
+import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import type { FrameContext } from '../types/frames';
 import {
   PitchCoreAdapter,
   type PitchCoreWasmModule,
-  type WorkerPitchDetection,
+  type WorkerPitchFrame,
 } from './pitchCoreAdapter';
 
 interface PitchRequest {
+  type: 'process';
   id: number;
   buffer: ArrayBuffer;
+  frameContext?: FrameContext;
   range: PitchDetectionRange;
   sampleRate: number;
   stats?: SignalStats;
   wasmModuleUrl: string;
 }
 
-interface PitchResponse extends WorkerPitchDetection {
+interface ResetRequest {
+  type: 'reset';
+}
+
+interface PitchResponse extends WorkerPitchFrame {
   buffer: ArrayBuffer;
   id: number;
 }
@@ -27,15 +36,32 @@ interface PitchResponse extends WorkerPitchDetection {
 let adapter: PitchCoreAdapter | null = null;
 let adapterModuleUrl = '';
 
-self.onmessage = async (event: MessageEvent<PitchRequest>) => {
-  const { id, buffer, range, sampleRate, stats, wasmModuleUrl } = event.data;
+self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
+  if (event.data.type === 'reset') {
+    await adapter?.reset();
+    return;
+  }
+  const { id, buffer, frameContext, range, sampleRate, stats, wasmModuleUrl } = event.data;
   const frame = new Float32Array(buffer);
   const signalStats = stats ?? computeSignalStats(frame);
-  let detection: WorkerPitchDetection;
+  let detection: WorkerPitchFrame;
   try {
-    detection = await getAdapter(wasmModuleUrl).detect(frame, sampleRate, signalStats, range);
+    detection = await getAdapter(wasmModuleUrl).process(
+      frame,
+      sampleRate,
+      signalStats,
+      range,
+      frameContext,
+    );
   } catch {
-    detection = { backend: 'typescript', confidence: 0, frequency: null };
+    detection = {
+      backend: 'typescript',
+      frame: createUnresolvedDetectionFrame({
+        level: normalizeLevel(signalStats.rms),
+        rms: signalStats.rms,
+      }),
+      semantics: 'unresolved',
+    };
   }
   self.postMessage({ id, buffer, ...detection } satisfies PitchResponse, { transfer: [buffer] });
 };
@@ -47,7 +73,7 @@ function getAdapter(moduleUrl: string) {
   adapter = new PitchCoreAdapter(
     moduleUrl,
     loadPitchCore,
-    (buffer, sampleRate, stats, range) => detectPitch(buffer, sampleRate, stats, range),
+    (buffer, sampleRate, stats, range) => detectPitchEstimate(buffer, sampleRate, stats, range),
   );
   return adapter;
 }

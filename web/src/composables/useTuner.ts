@@ -8,6 +8,7 @@ import { useTunerSession } from './useTunerSession';
 import { useTuningState } from './useTuningState';
 import { useVisualizationFrames } from './useVisualizationFrames';
 import { summarizePractice } from '../domain/practice';
+import { createFrameContext } from '../domain/frameContext';
 import type { DetectionFrame } from '../types/frames';
 import { decodeUserProfile } from '../settings/profileCodec';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
@@ -22,8 +23,36 @@ export function useTuner() {
   const tuning = useTuningState(detectedFrequency, {
     onResetDetection: session.resetDetection,
   });
-  const referenceTone = useReferenceTone(() => tuning.targetNote.value);
-  const centsHistory = useCentsHistory(tuning.cents, computed(() => !!tuning.detectedNote.value));
+  const nativeFrameContext = computed(() => createFrameContext({
+    a4: tuning.a4.value,
+    isChromaticMode: tuning.isChromaticMode.value,
+    selectedString: tuning.selectedString.value,
+    strings: tuning.strings.value,
+    temperament: tuning.temperament.value,
+    temperamentOptions: tuning.temperamentOptions.value,
+    temperamentRoot: tuning.temperamentRoot.value,
+    transpose: tuning.transpose.value,
+  }));
+  const detectionFrame = computed<DetectionFrame>(() => {
+    const baseFrame = session.detectionFrame.value;
+    if (session.detectionFrameResolved.value) return baseFrame;
+    return {
+      ...baseFrame,
+      cents: tuning.detectedNote.value ? tuning.cents.value : 0,
+      note: tuning.currentNoteDisplay.value ?? baseFrame.note,
+      target: tuning.targetNote.value,
+      inTune: tuning.isInTune.value,
+    };
+  });
+  const targetNote = computed(() => detectionFrame.value.target ?? tuning.targetNote.value);
+  const cents = computed(() => detectionFrame.value.cents);
+  const isInTune = computed(() => detectionFrame.value.inTune);
+  const hasDetection = computed(() => detectionFrame.value.freq != null);
+  const currentNoteDisplay = computed(() => (
+    hasDetection.value ? detectionFrame.value.note : null
+  ));
+  const referenceTone = useReferenceTone(() => targetNote.value);
+  const centsHistory = useCentsHistory(cents, hasDetection);
   const earTraining = useEarTraining(tuning.getRandomPracticeNote, referenceTone.playTimedTone);
   const metronome = useMetronome(
     settings.metronomeBpm,
@@ -42,19 +71,11 @@ export function useTuner() {
     session.audioSampleRate,
     shouldCaptureVisualizationFrames,
   );
-  const detectionFrame = computed<DetectionFrame>(() => {
-    const baseFrame = session.detectionFrame.value;
-    return {
-      ...baseFrame,
-      cents: tuning.detectedNote.value ? tuning.cents.value : 0,
-      note: tuning.currentNoteDisplay.value ?? baseFrame.note,
-      target: tuning.targetNote.value,
-      inTune: tuning.isInTune.value,
-    };
-  });
-
   watch(tuning.detectionRange, (range) => {
     session.setDetectionRange(range);
+  }, { immediate: true });
+  watch(nativeFrameContext, (context) => {
+    session.setFrameContext(context);
   }, { immediate: true });
 
   async function start() {
@@ -197,12 +218,12 @@ export function useTuner() {
     usingSyntheticAudio: session.usingSyntheticAudio,
 
     // computed
-    detectedNote: tuning.detectedNote,
+    hasDetection,
     detectionRange: session.detectionRange,
-    targetNote: tuning.targetNote,
-    cents: tuning.cents,
-    isInTune: tuning.isInTune,
-    currentNoteDisplay: tuning.currentNoteDisplay,
+    targetNote,
+    cents,
+    isInTune,
+    currentNoteDisplay,
     strings: tuning.strings,
     isChromaticMode: tuning.isChromaticMode,
 

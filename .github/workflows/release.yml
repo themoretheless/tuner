@@ -48,7 +48,6 @@ jobs:
 
   release:
     needs: [build-web, build-tauri, build-egui]
-    if: always()  # run even if some desktop builds fail
 
     runs-on: ubuntu-latest
     steps:
@@ -91,6 +90,7 @@ jobs:
         if: steps.version.outputs.skip != 'true' && needs.build-tauri.result == 'success'
         uses: actions/download-artifact@v8
         with:
+          pattern: tauri-*
           path: tauri-artifacts
           merge-multiple: true
 
@@ -98,6 +98,7 @@ jobs:
         if: steps.version.outputs.skip != 'true' && needs.build-egui.result == 'success'
         uses: actions/download-artifact@v8
         with:
+          pattern: egui-*
           path: egui-artifacts
           merge-multiple: true
 
