@@ -109,6 +109,22 @@ describe('PitchCoreAdapter', () => {
     expect(fallback).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps numeric pitch guidance available to the fallback detector', async () => {
+    const loadModule: PitchCoreModuleLoader = vi.fn(async () => {
+      throw new Error('missing module');
+    });
+    const fallback = vi.fn(() => ({ confidence: 0.92, frequency: 440 }));
+    const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
+
+    await adapter.process(BUFFER, 48_000, STATS, RANGE, CONTEXT);
+    await adapter.process(BUFFER, 48_000, STATS, RANGE);
+
+    expect(fallback.mock.calls[1]?.[4]).toEqual({
+      selectedFrequency: 440,
+      targetFrequencies: [],
+    });
+  });
+
   it('disables a broken processor and keeps serving the smoothed fallback', async () => {
     const processorFree = vi.fn();
     const process = vi.fn(() => {

@@ -45,6 +45,14 @@ impl PitchPrior {
         self.nearest_distance_cents(frequency)
     }
 
+    pub(crate) fn selected_frequency(&self) -> Option<f32> {
+        self.selected_frequency
+    }
+
+    pub(crate) fn target_frequencies(&self) -> &[f32] {
+        &self.target_frequencies
+    }
+
     pub(crate) fn correct_octave(&self, frequency: f32) -> f32 {
         if !valid_frequency(frequency) || self.is_empty() {
             return frequency;

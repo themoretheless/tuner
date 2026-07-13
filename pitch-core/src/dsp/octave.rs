@@ -10,6 +10,8 @@
 //! frame, no full FFT needed) and folds the estimate when the spectral
 //! evidence contradicts it.
 
+use super::spectral::{apply_hann_window, goertzel_power};
+
 /// Power at the sub-octave's odd multiples (0.5f, 1.5f, 2.5f) must exceed
 /// this fraction of the power at the estimate's own harmonics (f, 2f, 3f)
 /// before a fold down to f/2 engages. True fundamentals put no energy at
@@ -134,7 +136,7 @@ impl OctaveDisambiguator {
         {
             return frequency;
         }
-        self.apply_hann_window(buffer);
+        apply_hann_window(buffer, &mut self.windowed);
 
         let desired = self.desired_fold(sample_rate, frequency, min_frequency, max_frequency);
         let previous_active = self.active;
@@ -232,28 +234,4 @@ impl OctaveDisambiguator {
         }
         self.group_power(sample_rate, fundamental, multipliers)
     }
-
-    fn apply_hann_window(&mut self, buffer: &[f32]) {
-        let length = buffer.len();
-        self.windowed.resize(length, 0.0);
-        let scale = std::f32::consts::TAU / (length - 1) as f32;
-        for (index, (output, sample)) in self.windowed.iter_mut().zip(buffer).enumerate() {
-            let window = 0.5 * (1.0 - (scale * index as f32).cos());
-            *output = sample * window;
-        }
-    }
-}
-
-/// Spectral power of `samples` at `frequency` via the Goertzel recurrence.
-fn goertzel_power(samples: &[f32], sample_rate: f32, frequency: f32) -> f32 {
-    let omega = std::f32::consts::TAU * frequency / sample_rate;
-    let coefficient = 2.0 * omega.cos();
-    let mut delayed_1 = 0.0_f32;
-    let mut delayed_2 = 0.0_f32;
-    for sample in samples {
-        let current = sample + coefficient * delayed_1 - delayed_2;
-        delayed_2 = delayed_1;
-        delayed_1 = current;
-    }
-    delayed_1 * delayed_1 + delayed_2 * delayed_2 - coefficient * delayed_1 * delayed_2
 }

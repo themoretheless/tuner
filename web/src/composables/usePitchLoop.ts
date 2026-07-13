@@ -10,6 +10,7 @@ import {
   normalizeLevel,
   type PitchDetectionRange,
   type PitchEstimate,
+  type PitchGuidance,
   type SignalStats,
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
@@ -41,6 +42,9 @@ export function usePitchLoop(
   const smoothedFrequency = currentFrequency;
 
   let contextRevision = 0;
+  let fallbackPitchGuidance = frameContext
+    ? pitchGuidanceFromContext(frameContext.value)
+    : undefined;
   let rafId: number | null = null;
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
@@ -167,7 +171,10 @@ export function usePitchLoop(
     if (!worker) {
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
-      applyFallbackEstimate(detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range), stats);
+      applyFallbackEstimate(
+        detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range, fallbackPitchGuidance),
+        stats,
+      );
       return;
     }
     if (pendingPitchRequestId != null) return;
@@ -205,8 +212,18 @@ export function usePitchLoop(
       pitchWorker = null;
       sentContextRevision = -1;
       workerTransferBuffer = null;
-      applyFallbackEstimate(detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range), stats);
+      applyFallbackEstimate(
+        detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range, fallbackPitchGuidance),
+        stats,
+      );
     }
+  }
+
+  function pitchGuidanceFromContext(context: FrameContext): PitchGuidance {
+    return {
+      selectedFrequency: context.selectedTarget?.frequency,
+      targetFrequencies: context.tuningTargets.map((target) => target.frequency),
+    };
   }
 
   function start() {
@@ -229,7 +246,8 @@ export function usePitchLoop(
   });
   watch(detectionRange, reset, { deep: true });
   if (frameContext) {
-    watch(frameContext, () => {
+    watch(frameContext, (context) => {
+      fallbackPitchGuidance = pitchGuidanceFromContext(context);
       contextRevision += 1;
       reset();
     }, { deep: true });

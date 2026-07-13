@@ -4,6 +4,7 @@ import {
   normalizeLevel,
   type PitchDetectionRange,
   type PitchEstimate,
+  type PitchGuidance,
   type SignalStats,
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
@@ -33,10 +34,12 @@ export type FallbackPitchDetector = (
   sampleRate: number,
   stats: SignalStats,
   range: PitchDetectionRange,
+  guidance?: PitchGuidance,
 ) => PitchEstimate | null;
 
 export class PitchCoreAdapter {
   private readonly fallback: FallbackPitchDetector;
+  private fallbackGuidance: PitchGuidance | undefined;
   private readonly fallbackTracker = new StreamingPitchTracker();
   private lastMaxFrequency: number | null = null;
   private lastMinFrequency: number | null = null;
@@ -62,7 +65,10 @@ export class PitchCoreAdapter {
     frameContext?: FrameContext,
   ): Promise<WorkerPitchFrame> {
     const rangeChanged = this.updateRange(range);
-    if (frameContext) this.fallbackTracker.setContext(frameContext);
+    if (frameContext) {
+      this.fallbackGuidance = guidanceFromContext(frameContext);
+      this.fallbackTracker.setContext(frameContext);
+    }
     const processor = await this.getProcessor();
     if (!processor) return this.fallbackFrame(buffer, sampleRate, stats, range);
 
@@ -94,6 +100,7 @@ export class PitchCoreAdapter {
     this.processorPromise = null;
     this.lastMinFrequency = null;
     this.lastMaxFrequency = null;
+    this.fallbackGuidance = undefined;
     this.fallbackTracker.reset();
     const processor = await pending?.catch(() => null);
     processor?.free();
@@ -133,7 +140,7 @@ export class PitchCoreAdapter {
     stats: SignalStats,
     range: PitchDetectionRange,
   ): WorkerPitchFrame {
-    const estimate = this.fallback(buffer, sampleRate, stats, range);
+    const estimate = this.fallback(buffer, sampleRate, stats, range, this.fallbackGuidance);
     const tracked = this.fallbackTracker.update(estimate, stats);
     return {
       backend: 'typescript',
@@ -157,4 +164,11 @@ export class PitchCoreAdapter {
     }
     return changed;
   }
+}
+
+function guidanceFromContext(context: FrameContext): PitchGuidance {
+  return {
+    selectedFrequency: context.selectedTarget?.frequency,
+    targetFrequencies: context.tuningTargets.map((target) => target.frequency),
+  };
 }
