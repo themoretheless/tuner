@@ -3,6 +3,7 @@ import { useLiveTunerPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
 import { Play, Square } from '@lucide/vue';
 import CentsGauge from '../../components/CentsGauge.vue';
+import DebugOverlay from '../../components/DebugOverlay.vue';
 import DisplayModeSelector from '../../components/DisplayModeSelector.vue';
 import FreqReadout from '../../components/FreqReadout.vue';
 import InputDeviceSelector from '../../components/InputDeviceSelector.vue';
@@ -15,6 +16,11 @@ import TuningSelector from '../../components/TuningSelector.vue';
 const tuner = useLiveTunerPort();
 const { t } = useL10n();
 
+// Diagnostic overlay (raw vs smoothed detector output + signal recorder),
+// enabled with ?debug=1 so it never shows up in normal use.
+const debugEnabled = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).has('debug');
+
 function toggleMic() {
   if (tuner.sessionStatus === 'starting' || tuner.sessionStatus === 'listening') {
     void tuner.stop();
@@ -25,6 +31,13 @@ function toggleMic() {
 
 <template>
   <section class="live-workspace" aria-labelledby="live-tuner-heading">
+    <DebugOverlay
+      v-if="debugEnabled"
+      :frame="tuner.detectionFrame"
+      :backend="tuner.detectorBackend"
+      :is-listening="tuner.isListening"
+      :selected-input-device-id="tuner.selectedInputDeviceId"
+    />
     <div class="live-panel card">
       <div class="sr-only" id="live-tuner-heading">{{ t('nav.tuner') }}</div>
       <div v-if="tuner.error" class="error-banner" role="alert">

@@ -14,7 +14,9 @@ interface WasmTunerFrame {
   readonly cents: number;
   readonly confidence: number;
   readonly freq: number;
+  readonly raw_freq: number;
   readonly has_frequency: boolean;
+  readonly has_raw_frequency: boolean;
   readonly has_target: boolean;
   readonly in_tune: boolean;
   readonly is_power: boolean;
@@ -85,6 +87,7 @@ export function readWasmFrame(frame: WasmTunerFrame): DetectionFrame {
     : null;
   return {
     freq,
+    rawFreq: frame.has_raw_frequency ? positiveFiniteOrNull(frame.raw_freq) : null,
     confidence: freq == null ? 0 : clampConfidence(frame.confidence),
     rms: Math.max(0, finiteOr(frame.rms)),
     level: Math.max(0, Math.min(1, finiteOr(frame.level))),

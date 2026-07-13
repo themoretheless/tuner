@@ -15,9 +15,16 @@ export interface WebAudioInputAdapter extends AudioFrameInputPort {
   setInputDevice(deviceId: string): Promise<void>;
 }
 
+// 8192 samples ≈ 186ms at 44.1kHz: ~15 periods of low E instead of ~7 with
+// 4096. Real-world tuners (e.g. tuneo uses a 204ms window) pay this small
+// extra latency for a dramatically more stable difference function on low
+// strings; the readout still updates every frame, only the analysis window
+// looking back in time grows.
+const DEFAULT_ANALYSIS_FFT_SIZE = 8192;
+
 export function useAudioInput(
   selectedInputDeviceId: Ref<string>,
-  fftSize = 4096,
+  fftSize = DEFAULT_ANALYSIS_FFT_SIZE,
 ): WebAudioInputAdapter {
   const isListening = ref(false);
   const error = ref<string | null>(null);

@@ -13,6 +13,7 @@ function createLiveTunerPort(root: TunerRoot) {
     currentTuning: root.currentTuning,
     hasDetection: root.hasDetection,
     detectionFrame: root.detectionFrame,
+    detectorBackend: root.detectorBackend,
     displayMode: root.displayMode,
     error: root.error,
     formatFreq: root.formatFreq,

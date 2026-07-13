@@ -147,6 +147,7 @@ export class PitchCoreAdapter {
       frame: createUnresolvedDetectionFrame({
         confidence: tracked?.confidence ?? 0,
         freq: tracked?.frequency ?? null,
+        rawFreq: estimate?.frequency ?? null,
         level: normalizeLevel(stats.rms),
         rms: stats.rms,
       }),

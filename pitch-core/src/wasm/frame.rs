@@ -6,7 +6,9 @@ pub struct WasmDetectionFrame {
     cents: f32,
     confidence: f32,
     freq: f32,
+    raw_freq: f32,
     has_frequency: bool,
+    has_raw_frequency: bool,
     has_target: bool,
     in_tune: bool,
     is_power: bool,
@@ -35,8 +37,18 @@ impl WasmDetectionFrame {
     }
 
     #[wasm_bindgen(getter)]
+    pub fn raw_freq(&self) -> f32 {
+        self.raw_freq
+    }
+
+    #[wasm_bindgen(getter)]
     pub fn has_frequency(&self) -> bool {
         self.has_frequency
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn has_raw_frequency(&self) -> bool {
+        self.has_raw_frequency
     }
 
     #[wasm_bindgen(getter)]
@@ -83,6 +95,7 @@ impl WasmDetectionFrame {
 impl From<DetectionFrame> for WasmDetectionFrame {
     fn from(frame: DetectionFrame) -> Self {
         let has_frequency = frame.freq.is_some();
+        let has_raw_frequency = frame.raw_freq.is_some();
         let (has_target, target_midi, target_frequency) =
             frame.target.as_ref().map_or((false, -1, 0.0), |target| {
                 (
@@ -95,7 +108,9 @@ impl From<DetectionFrame> for WasmDetectionFrame {
             cents: frame.cents,
             confidence: frame.confidence,
             freq: frame.freq.unwrap_or(0.0),
+            raw_freq: frame.raw_freq.unwrap_or(0.0),
             has_frequency,
+            has_raw_frequency,
             has_target,
             in_tune: frame.in_tune,
             is_power: frame.is_power,

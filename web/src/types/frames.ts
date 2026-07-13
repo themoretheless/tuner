@@ -2,6 +2,9 @@ import type { Note } from '../utils/notes';
 
 export interface DetectionFrame {
   freq: number | null;
+  /** The detector's own per-frame estimate before any suppression,
+   * smoothing, or hold logic - diagnostic, shown in the ?debug=1 overlay. */
+  rawFreq: number | null;
   confidence: number;
   rms: number;
   level: number;

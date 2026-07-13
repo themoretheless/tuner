@@ -2,7 +2,9 @@ import { computed, onUnmounted, ref, type ComputedRef, type Ref } from 'vue';
 import type { AudioFrame, AudioFrameInputPort } from '../ports/audioInput';
 import { fillSyntheticAudioBuffer, type SyntheticAudioFixture } from '../utils/syntheticAudio';
 
-const DEFAULT_FFT_SIZE = 4096;
+// Kept in step with the live input's analysis window (useAudioInput) so the
+// synthetic fixture exercises the same buffer size as a real microphone.
+const DEFAULT_FFT_SIZE = 8192;
 const DEFAULT_SAMPLE_RATE = 44100;
 
 export interface SyntheticAudioInputAdapter extends AudioFrameInputPort {

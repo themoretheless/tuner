@@ -154,6 +154,9 @@ impl TunerEngine {
             prior.selected_frequency(),
             prior.target_frequencies(),
         );
+        // Diagnostic: what the detector itself said this frame, before any
+        // suppression, gating, or tracking touches it.
+        let raw_freq = estimate.map(|estimate| estimate.frequency);
         let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
         let octave_correction_started = self.detector.take_octave_correction_started();
         let gate_estimate = estimate;
@@ -221,6 +224,7 @@ impl TunerEngine {
 
         DetectionFrame {
             freq: freq_opt,
+            raw_freq,
             confidence,
             rms,
             level,

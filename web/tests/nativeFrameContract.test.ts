@@ -18,6 +18,7 @@ describe('native DetectionFrame wire contract', () => {
       cents: -2.5,
       confidence: 1,
       freq: 440,
+      rawFreq: null,
       inTune: true,
       isPower: false,
       level: 0.4,
