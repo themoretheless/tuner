@@ -12,6 +12,11 @@ export interface PitchEstimate {
   frequency: number;
 }
 
+export interface PitchGuidance {
+  selectedFrequency?: number | null;
+  targetFrequencies?: readonly number[];
+}
+
 export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
   minFrequency: 24,
   maxFrequency: 1200,
@@ -20,6 +25,11 @@ export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
 const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
 const MIN_RMS = 0.0025;
 const MIN_PEAK = 0.012;
+const DETECTOR_AGREEMENT_CENTS = 35;
+const DECISIVE_CONFIDENCE_MARGIN = 0.12;
+const GUIDED_IMPROVEMENT_CENTS = 80;
+const GUIDED_RAW_DISTANCE_CENTS = 300;
+const STRONG_DISAGREEMENT_CONFIDENCE = 0.9;
 
 // Confidence is normalized periodicity quality, not a probability. Frames
 // below this score do not update the readout in either the Rust or TS path.
@@ -245,21 +255,100 @@ export function autoCorrelate(
   return autoCorrelateEstimate(buffer, sampleRate, stats, range)?.frequency ?? null;
 }
 
-/** Main detector - prefers YIN */
+/** Main fallback detector - reconciles two independent periodicity estimates. */
 export function detectPitchEstimate(
   buffer: Float32Array,
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+  guidance?: PitchGuidance,
 ): PitchEstimate | null {
   if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
 
-  // Try YIN first
-  const yinResult = detectPitchYINEstimate(buffer, sampleRate, stats, range);
-  if (yinResult != null) return yinResult;
+  const yin = detectPitchYINEstimate(buffer, sampleRate, stats, range);
+  const autocorrelation = autoCorrelateEstimate(buffer, sampleRate, stats, range);
+  return selectPitchCandidate(yin, autocorrelation, guidance);
+}
 
-  // Fallback to autocorrelation
-  return autoCorrelateEstimate(buffer, sampleRate, stats, range);
+export function selectPitchCandidate(
+  left: PitchEstimate | null,
+  right: PitchEstimate | null,
+  guidance?: PitchGuidance,
+): PitchEstimate | null {
+  left = validEstimate(left) ? left : null;
+  right = validEstimate(right) ? right : null;
+  if (!left) return right;
+  if (!right) return left;
+
+  if (centsDistance(left.frequency, right.frequency) <= DETECTOR_AGREEMENT_CENTS) {
+    const leftWeight = Math.max(0.01, left.confidence);
+    const rightWeight = Math.max(0.01, right.confidence);
+    return {
+      confidence: Math.max(0, Math.min(1, (left.confidence + right.confidence) * 0.5)),
+      frequency: 2 ** (
+        (Math.log2(left.frequency) * leftWeight + Math.log2(right.frequency) * rightWeight)
+        / (leftWeight + rightWeight)
+      ),
+    };
+  }
+
+  const leftDistance = guidanceDistance(left.frequency, guidance);
+  const rightDistance = guidanceDistance(right.frequency, guidance);
+  if (leftDistance != null && rightDistance != null) {
+    const [preferred, preferredDistance, otherDistance] = leftDistance <= rightDistance
+      ? [left, leftDistance, rightDistance]
+      : [right, rightDistance, leftDistance];
+    if (preferredDistance <= GUIDED_RAW_DISTANCE_CENTS
+      && otherDistance - preferredDistance >= GUIDED_IMPROVEMENT_CENTS) {
+      return preferred;
+    }
+  }
+
+  const [stronger, weaker] = left.confidence >= right.confidence
+    ? [left, right]
+    : [right, left];
+  return stronger.confidence >= STRONG_DISAGREEMENT_CONFIDENCE
+    && stronger.confidence - weaker.confidence >= DECISIVE_CONFIDENCE_MARGIN
+    ? stronger
+    : null;
+}
+
+function centsDistance(left: number, right: number) {
+  return Math.abs(1_200 * Math.log2(left / right));
+}
+
+function guidanceDistance(frequency: number, guidance?: PitchGuidance): number | null {
+  if (!guidance) return null;
+  let minimum = Number.POSITIVE_INFINITY;
+  for (const candidate of [frequency, frequency * 0.5, frequency * 2]) {
+    const distance = directGuidanceDistance(candidate, guidance);
+    if (distance != null) minimum = Math.min(minimum, distance);
+  }
+  return Number.isFinite(minimum) ? minimum : null;
+}
+
+function directGuidanceDistance(frequency: number, guidance: PitchGuidance): number | null {
+  if (!validFrequency(frequency)) return null;
+  if (validFrequency(guidance.selectedFrequency)) {
+    return centsDistance(frequency, guidance.selectedFrequency);
+  }
+  let minimum = Number.POSITIVE_INFINITY;
+  for (const target of guidance.targetFrequencies ?? []) {
+    if (validFrequency(target)) minimum = Math.min(minimum, centsDistance(frequency, target));
+  }
+  return Number.isFinite(minimum) ? minimum : null;
+}
+
+function validFrequency(value: number | null | undefined): value is number {
+  return Number.isFinite(value) && (value ?? 0) > 0;
+}
+
+function validEstimate(estimate: PitchEstimate | null): estimate is PitchEstimate {
+  return estimate != null
+    && validFrequency(estimate.frequency)
+    && Number.isFinite(estimate.confidence)
+    && estimate.confidence >= 0
+    && estimate.confidence <= 1;
 }
 
 export function detectPitch(
@@ -267,8 +356,9 @@ export function detectPitch(
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+  guidance?: PitchGuidance,
 ): number | null {
-  return detectPitchEstimate(buffer, sampleRate, stats, range)?.frequency ?? null;
+  return detectPitchEstimate(buffer, sampleRate, stats, range, guidance)?.frequency ?? null;
 }
 
 export class FrequencySmoother {

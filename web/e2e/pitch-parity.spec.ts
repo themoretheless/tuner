@@ -159,16 +159,16 @@ test('full-frame WASM processor resolves context and clears state on silence', a
       detected.free();
 
       processor.reset();
-      const lowerSamples = new Float32Array(samples.length);
-      for (let index = 0; index < lowerSamples.length; index += 1) {
-        lowerSamples[index] = Math.sin(Math.PI * 2 * 220 * index / sampleRate);
+      const detunedSamples = new Float32Array(samples.length);
+      for (let index = 0; index < detunedSamples.length; index += 1) {
+        detunedSamples[index] = Math.sin(Math.PI * 2 * 430 * index / sampleRate);
       }
-      const afterResetProvisional = processor.process(lowerSamples, sampleRate);
+      const afterResetProvisional = processor.process(detunedSamples, sampleRate);
       const afterResetProvisionalFrequency = afterResetProvisional.has_frequency
         ? afterResetProvisional.freq
         : null;
       afterResetProvisional.free();
-      const afterReset = processor.process(lowerSamples, sampleRate);
+      const afterReset = processor.process(detunedSamples, sampleRate);
       const afterResetFrequency = afterReset.has_frequency ? afterReset.freq : null;
       afterReset.free();
 
@@ -181,10 +181,46 @@ test('full-frame WASM processor resolves context and clears state on silence', a
         targetMidi: silent.target_midi,
       };
       silent.free();
+
+      processor.set_frequency_range(53, 120);
+      processor.set_frame_context(
+        440,
+        new Int32Array([40, 45]),
+        new Float32Array([82.4069, 110]),
+        new Int32Array([40, 45]),
+        new Float32Array([82.4069, 110]),
+        -1,
+        0,
+        40,
+        82.4069,
+        5,
+        7,
+      );
+      const lowEWithHum = new Float32Array(samples.length);
+      let noiseState = 0x12345678;
+      for (let index = 0; index < lowEWithHum.length; index += 1) {
+        const time = index / sampleRate;
+        const phase = Math.PI * 2 * 82.4069 * time;
+        noiseState = (Math.imul(noiseState, 1_664_525) + 1_013_904_223) >>> 0;
+        const noise = ((noiseState >>> 8) / (1 << 24) * 2 - 1) * 0.015;
+        lowEWithHum[index] = 0.08 * Math.sin(phase)
+          + 0.70 * Math.sin(phase * 2)
+          + 0.25 * Math.sin(phase * 3)
+          + 0.35 * Math.sin(phase * 4)
+          + 0.40 * Math.sin(Math.PI * 2 * 50 * time + 0.3)
+          + noise;
+      }
+      let guidedLowEFrequency: number | null = null;
+      for (let frameIndex = 0; frameIndex < 6; frameIndex += 1) {
+        const lowEFrame = processor.process(lowEWithHum, sampleRate);
+        guidedLowEFrequency = lowEFrame.has_frequency ? lowEFrame.freq : guidedLowEFrequency;
+        lowEFrame.free();
+      }
       return {
         afterResetFrequency,
         afterResetProvisionalFrequency,
         detectedFrame,
+        guidedLowEFrequency,
         provisionalFrequency,
         silentFrame,
       };
@@ -202,7 +238,9 @@ test('full-frame WASM processor resolves context and clears state on silence', a
   expect(result.detectedFrame.note).toBe('A4');
   expect(result.detectedFrame.targetMidi).toBe(69);
   expect(result.afterResetProvisionalFrequency).toBeNull();
-  expect(result.afterResetFrequency).toBeCloseTo(220, 0);
+  expect(result.afterResetFrequency).toBeCloseTo(430, 0);
+  expect(result.guidedLowEFrequency).not.toBeNull();
+  expect(centsError(result.guidedLowEFrequency ?? 0, 82.4069)).toBeLessThan(15);
   expect(result.silentFrame).toEqual({
     confidence: 0,
     frequency: null,

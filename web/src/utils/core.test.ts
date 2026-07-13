@@ -16,6 +16,7 @@ import {
   FrequencySmoother,
   computeSignalStats,
   detectPitch,
+  selectPitchCandidate,
   normalizePitchDetectionRange,
 } from './pitch';
 
@@ -131,6 +132,27 @@ describe('pitch utilities', () => {
     expect(normalizePitchDetectionRange({ minFrequency: 100, maxFrequency: 110 })).toEqual(
       DEFAULT_PITCH_DETECTION_RANGE,
     );
+  });
+
+  it('reconciles independent fallback detector candidates', () => {
+    const agreed = selectPitchCandidate(
+      { confidence: 0.91, frequency: 82.3 },
+      { confidence: 0.93, frequency: 82.5 },
+    );
+    expect(agreed?.frequency).toBeCloseTo(82.4, 1);
+    expect(selectPitchCandidate(
+      { confidence: 0.82, frequency: 55 },
+      { confidence: 0.78, frequency: 82.4 },
+    )).toBeNull();
+    expect(selectPitchCandidate(
+      { confidence: 0.82, frequency: 55 },
+      { confidence: 0.78, frequency: 82.4 },
+      { selectedFrequency: 82.4069, targetFrequencies: [82.4069] },
+    )?.frequency).toBeCloseTo(82.4);
+    expect(selectPitchCandidate(
+      { confidence: Number.NaN, frequency: 82.4 },
+      { confidence: 0.91, frequency: 82.5 },
+    )?.frequency).toBe(82.5);
   });
 
   it('smooths and resets frequency estimates', () => {

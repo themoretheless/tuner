@@ -1,7 +1,7 @@
 use crate::{gate::AdaptiveSignalGate, tracking::PitchTracker};
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
-    FrameContext, FrameResolver, HybridPitchDetector, PitchDetector, SpectrumAnalyzer, Tuning,
+    FrameContext, FrameResolver, HybridPitchDetector, SpectrumAnalyzer, Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -147,13 +147,19 @@ impl TunerEngine {
         let rms = signal::compute_rms_volume(buffer);
         let signal_stats = signal::compute_centered_signal_stats(buffer);
         let level = signal::normalize_level(rms);
-        let mut estimate = self.detector.detect(buffer, sample_rate);
-        let gate_estimate = estimate;
+        let prior = self.resolver.tracking_prior();
+        let mut estimate = self.detector.detect_guided(
+            buffer,
+            sample_rate,
+            prior.selected_frequency(),
+            prior.target_frequencies(),
+        );
         // Diagnostic: what the detector itself said this frame, before any
         // suppression, gating, or tracking touches it.
         let raw_freq = estimate.map(|estimate| estimate.frequency);
         let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
         let octave_correction_started = self.detector.take_octave_correction_started();
+        let gate_estimate = estimate;
         if octave_correction_pending {
             // Confirmation deliberately costs one frame. Publishing the
             // provisional octave would seed smoothing with a value the
@@ -198,6 +204,7 @@ impl TunerEngine {
             (Some(frequency), held_confidence)
         } else {
             self.clear_tracking();
+            self.detector.reset_tracking_state();
             (None, 0.0)
         };
 

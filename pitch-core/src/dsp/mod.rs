@@ -1,12 +1,17 @@
+mod candidates;
 mod detector;
+mod harmonic;
 mod mpm;
 mod octave;
 mod power;
+mod spectral;
 mod yin;
 
+pub(crate) use candidates::{prefer_guided_harmonic, select_pitch_candidate, PitchGuidance};
 pub use detector::{
     DetectorConfig, HybridPitchDetector, PitchDetector, PitchEstimate, MIN_USABLE_CONFIDENCE,
 };
+pub(crate) use harmonic::HarmonicPitchDetector;
 pub use mpm::MpmDetector;
 pub use octave::OctaveDisambiguator;
 pub use yin::YinDetector;

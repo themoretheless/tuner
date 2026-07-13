@@ -1,4 +1,7 @@
-use super::{MpmDetector, OctaveDisambiguator, YinDetector};
+use super::{
+    prefer_guided_harmonic, select_pitch_candidate, HarmonicPitchDetector, MpmDetector,
+    OctaveDisambiguator, PitchGuidance, YinDetector,
+};
 
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
 const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
@@ -82,6 +85,7 @@ pub trait PitchDetector {
 pub struct HybridPitchDetector {
     cleaned: Vec<f32>,
     config: DetectorConfig,
+    harmonic: HarmonicPitchDetector,
     mpm: MpmDetector,
     octave: OctaveDisambiguator,
     yin: YinDetector,
@@ -100,6 +104,7 @@ impl HybridPitchDetector {
         Self {
             cleaned: Vec::new(),
             config,
+            harmonic: HarmonicPitchDetector::new(),
             mpm: MpmDetector::new(config),
             octave: OctaveDisambiguator::new(),
             yin: YinDetector::new(config),
@@ -122,6 +127,74 @@ impl HybridPitchDetector {
 
     pub(crate) fn reset_tracking_state(&mut self) {
         self.octave.reset();
+    }
+
+    pub(crate) fn detect_guided(
+        &mut self,
+        buffer: &[f32],
+        sample_rate: f32,
+        selected_target: Option<f32>,
+        tuning_targets: &[f32],
+    ) -> Option<PitchEstimate> {
+        self.detect_with_guidance(
+            buffer,
+            sample_rate,
+            PitchGuidance::new(selected_target, tuning_targets),
+        )
+    }
+
+    fn detect_with_guidance(
+        &mut self,
+        buffer: &[f32],
+        sample_rate: f32,
+        guidance: PitchGuidance<'_>,
+    ) -> Option<PitchEstimate> {
+        // Frame status is edge-triggered; never let an unread status leak
+        // into a later detector call.
+        self.octave.take_correction_started();
+        if !self.prepare_centered(buffer) {
+            self.octave.reset();
+            return None;
+        }
+        let cleaned = std::mem::take(&mut self.cleaned);
+        let yin = self.yin.detect_centered(&cleaned, sample_rate);
+        let mpm = self.mpm.detect_centered(&cleaned, sample_rate);
+        let mut estimate = select_pitch_candidate(yin, mpm, guidance);
+        let needs_harmonic_alternative = !guidance.is_empty()
+            && (yin.is_some() || mpm.is_some())
+            && estimate.is_none_or(|estimate| !guidance.supports_resolved(estimate.frequency));
+        if needs_harmonic_alternative {
+            let harmonic = self.harmonic.detect(
+                &cleaned,
+                sample_rate,
+                guidance.selected_target(),
+                guidance.tuning_targets(),
+                self.config.min_frequency,
+                self.config.max_frequency,
+            );
+            estimate = prefer_guided_harmonic(estimate, harmonic, guidance);
+        }
+        let estimate = estimate
+            .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
+            .and_then(|estimate| {
+                let frequency = self.octave.resolve(
+                    &cleaned,
+                    sample_rate,
+                    estimate.frequency,
+                    self.config.min_frequency,
+                    self.config.max_frequency,
+                );
+                // A pending octave correction is deliberately held by the
+                // engine on this frame. Validate only settled decisions so a
+                // correct 2f candidate is not rejected before it folds to f.
+                (self.octave.has_unconfirmed_correction() || guidance.supports_resolved(frequency))
+                    .then_some(PitchEstimate {
+                        frequency,
+                        ..estimate
+                    })
+            });
+        self.cleaned = cleaned;
+        estimate
     }
 
     fn prepare_centered(&mut self, buffer: &[f32]) -> bool {
@@ -152,38 +225,7 @@ impl HybridPitchDetector {
 
 impl PitchDetector for HybridPitchDetector {
     fn detect(&mut self, buffer: &[f32], sample_rate: f32) -> Option<PitchEstimate> {
-        // Frame status is edge-triggered; never let an unread status leak
-        // into a later detector call.
-        self.octave.take_correction_started();
-        if !self.prepare_centered(buffer) {
-            // Gate closed: drop any fold engaged on the previous note so it
-            // cannot carry over to the next one.
-            self.octave.reset();
-            return None;
-        }
-        let cleaned = std::mem::take(&mut self.cleaned);
-        let estimate = self
-            .yin
-            .detect_centered(&cleaned, sample_rate)
-            .or_else(|| self.mpm.detect_centered(&cleaned, sample_rate))
-            .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
-            .map(|estimate| {
-                // Time-domain estimates can lock onto a harmonic/subharmonic;
-                // cross-check against the frame's actual spectral content.
-                let frequency = self.octave.resolve(
-                    &cleaned,
-                    sample_rate,
-                    estimate.frequency,
-                    self.config.min_frequency,
-                    self.config.max_frequency,
-                );
-                PitchEstimate {
-                    frequency,
-                    ..estimate
-                }
-            });
-        self.cleaned = cleaned;
-        estimate
+        self.detect_with_guidance(buffer, sample_rate, PitchGuidance::none())
     }
 
     fn set_config(&mut self, config: DetectorConfig) {

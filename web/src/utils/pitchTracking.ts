@@ -10,6 +10,8 @@ const CHANGE_FRAMES = 3;
 const OCTAVE_CHANGE_FRAMES = 7;
 const PENDING_CENTS = 55;
 const HOLD_FRAMES = 6;
+const SELECTED_TARGET_LIMIT_CENTS = 350;
+const TUNING_TARGET_LIMIT_CENTS = 450;
 
 /** Stateful fallback for browsers where the shared WASM processor cannot load. */
 export class StreamingPitchTracker {
@@ -47,11 +49,12 @@ export class StreamingPitchTracker {
   }
 
   update(estimate: PitchEstimate | null, stats: SignalStats): PitchEstimate | null {
-    if (!this.observeGate(stats, estimate)) {
+    const resolvedEstimate = this.resolveEstimate(estimate);
+    if (!this.observeGate(stats, resolvedEstimate)) {
       this.resetTrack();
       return null;
     }
-    if (!estimate) {
+    if (!resolvedEstimate) {
       this.missingFrames += 1;
       if (this.missingFrames <= HOLD_FRAMES) return this.current();
       this.resetTrack();
@@ -59,11 +62,11 @@ export class StreamingPitchTracker {
     }
 
     this.missingFrames = 0;
-    const candidate = Math.log2(this.correctOctave(estimate.frequency));
+    const candidate = Math.log2(resolvedEstimate.frequency);
     if (!Number.isFinite(candidate)) return this.current();
 
     if (this.stableLog == null) {
-      this.updatePending(candidate, estimate.confidence, ACQUIRE_CENTS);
+      this.updatePending(candidate, resolvedEstimate.confidence, ACQUIRE_CENTS);
       if (this.pendingStreak < ACQUIRE_FRAMES) return null;
       this.commitPending();
       return this.current();
@@ -80,12 +83,12 @@ export class StreamingPitchTracker {
       const residual = Math.abs(centsBetween(median, this.stableLog));
       const alpha = residual < 12 ? 0.2 : residual < 35 ? 0.35 : 0.55;
       this.stableLog += alpha * (median - this.stableLog);
-      this.stableConfidence = 0.25 * estimate.confidence + 0.75 * this.stableConfidence;
+      this.stableConfidence = 0.25 * resolvedEstimate.confidence + 0.75 * this.stableConfidence;
       return this.current();
     }
 
     this.unstableFrames += 1;
-    this.updatePending(candidate, estimate.confidence, PENDING_CENTS);
+    this.updatePending(candidate, resolvedEstimate.confidence, PENDING_CENTS);
     const required = looksLikeOctave(candidate, this.stableLog)
       ? OCTAVE_CHANGE_FRAMES
       : CHANGE_FRAMES;
@@ -168,6 +171,17 @@ export class StreamingPitchTracker {
       && folded <= 80 && direct >= 120 && direct - folded >= 50
       ? frequency * 0.5
       : frequency;
+  }
+
+  private resolveEstimate(estimate: PitchEstimate | null): PitchEstimate | null {
+    if (!estimate) return null;
+    const frequency = this.correctOctave(estimate.frequency);
+    const distance = this.directTargetDistance(frequency);
+    if (distance == null) return { ...estimate, frequency };
+    const limit = this.selectedTarget != null
+      ? SELECTED_TARGET_LIMIT_CENTS
+      : TUNING_TARGET_LIMIT_CENTS;
+    return distance <= limit ? { ...estimate, frequency } : null;
   }
 
   private directTargetDistance(frequency: number): number | null {

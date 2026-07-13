@@ -73,7 +73,9 @@ function getAdapter(moduleUrl: string) {
   adapter = new PitchCoreAdapter(
     moduleUrl,
     loadPitchCore,
-    (buffer, sampleRate, stats, range) => detectPitchEstimate(buffer, sampleRate, stats, range),
+    (buffer, sampleRate, stats, range, guidance) => (
+      detectPitchEstimate(buffer, sampleRate, stats, range, guidance)
+    ),
   );
   return adapter;
 }

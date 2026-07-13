@@ -124,14 +124,14 @@ mod tests {
         assert!(frame.in_tune());
 
         processor.reset();
-        let lower_samples: Vec<f32> = (0..4096)
-            .map(|index| (std::f32::consts::TAU * 220.0 * index as f32 / sample_rate).sin())
+        let detuned_samples: Vec<f32> = (0..4096)
+            .map(|index| (std::f32::consts::TAU * 430.0 * index as f32 / sample_rate).sin())
             .collect();
         assert!(!processor
-            .process(&lower_samples, sample_rate)
+            .process(&detuned_samples, sample_rate)
             .has_frequency());
-        let after_reset = processor.process(&lower_samples, sample_rate);
-        assert!((after_reset.freq() - 220.0).abs() < 2.0);
+        let after_reset = processor.process(&detuned_samples, sample_rate);
+        assert!((after_reset.freq() - 430.0).abs() < 2.0);
 
         let silent = processor.process(&vec![0.0; samples.len()], sample_rate);
         assert!(!silent.has_frequency());
