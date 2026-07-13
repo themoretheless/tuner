@@ -19,7 +19,6 @@
     "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
   },
   "dependencies": {
-    "@lucide/vue": "^1.24.0",
     "@tauri-apps/plugin-store": "^2.4.3",
     "vue": "^3.5.34"
   },

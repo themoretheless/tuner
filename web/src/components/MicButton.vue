@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { LoaderCircle, Mic, Square } from '@lucide/vue';
 import { useL10n } from '../stores/l10n';
 import type { SessionStatus } from '../session/sessionLifecycle';
 
@@ -17,20 +16,17 @@ const actionHint = computed(() => {
 </script>
 
 <template>
-  <div class="mic-control">
+  <div class="flex flex-col items-center gap-3">
     <button
       data-testid="mic-toggle"
-      type="button"
-      class="mic-btn"
+      class="mic-btn focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#11151b] focus:ring-emerald-500"
       :class="{ listening: isListening, pending: status === 'starting' || status === 'stopping' }"
       @click="$emit('toggle')"
       :aria-label="t('toggle.microphone')"
-      :title="t('toggle.microphone')"
     >
-      <LoaderCircle v-if="status === 'starting' || status === 'stopping'" :size="22" class="mic-spinner" />
-      <Square v-else-if="offersStop" :size="19" fill="currentColor" />
-      <Mic v-else :size="24" />
+      <span v-if="offersStop">■</span>
+      <span v-else>🎤</span>
     </button>
-    <div class="mic-copy">{{ actionHint }}</div>
+    <div class="text-xs text-slate-400">{{ actionHint }}</div>
   </div>
 </template>
