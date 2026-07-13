@@ -9,7 +9,6 @@ import InputDeviceSelector from '../../components/InputDeviceSelector.vue';
 import LevelMeter from '../../components/LevelMeter.vue';
 import MicButton from '../../components/MicButton.vue';
 import NoteDisplay from '../../components/NoteDisplay.vue';
-import SpectralPeakReadout from '../../components/SpectralPeakReadout.vue';
 import StringSelector from '../../components/StringSelector.vue';
 import TuningSelector from '../../components/TuningSelector.vue';
 
@@ -59,12 +58,6 @@ function toggleMic() {
         :detected="tuner.detectionFrame.freq"
         :target="tuner.targetNote.frequency"
         :is-in-tune="tuner.isInTune"
-      />
-      <SpectralPeakReadout
-        :frame="tuner.spectrumFrame"
-        :is-listening="tuner.isListening"
-        :a4="tuner.a4"
-        :format-freq="tuner.formatFreq"
       />
       <DisplayModeSelector :mode="tuner.displayMode" @change="tuner.setDisplayMode" />
     </div>

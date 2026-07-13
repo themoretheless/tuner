@@ -415,3 +415,27 @@ fn smoother_leaves_normal_pitch_bends_untouched() {
         "expected the smoother to track a normal pitch bend, got {last}"
     );
 }
+
+#[test]
+fn weak_low_e_fundamental_is_not_doubled_to_its_loudest_harmonic() {
+    // A real low E through a phone/laptop microphone often has a tiny 82 Hz
+    // fundamental and a dominant 165 Hz second harmonic. Periodicity still
+    // identifies E2 correctly; the spectral cross-check must not override it
+    // with the loudest FFT peak and publish E3.
+    let sample_rate = 48_000.0;
+    let buffer = harmonic_buffer(82.4069, sample_rate, 4096, &[0.08, 1.0, 0.25, 0.6, 0.15]);
+    let mut engine = TunerEngine::with_config(EngineConfig {
+        spectrum_bins: 0,
+        ..EngineConfig::default()
+    });
+
+    for _ in 0..8 {
+        let frame = engine.process(&buffer, sample_rate);
+        let frequency = frame.freq.expect("low E should remain detectable");
+        assert!(
+            (frequency - 82.4069).abs() < 2.0,
+            "expected E2 near 82.4 Hz, got {frequency} Hz"
+        );
+        assert_eq!(frame.note, "E2");
+    }
+}

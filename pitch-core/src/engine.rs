@@ -138,7 +138,15 @@ impl TunerEngine {
     pub fn process(&mut self, buffer: &[f32], sample_rate: f32) -> DetectionFrame {
         let rms = signal::compute_rms_volume(buffer);
         let level = signal::normalize_level(rms);
-        let estimate = self.detector.detect(buffer, sample_rate);
+        let mut estimate = self.detector.detect(buffer, sample_rate);
+        let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
+        let octave_correction_started = self.detector.take_octave_correction_started();
+        if octave_correction_pending {
+            // Confirmation deliberately costs one frame. Publishing the
+            // provisional octave would seed smoothing with a value the
+            // detector already suspects is wrong.
+            estimate = None;
+        }
         let raw_opt = estimate.map(|estimate| estimate.frequency);
 
         // Smooth the detected pitch to de-jitter the readout. A failed
@@ -148,6 +156,11 @@ impl TunerEngine {
         // history alive so re-acquired values stay smoothed. True silence
         // clears immediately instead of lingering on a stale value.
         let (freq_opt, confidence) = if let Some(estimate) = estimate {
+            if octave_correction_started {
+                // The detector just confirmed that its prior octave was
+                // wrong. Do not let that stale EMA fold the correction back.
+                self.clear_smoothing();
+            }
             self.hold_streak = 0;
             let smoothed = self.smoother.add(raw_opt);
             self.held_reading = smoothed.map(|frequency| (frequency, estimate.confidence));

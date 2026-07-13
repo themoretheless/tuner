@@ -26,15 +26,16 @@ const FOLD_DOWN_EXIT_RATIO: f32 = 0.15;
 
 /// Power at the estimate's odd multiples (f, 3f, 5f) must fall below this
 /// fraction of the power at its even multiples (2f, 4f, 6f) before a fold
-/// up to 2f engages. Kept small on purpose: a weak-but-present fundamental
-/// (e.g. a low string through a high-pass-filtered mic) still has clear
-/// odd-harmonic energy and must keep the periodicity-based estimate, which
-/// is exactly where YIN beats a naive spectral peak.
-const FOLD_UP_ENTER_RATIO: f32 = 0.15;
+/// up to 2f engages. This must stay near the spectral leakage floor: guitar
+/// microphones routinely make the second harmonic much louder than the
+/// fundamental, while YIN still correctly sees the longer period. Only an
+/// effectively absent odd series is evidence that the estimate is truly a
+/// subharmonic lock.
+const FOLD_UP_ENTER_RATIO: f32 = 0.02;
 
 /// An active fold up disengages once odd-harmonic evidence recovers past
 /// this ratio (see [`FOLD_DOWN_EXIT_RATIO`] for why enter/exit differ).
-const FOLD_UP_EXIT_RATIO: f32 = 0.3;
+const FOLD_UP_EXIT_RATIO: f32 = 0.05;
 
 /// A fold engages only after its evidence holds for this many consecutive
 /// frames, so one borderline frame cannot yank the readout an octave.
@@ -68,6 +69,7 @@ pub struct OctaveDisambiguator {
     active: FoldDirection,
     pending: FoldDirection,
     pending_streak: u8,
+    correction_started: bool,
 }
 
 impl Default for OctaveDisambiguator {
@@ -83,6 +85,7 @@ impl OctaveDisambiguator {
             active: FoldDirection::None,
             pending: FoldDirection::None,
             pending_streak: 0,
+            correction_started: false,
         }
     }
 
@@ -92,6 +95,19 @@ impl OctaveDisambiguator {
         self.active = FoldDirection::None;
         self.pending = FoldDirection::None;
         self.pending_streak = 0;
+        self.correction_started = false;
+    }
+
+    /// A pending fold has spectral evidence, but has not yet survived enough
+    /// consecutive frames to be safe to publish as pitch.
+    pub(crate) fn has_unconfirmed_correction(&self) -> bool {
+        self.pending != FoldDirection::None
+    }
+
+    /// Reports a newly engaged fold once. The engine uses this boundary to
+    /// discard smoothing history that was seeded by the wrong octave.
+    pub(crate) fn take_correction_started(&mut self) -> bool {
+        std::mem::take(&mut self.correction_started)
     }
 
     /// Returns `frequency` unchanged when the spectrum supports it, `frequency / 2`
@@ -109,6 +125,7 @@ impl OctaveDisambiguator {
         min_frequency: f32,
         max_frequency: f32,
     ) -> f32 {
+        self.correction_started = false;
         if buffer.len() < 64
             || !sample_rate.is_finite()
             || sample_rate <= 0.0
@@ -120,6 +137,7 @@ impl OctaveDisambiguator {
         self.apply_hann_window(buffer);
 
         let desired = self.desired_fold(sample_rate, frequency, min_frequency, max_frequency);
+        let previous_active = self.active;
 
         if desired == self.active {
             self.pending = FoldDirection::None;
@@ -143,6 +161,9 @@ impl OctaveDisambiguator {
                 self.pending_streak = 0;
             }
         }
+
+        self.correction_started =
+            self.active != FoldDirection::None && self.active != previous_active;
 
         match self.active {
             FoldDirection::Down => frequency * 0.5,

@@ -112,6 +112,14 @@ impl HybridPitchDetector {
         self.set_config(config);
     }
 
+    pub(crate) fn take_octave_correction_started(&mut self) -> bool {
+        self.octave.take_correction_started()
+    }
+
+    pub(crate) fn has_unconfirmed_octave_correction(&self) -> bool {
+        self.octave.has_unconfirmed_correction()
+    }
+
     fn prepare_centered(&mut self, buffer: &[f32]) -> bool {
         if buffer.is_empty() {
             return false;
@@ -140,6 +148,9 @@ impl HybridPitchDetector {
 
 impl PitchDetector for HybridPitchDetector {
     fn detect(&mut self, buffer: &[f32], sample_rate: f32) -> Option<PitchEstimate> {
+        // Frame status is edge-triggered; never let an unread status leak
+        // into a later detector call.
+        self.octave.take_correction_started();
         if !self.prepare_centered(buffer) {
             // Gate closed: drop any fold engaged on the previous note so it
             // cannot carry over to the next one.
@@ -152,18 +163,20 @@ impl PitchDetector for HybridPitchDetector {
             .detect_centered(&cleaned, sample_rate)
             .or_else(|| self.mpm.detect_centered(&cleaned, sample_rate))
             .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
-            // Time-domain estimates can lock onto a harmonic/subharmonic;
-            // cross-check against the frame's actual spectral content and
-            // fold octave errors back before anything downstream sees them.
-            .map(|estimate| PitchEstimate {
-                frequency: self.octave.resolve(
+            .map(|estimate| {
+                // Time-domain estimates can lock onto a harmonic/subharmonic;
+                // cross-check against the frame's actual spectral content.
+                let frequency = self.octave.resolve(
                     &cleaned,
                     sample_rate,
                     estimate.frequency,
                     self.config.min_frequency,
                     self.config.max_frequency,
-                ),
-                ..estimate
+                );
+                PitchEstimate {
+                    frequency,
+                    ..estimate
+                }
             });
         self.cleaned = cleaned;
         estimate
@@ -175,6 +188,7 @@ impl PitchDetector for HybridPitchDetector {
         self.config = normalized;
         self.yin.set_config(normalized);
         self.mpm.set_config(normalized);
+        self.octave.reset();
     }
 }
 

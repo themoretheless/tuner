@@ -5,6 +5,7 @@ use crate::{
 
 const DEFAULT_IN_TUNE_ENTER_CENTS: f32 = 5.0;
 const DEFAULT_IN_TUNE_EXIT_CENTS: f32 = 7.0;
+const TARGET_SWITCH_MARGIN_CENTS: f32 = 15.0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FrameContext {
@@ -68,6 +69,8 @@ pub struct FrameResolver {
     a4: f32,
     context: Option<FrameContext>,
     in_tune_stable: bool,
+    sticky_display_target: Option<Note>,
+    sticky_tuning_target: Option<Note>,
     tuning: Tuning,
 }
 
@@ -77,6 +80,8 @@ impl FrameResolver {
             a4: normalize_a4(a4),
             context: None,
             in_tune_stable: false,
+            sticky_display_target: None,
+            sticky_tuning_target: None,
             tuning,
         };
         resolver.set_context(context);
@@ -124,7 +129,11 @@ impl FrameResolver {
 
         let (fallback_note, fallback_cents) = frequency_to_note(frequency, self.a4);
         let (note, target, cents, enter_cents, exit_cents) = if let Some(context) = &self.context {
-            let display_target = closest_target(frequency, &context.display_targets);
+            let display_target = sticky_closest_target(
+                frequency,
+                &context.display_targets,
+                &mut self.sticky_display_target,
+            );
             let note = display_target
                 .as_ref()
                 .map(get_note_display)
@@ -132,7 +141,13 @@ impl FrameResolver {
             let target = context
                 .selected_target
                 .clone()
-                .or_else(|| closest_target(frequency, &context.tuning_targets))
+                .or_else(|| {
+                    sticky_closest_target(
+                        frequency,
+                        &context.tuning_targets,
+                        &mut self.sticky_tuning_target,
+                    )
+                })
                 .or_else(|| display_target.clone());
             let cents = target.as_ref().map_or(fallback_cents, |target| {
                 get_cents(frequency, target.frequency)
@@ -145,8 +160,10 @@ impl FrameResolver {
                 context.in_tune_exit_cents,
             )
         } else {
-            let target = (!self.tuning.strings.is_empty())
-                .then(|| find_closest_string(frequency, &self.tuning.strings, self.a4));
+            let target = (!self.tuning.strings.is_empty()).then(|| {
+                let candidate = find_closest_string(frequency, &self.tuning.strings, self.a4);
+                keep_sticky_target(frequency, candidate, &mut self.sticky_tuning_target)
+            });
             let cents = target.as_ref().map_or(fallback_cents, |target| {
                 get_cents(frequency, target.frequency)
             });
@@ -176,11 +193,40 @@ impl FrameResolver {
 
     pub fn reset(&mut self) {
         self.in_tune_stable = false;
+        self.sticky_display_target = None;
+        self.sticky_tuning_target = None;
     }
 }
 
 fn closest_target(frequency: f32, targets: &[Note]) -> Option<Note> {
     closest_note_index(frequency, targets, 1.0).map(|index| targets[index].clone())
+}
+
+fn sticky_closest_target(
+    frequency: f32,
+    targets: &[Note],
+    previous: &mut Option<Note>,
+) -> Option<Note> {
+    let Some(candidate) = closest_target(frequency, targets) else {
+        *previous = None;
+        return None;
+    };
+    Some(keep_sticky_target(frequency, candidate, previous))
+}
+
+fn keep_sticky_target(frequency: f32, candidate: Note, previous: &mut Option<Note>) -> Note {
+    let chosen = previous
+        .as_ref()
+        .filter(|target| valid_target(target))
+        .filter(|target| {
+            let previous_distance = get_cents(frequency, target.frequency).abs();
+            let candidate_distance = get_cents(frequency, candidate.frequency).abs();
+            previous_distance - candidate_distance <= TARGET_SWITCH_MARGIN_CENTS
+        })
+        .cloned()
+        .unwrap_or(candidate);
+    *previous = Some(chosen.clone());
+    chosen
 }
 
 fn normalize_a4(a4: f32) -> f32 {
@@ -257,6 +303,41 @@ mod tests {
         assert!(resolver.resolve(Some(cents_above_a4(6.0))).in_tune);
         assert!(!resolver.resolve(Some(cents_above_a4(8.0))).in_tune);
         assert!(!resolver.resolve(None).in_tune);
+    }
+
+    #[test]
+    fn target_selection_is_sticky_around_the_midpoint() {
+        let e2 = note("E", 2, 82.4069);
+        let a2 = note("A", 2, 110.0);
+        let mut resolver = FrameResolver::new(
+            440.0,
+            chromatic_tuning(),
+            Some(FrameContext {
+                display_targets: vec![e2.clone(), a2.clone()],
+                tuning_targets: vec![e2.clone(), a2.clone()],
+                ..FrameContext::default()
+            }),
+        );
+
+        let below_midpoint = resolver.resolve(Some(95.0));
+        assert_eq!(below_midpoint.note, "E2");
+        assert_eq!(below_midpoint.target, Some(e2));
+
+        let jitter_above_midpoint = resolver.resolve(Some(95.5));
+        assert_eq!(jitter_above_midpoint.note, "E2");
+        assert_eq!(
+            jitter_above_midpoint.target.as_ref().map(|note| note.name),
+            Some("E")
+        );
+
+        let decisive_move = resolver.resolve(Some(104.0));
+        assert_eq!(decisive_move.note, "A2");
+        assert_eq!(decisive_move.target, Some(a2.clone()));
+
+        resolver.resolve(None);
+        let fresh_pick = resolver.resolve(Some(95.5));
+        assert_eq!(fresh_pick.note, "A2");
+        assert_eq!(fresh_pick.target, Some(a2));
     }
 
     fn cents_above_a4(cents: f32) -> f32 {

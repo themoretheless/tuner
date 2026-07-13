@@ -30,6 +30,19 @@
       "toleranceCents": 5
     },
     {
+      "id": "guitar-e2-weak-fundamental",
+      "frequency": 82.4069,
+      "sampleRate": 48000,
+      "bufferSize": 4096,
+      "amplitude": 0.4,
+      "dcOffset": 0,
+      "harmonics": [0.08, 1, 0.25, 0.6, 0.15],
+      "minFrequency": 50,
+      "maxFrequency": 220,
+      "minimumConfidence": 0.75,
+      "toleranceCents": 5
+    },
+    {
       "id": "guitar-a3-with-dc",
       "frequency": 220,
       "sampleRate": 48000,
