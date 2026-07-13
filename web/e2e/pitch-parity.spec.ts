@@ -143,6 +143,9 @@ test('full-frame WASM processor resolves context and clears state on silence', a
         5,
         7,
       );
+      const provisional = processor.process(samples, sampleRate);
+      const provisionalFrequency = provisional.has_frequency ? provisional.freq : null;
+      provisional.free();
       const detected = processor.process(samples, sampleRate);
       const detectedFrame = {
         cents: detected.cents,
@@ -160,6 +163,11 @@ test('full-frame WASM processor resolves context and clears state on silence', a
       for (let index = 0; index < lowerSamples.length; index += 1) {
         lowerSamples[index] = Math.sin(Math.PI * 2 * 220 * index / sampleRate);
       }
+      const afterResetProvisional = processor.process(lowerSamples, sampleRate);
+      const afterResetProvisionalFrequency = afterResetProvisional.has_frequency
+        ? afterResetProvisional.freq
+        : null;
+      afterResetProvisional.free();
       const afterReset = processor.process(lowerSamples, sampleRate);
       const afterResetFrequency = afterReset.has_frequency ? afterReset.freq : null;
       afterReset.free();
@@ -173,12 +181,19 @@ test('full-frame WASM processor resolves context and clears state on silence', a
         targetMidi: silent.target_midi,
       };
       silent.free();
-      return { afterResetFrequency, detectedFrame, silentFrame };
+      return {
+        afterResetFrequency,
+        afterResetProvisionalFrequency,
+        detectedFrame,
+        provisionalFrequency,
+        silentFrame,
+      };
     } finally {
       processor.free();
     }
   });
 
+  expect(result.provisionalFrequency).toBeNull();
   expect(result.detectedFrame.frequency).toBeCloseTo(440, 0);
   expect(result.detectedFrame.confidence).toBeGreaterThanOrEqual(0.75);
   expect(result.detectedFrame.cents).toBeCloseTo(0, 0);
@@ -186,6 +201,7 @@ test('full-frame WASM processor resolves context and clears state on silence', a
   expect(result.detectedFrame.inTune).toBe(true);
   expect(result.detectedFrame.note).toBe('A4');
   expect(result.detectedFrame.targetMidi).toBe(69);
+  expect(result.afterResetProvisionalFrequency).toBeNull();
   expect(result.afterResetFrequency).toBeCloseTo(220, 0);
   expect(result.silentFrame).toEqual({
     confidence: 0,

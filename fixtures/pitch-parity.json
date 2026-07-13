@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "confidenceModel": "normalized-periodicity-v1",
-  "minimumUsableConfidence": 0.5,
+  "minimumUsableConfidence": 0.7,
   "fixtures": [
     {
       "id": "bass-b0",

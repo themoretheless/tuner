@@ -4,11 +4,13 @@ mod domain;
 mod dsp;
 mod engine;
 mod frames;
+mod gate;
 mod generated_note_math;
 mod resolution;
 mod signal;
 mod smoother;
 mod spectrum;
+mod tracking;
 #[cfg(feature = "wasm")]
 mod wasm;
 pub use domain::*;

@@ -38,6 +38,11 @@ impl YinDetector {
         if max_tau <= min_tau + 2 {
             return None;
         }
+        // Use every sample that is valid for the full searched lag range.
+        // A constant comparison length keeps CMNDF values comparable across
+        // taus and gives low guitar strings substantially more cycles than
+        // the old fixed half-frame window.
+        let analysis_length = buffer.len() - max_tau;
 
         self.difference.resize(max_tau, 0.0);
         self.normalized.resize(max_tau, 1.0);
@@ -46,7 +51,7 @@ impl YinDetector {
 
         for tau in 1..max_tau {
             let mut sum = 0.0;
-            for index in 0..half {
+            for index in 0..analysis_length {
                 let delta = buffer[index] - buffer[index + tau];
                 sum += delta * delta;
             }
@@ -63,11 +68,8 @@ impl YinDetector {
             };
         }
 
-        let rms =
-            (buffer.iter().map(|sample| sample * sample).sum::<f32>() / buffer.len() as f32).sqrt();
-        let adaptive_threshold = self.config.yin_threshold * (1.0 - 0.35 * (rms * 15.0).min(1.0));
         let estimate = (min_tau..max_tau).find_map(|tau| {
-            if self.normalized[tau] >= adaptive_threshold {
+            if self.normalized[tau] >= self.config.yin_threshold {
                 return None;
             }
             let mut best = tau;

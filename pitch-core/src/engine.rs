@@ -1,7 +1,7 @@
+use crate::{gate::AdaptiveSignalGate, tracking::PitchTracker};
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
-    FrameContext, FrameResolver, HybridPitchDetector, PitchDetector, Smoother, SpectrumAnalyzer,
-    Tuning,
+    FrameContext, FrameResolver, HybridPitchDetector, PitchDetector, SpectrumAnalyzer, Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -40,13 +40,14 @@ impl Default for EngineConfig {
 }
 
 pub struct TunerEngine {
-    smoother: Smoother,
     detector: HybridPitchDetector,
+    gate: AdaptiveSignalGate,
     resolver: FrameResolver,
     spectrum: Option<SpectrumAnalyzer>,
     spectrum_bins: usize,
     spectrum_fft_size: usize,
     rms_gate: f32,
+    tracker: PitchTracker,
     hold_streak: u8,
     held_reading: Option<(f32, f32)>,
 }
@@ -81,45 +82,52 @@ impl TunerEngine {
                 strings: Vec::new(),
             });
         Self {
-            smoother: Smoother::new(),
             detector: HybridPitchDetector::new(detector),
+            gate: AdaptiveSignalGate::new(detector.rms_gate, detector.peak_gate),
             resolver: FrameResolver::new(a4, tuning, frame_context),
             spectrum: (spectrum_bins > 0)
                 .then(|| SpectrumAnalyzer::new(spectrum_fft_size, spectrum_bins)),
             spectrum_bins: configured_spectrum_bins,
             spectrum_fft_size,
             rms_gate: detector.rms_gate,
+            tracker: PitchTracker::new(),
             hold_streak: 0,
             held_reading: None,
         }
     }
 
-    fn clear_smoothing(&mut self) {
-        self.smoother.reset();
+    fn clear_tracking(&mut self) {
+        self.tracker.reset();
         self.hold_streak = 0;
         self.held_reading = None;
+        self.resolver.reset();
+    }
+
+    fn reset_pipeline(&mut self) {
+        self.clear_tracking();
+        self.detector.reset_tracking_state();
+        self.gate.reset();
     }
 
     pub fn set_a4(&mut self, a4: f32) {
         self.resolver.set_a4(a4);
-        self.clear_smoothing();
+        self.reset_pipeline();
     }
 
     pub fn set_tuning(&mut self, t: Tuning) {
         self.resolver.set_tuning(t);
-        self.clear_smoothing();
+        self.reset_pipeline();
     }
 
     pub fn set_frame_context(&mut self, context: Option<FrameContext>) {
         self.resolver.set_context(context);
-        self.clear_smoothing();
+        self.reset_pipeline();
     }
 
     pub fn set_detection_range(&mut self, min_frequency: f32, max_frequency: f32) {
         self.detector
             .set_frequency_range(min_frequency, max_frequency);
-        self.clear_smoothing();
-        self.resolver.reset();
+        self.reset_pipeline();
     }
 
     pub fn set_spectrum_enabled(&mut self, enabled: bool) {
@@ -137,8 +145,10 @@ impl TunerEngine {
 
     pub fn process(&mut self, buffer: &[f32], sample_rate: f32) -> DetectionFrame {
         let rms = signal::compute_rms_volume(buffer);
+        let signal_stats = signal::compute_centered_signal_stats(buffer);
         let level = signal::normalize_level(rms);
         let mut estimate = self.detector.detect(buffer, sample_rate);
+        let gate_estimate = estimate;
         let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
         let octave_correction_started = self.detector.take_octave_correction_started();
         if octave_correction_pending {
@@ -147,25 +157,36 @@ impl TunerEngine {
             // detector already suspects is wrong.
             estimate = None;
         }
-        let raw_opt = estimate.map(|estimate| estimate.frequency);
 
-        // Smooth the detected pitch to de-jitter the readout. A failed
-        // detection while the signal is still above the gate (a decaying
-        // string flickering around the detector's thresholds) rides on the
-        // last smoothed reading for a few frames, keeping the smoother's
-        // history alive so re-acquired values stay smoothed. True silence
-        // clears immediately instead of lingering on a stale value.
-        let (freq_opt, confidence) = if let Some(estimate) = estimate {
+        let gate_open =
+            self.gate
+                .observe(signal_stats, gate_estimate, self.resolver.tracking_prior());
+
+        // Track only coherent estimates. Brief detector dropouts ride on the
+        // settled track while the signal remains open; sustained uncertainty
+        // or a closed adaptive gate clears it before the next acquisition.
+        let (freq_opt, confidence) = if !gate_open {
+            self.clear_tracking();
+            self.detector.reset_tracking_state();
+            (None, 0.0)
+        } else if let Some(estimate) = estimate {
             if octave_correction_started {
                 // The detector just confirmed that its prior octave was
-                // wrong. Do not let that stale EMA fold the correction back.
-                self.clear_smoothing();
+                // wrong. Start a fresh track at the corrected octave.
+                self.clear_tracking();
             }
-            self.hold_streak = 0;
-            let smoothed = self.smoother.add(raw_opt);
-            self.held_reading = smoothed.map(|frequency| (frequency, estimate.confidence));
-            (smoothed, estimate.confidence)
-        } else if rms >= self.rms_gate
+            let tracked = self
+                .tracker
+                .update(estimate, self.resolver.tracking_prior());
+            if let Some(tracked) = tracked {
+                self.hold_streak = 0;
+                self.held_reading = Some((tracked.frequency, tracked.confidence));
+                (Some(tracked.frequency), tracked.confidence)
+            } else {
+                self.held_reading = None;
+                (None, 0.0)
+            }
+        } else if signal_stats.rms >= self.rms_gate
             && self.held_reading.is_some()
             && self.hold_streak < DETECTION_HOLD_FRAMES
         {
@@ -173,7 +194,7 @@ impl TunerEngine {
             let (frequency, held_confidence) = self.held_reading.unwrap_or_default();
             (Some(frequency), held_confidence)
         } else {
-            self.clear_smoothing();
+            self.clear_tracking();
             (None, 0.0)
         };
 
@@ -206,7 +227,6 @@ impl TunerEngine {
     }
 
     pub fn reset(&mut self) {
-        self.clear_smoothing();
-        self.resolver.reset();
+        self.reset_pipeline();
     }
 }

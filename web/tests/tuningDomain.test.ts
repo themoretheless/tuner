@@ -68,6 +68,12 @@ describe('tuning calculations', () => {
     ], 'guitar');
     expect(range.minFrequency).toBeLessThan(82.5);
     expect(range.maxFrequency).toBeGreaterThan(329);
+
+    const selected = noteWithA4({ name: 'E', octave: 2 }, 440);
+    expect(detectionRangeForStrings([], 'guitar', selected)).toEqual({
+      minFrequency: 53,
+      maxFrequency: 120,
+    });
   });
 
   it('pads custom sweetening offsets to the string count', () => {

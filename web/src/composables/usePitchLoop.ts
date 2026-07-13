@@ -5,7 +5,6 @@ import type { AudioFrame } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
-  FrequencySmoother,
   computeSignalStats,
   detectPitchEstimate,
   normalizeLevel,
@@ -13,6 +12,7 @@ import {
   type PitchEstimate,
   type SignalStats,
 } from '../utils/pitch';
+import { StreamingPitchTracker } from '../utils/pitchTracking';
 import type {
   DetectionFrameSemantics,
   PitchDetectorBackend,
@@ -49,7 +49,7 @@ export function usePitchLoop(
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
   let quietTicks = 0;
-  const fallbackSmoother = new FrequencySmoother();
+  const fallbackTracker = new StreamingPitchTracker();
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
   function ensurePitchWorker() {
@@ -71,7 +71,7 @@ export function usePitchLoop(
       if (event.data.id !== pitchRequestId) return;
       detectorBackend.value = event.data.backend;
       frameSemantics.value = event.data.semantics;
-      fallbackSmoother.reset();
+      fallbackTracker.reset();
       detectionFrame.value = event.data.frame;
       volume.value = event.data.frame.level;
     };
@@ -80,7 +80,7 @@ export function usePitchLoop(
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
       detectionFrame.value = createUnresolvedDetectionFrame({ level: volume.value });
-      fallbackSmoother.reset();
+      fallbackTracker.reset();
       pitchRequestId += 1;
       pitchWorker?.terminate();
       pitchWorker = null;
@@ -106,15 +106,16 @@ export function usePitchLoop(
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
     quietTicks = 0;
-    fallbackSmoother.reset();
+    fallbackTracker.reset();
     pitchWorker?.postMessage({ type: 'reset' });
   }
 
   function applyFallbackEstimate(estimate: PitchEstimate | null, stats: SignalStats) {
-    const frequency = fallbackSmoother.add(estimate?.frequency ?? null);
+    if (frameContext) fallbackTracker.setContext(frameContext.value);
+    const tracked = fallbackTracker.update(estimate, stats);
     detectionFrame.value = createUnresolvedDetectionFrame({
-      confidence: frequency == null ? 0 : estimate?.confidence,
-      freq: frequency,
+      confidence: tracked?.confidence ?? 0,
+      freq: tracked?.frequency ?? null,
       level: normalizeLevel(stats.rms),
       rms: stats.rms,
     });

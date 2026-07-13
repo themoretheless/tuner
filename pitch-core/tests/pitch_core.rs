@@ -116,6 +116,7 @@ fn note_math_and_tunings_are_consistent() {
 fn engine_emits_detection_frame_and_optional_spectrum() {
     let buffer = sine_buffer(110.0, 44_100.0, 4096);
     let mut engine = TunerEngine::new(440.0);
+    assert!(engine.process(&buffer, 44_100.0).freq.is_none());
     let frame = engine.process(&buffer, 44_100.0);
     assert_eq!(frame.note, "A2");
     assert!(frame.confidence > 0.5);
@@ -146,11 +147,13 @@ fn engine_does_not_blend_a_new_note_with_pitch_before_silence() {
     let _ = engine.process(&sine_buffer(110.0, sample_rate, 4096), sample_rate);
     assert!(engine.process(&[0.0; 4096], sample_rate).freq.is_none());
 
+    let next_note = sine_buffer(146.8324, sample_rate, 4096);
+    assert!(engine.process(&next_note, sample_rate).freq.is_none());
     let frequency = engine
-        .process(&sine_buffer(220.0, sample_rate, 4096), sample_rate)
+        .process(&next_note, sample_rate)
         .freq
-        .expect("pitch after silence");
-    assert!((frequency - 220.0).abs() < 2.0);
+        .expect("confirmed pitch after silence");
+    assert!((frequency - 146.8324).abs() < 2.0);
 }
 
 #[test]
@@ -429,7 +432,8 @@ fn weak_low_e_fundamental_is_not_doubled_to_its_loudest_harmonic() {
         ..EngineConfig::default()
     });
 
-    for _ in 0..8 {
+    assert!(engine.process(&buffer, sample_rate).freq.is_none());
+    for _ in 0..7 {
         let frame = engine.process(&buffer, sample_rate);
         let frequency = frame.freq.expect("low E should remain detectable");
         assert!(
