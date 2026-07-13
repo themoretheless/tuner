@@ -3,6 +3,7 @@ import type { DetectionFrame } from '../types/frames';
 interface UnresolvedDetectionInput {
   confidence?: number;
   freq?: number | null;
+  rawFreq?: number | null;
   level?: number;
   rms?: number;
 }
@@ -13,6 +14,7 @@ export function createUnresolvedDetectionFrame(
   const freq = positiveFiniteOrNull(input.freq);
   return {
     freq,
+    rawFreq: positiveFiniteOrNull(input.rawFreq),
     confidence: freq == null ? 0 : clampConfidence(input.confidence ?? 0),
     rms: nonNegativeFinite(input.rms),
     level: clamp01(input.level),

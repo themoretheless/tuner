@@ -67,6 +67,9 @@ export function normalizeNativeFrame(payload: NativeAudioFramePayload = {}): Det
   const freq = Number.isFinite(rawFrequency) && rawFrequency > 0 ? rawFrequency : null;
   return {
     freq,
+    // The native (Tauri) bridge does not carry the pre-smoothing detector
+    // value; the diagnostic field is web/WASM-only for now.
+    rawFreq: null,
     confidence: clamp01(finiteNumber(payload.confidence)),
     rms: Math.max(0, finiteNumber(payload.rms)),
     level: clamp01(finiteNumber(payload.level)),

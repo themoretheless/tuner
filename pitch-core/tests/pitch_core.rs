@@ -400,6 +400,41 @@ fn engine_rides_out_brief_detection_dropouts_while_the_signal_persists() {
 }
 
 #[test]
+fn smoother_holds_out_non_octave_jumps_until_they_persist() {
+    let mut smoother = Smoother::new();
+    for _ in 0..4 {
+        smoother.add(Some(82.4));
+    }
+
+    // A neighboring string ringing sympathetically: the detector briefly
+    // reports A2 - a ~500-cent jump, not an octave, so the octave guard
+    // never saw it. The readout must hold the current pitch.
+    for _ in 0..4 {
+        let held = smoother.add(Some(110.0)).expect("smoothed value");
+        assert!(
+            (held - 82.4).abs() < 2.0,
+            "expected the readout to hold near 82.4 Hz through a brief jump, got {held}"
+        );
+    }
+
+    // The real string wins again: tracking resumes untouched.
+    let back = smoother.add(Some(82.4)).expect("smoothed value");
+    assert!((back - 82.4).abs() < 2.0);
+
+    // A sustained move to A2 is a genuine note change: after the confirm
+    // streak the readout switches cleanly to the new pitch.
+    let mut last = None;
+    for _ in 0..12 {
+        last = smoother.add(Some(110.0));
+    }
+    let settled = last.expect("smoothed value");
+    assert!(
+        (settled - 110.0).abs() < 2.0,
+        "expected a sustained note change to settle at 110 Hz, got {settled}"
+    );
+}
+
+#[test]
 fn smoother_leaves_normal_pitch_bends_untouched() {
     let mut smoother = Smoother::new();
     // A vibrato/bend sweep from 110 Hz up to ~116 Hz (a few percent, nowhere

@@ -3,6 +3,11 @@ use crate::domain::Note;
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct DetectionFrame {
     pub freq: Option<f32>,
+    /// The detector's own per-frame estimate before any suppression,
+    /// smoothing, or hold logic. Diagnostic: comparing it against `freq`
+    /// shows whether instability comes from the raw detector or from the
+    /// stabilization layers.
+    pub raw_freq: Option<f32>,
     pub confidence: f32,
     pub rms: f32,
     pub level: f32,

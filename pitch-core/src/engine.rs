@@ -139,6 +139,9 @@ impl TunerEngine {
         let rms = signal::compute_rms_volume(buffer);
         let level = signal::normalize_level(rms);
         let mut estimate = self.detector.detect(buffer, sample_rate);
+        // Diagnostic: what the detector itself said this frame, before any
+        // suppression, smoothing, or hold logic touches it.
+        let raw_freq = estimate.map(|estimate| estimate.frequency);
         let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
         let octave_correction_started = self.detector.take_octave_correction_started();
         if octave_correction_pending {
@@ -193,6 +196,7 @@ impl TunerEngine {
 
         DetectionFrame {
             freq: freq_opt,
+            raw_freq,
             confidence,
             rms,
             level,
