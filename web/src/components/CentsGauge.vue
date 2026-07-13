@@ -7,11 +7,12 @@ const props = defineProps<{
   mode: DisplayMode
   isInTune: boolean
   isDetected: boolean
+  isListening: boolean
 }>()
 
 const { t } = useL10n()
 const clamped = (c: number) => Math.max(-50, Math.min(50, c))
-const offset = (c: number) => (clamped(c) / 100) * 50   // -50..50 cents → -25..25 in % of half-width
+const offset = (c: number) => clamped(c)
 const needleAngle = (c: number) => (clamped(c) / 50) * 42
 const strobeShift = (c: number) => Math.max(-18, Math.min(18, c / 2))
 </script>
@@ -35,7 +36,7 @@ const strobeShift = (c: number) => Math.max(-18, Math.min(18, c / 2))
       <rect x="45" y="3" width="10" height="6" rx="2" fill="var(--accent)" opacity="0.25" />
 
       <!-- needle -->
-      <g :transform="`translate(${50 + offset(cents)}, 0)`">
+      <g v-if="isDetected" class="cents-needle" :transform="`translate(${50 + offset(cents)}, 0)`">
         <rect x="-1.2" y="1" width="2.4" height="10" rx="1" :fill="isInTune ? 'var(--accent)' : 'var(--warning)'" />
       </g>
     </svg>
@@ -60,14 +61,16 @@ const strobeShift = (c: number) => Math.max(-18, Math.min(18, c / 2))
       <rect x="49" y="0" width="2" height="24" fill="var(--text)" opacity="0.5" />
     </svg>
 
-    <div class="flex justify-center mt-1.5">
+    <div class="flex justify-center mt-2">
       <div
-        class="text-xs px-3 py-0.5 rounded-full inline-flex items-center gap-1.5"
+        class="tuner-status"
         role="status"
         aria-live="polite"
-        :class="isInTune ? 'bg-emerald-500/15 text-emerald-400' : isDetected ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-500'"
+        :class="{ tuned: isInTune, adjusting: isDetected && !isInTune }"
       >
+        <span class="tuner-status-dot" aria-hidden="true"></span>
         <span v-if="isInTune">{{ t('in.tune') }}</span>
+        <span v-else-if="!isListening">{{ t('ready') }}</span>
         <span v-else-if="!isDetected">{{ t('waiting.signal') }}</span>
         <span v-else>
           {{ cents > 0 ? t('adjust.sharp') : t('adjust.flat') }}

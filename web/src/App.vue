@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import { AudioLines } from '@lucide/vue';
 import { createFeaturePorts, featurePortKeys } from './app/featurePorts';
 import { useTuner } from './composables/useTuner';
 import { useL10n } from './stores/l10n';
@@ -69,10 +70,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
   <div class="app-root" :class="appClasses">
     <header class="app-header app-width">
       <div class="brand-lockup">
-        <div class="brand-mark" aria-hidden="true">♪</div>
+        <div class="brand-mark" aria-hidden="true"><AudioLines :size="22" :stroke-width="2.2" /></div>
         <div>
           <h1>{{ t('app.title') }}</h1>
-          <p>{{ t('subtitle') }}</p>
         </div>
       </div>
       <div class="header-actions">
@@ -111,10 +111,5 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
       <PracticeView v-else-if="activeView === 'practice'" />
       <AnalysisView v-else />
     </main>
-
-    <footer class="app-footer app-width">
-      <span>{{ t('quiet.room') }}</span>
-      <span>{{ t('keyboard.hint') }}</span>
-    </footer>
   </div>
 </template>
