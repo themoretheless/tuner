@@ -1,3 +1,4 @@
+use crate::tracking::PitchPrior;
 use crate::{
     closest_note_index, find_closest_string, frequency_to_note, get_cents, get_note_display, Note,
     Tuning,
@@ -71,6 +72,7 @@ pub struct FrameResolver {
     in_tune_stable: bool,
     sticky_display_target: Option<Note>,
     sticky_tuning_target: Option<Note>,
+    tracking_prior: PitchPrior,
     tuning: Tuning,
 }
 
@@ -82,8 +84,10 @@ impl FrameResolver {
             in_tune_stable: false,
             sticky_display_target: None,
             sticky_tuning_target: None,
+            tracking_prior: PitchPrior::default(),
             tuning,
         };
+        resolver.refresh_tracking_prior();
         resolver.set_context(context);
         resolver
     }
@@ -92,12 +96,14 @@ impl FrameResolver {
         let a4 = normalize_a4(a4);
         if (self.a4 - a4).abs() > 0.01 {
             self.a4 = a4;
+            self.refresh_tracking_prior();
             self.reset();
         }
     }
 
     pub fn set_tuning(&mut self, tuning: Tuning) {
         self.tuning = tuning;
+        self.refresh_tracking_prior();
         self.reset();
     }
 
@@ -110,6 +116,7 @@ impl FrameResolver {
             self.a4 = context.a4;
         }
         self.context = context;
+        self.refresh_tracking_prior();
         self.reset();
     }
 
@@ -195,6 +202,30 @@ impl FrameResolver {
         self.in_tune_stable = false;
         self.sticky_display_target = None;
         self.sticky_tuning_target = None;
+    }
+
+    pub(crate) fn tracking_prior(&self) -> &PitchPrior {
+        &self.tracking_prior
+    }
+
+    fn refresh_tracking_prior(&mut self) {
+        if let Some(context) = &self.context {
+            self.tracking_prior =
+                PitchPrior::new(context.selected_target.as_ref(), &context.tuning_targets);
+            return;
+        }
+
+        let scale = self.a4 / 440.0;
+        let targets = self
+            .tuning
+            .strings
+            .iter()
+            .map(|note| Note {
+                frequency: note.frequency * scale,
+                ..note.clone()
+            })
+            .collect::<Vec<_>>();
+        self.tracking_prior = PitchPrior::new(None, &targets);
     }
 }
 

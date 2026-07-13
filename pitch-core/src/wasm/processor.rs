@@ -114,6 +114,7 @@ mod tests {
             7.0,
         );
 
+        assert!(!processor.process(&samples, sample_rate).has_frequency());
         let frame = processor.process(&samples, sample_rate);
         assert!(frame.has_frequency());
         assert!((frame.freq() - 440.0).abs() < 2.0);
@@ -126,6 +127,9 @@ mod tests {
         let lower_samples: Vec<f32> = (0..4096)
             .map(|index| (std::f32::consts::TAU * 220.0 * index as f32 / sample_rate).sin())
             .collect();
+        assert!(!processor
+            .process(&lower_samples, sample_rate)
+            .has_frequency());
         let after_reset = processor.process(&lower_samples, sample_rate);
         assert!((after_reset.freq() - 220.0).abs() < 2.0);
 

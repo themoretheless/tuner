@@ -23,7 +23,7 @@ const MIN_PEAK = 0.012;
 
 // Confidence is normalized periodicity quality, not a probability. Frames
 // below this score do not update the readout in either the Rust or TS path.
-export const MIN_USABLE_PITCH_CONFIDENCE = 0.5;
+export const MIN_USABLE_PITCH_CONFIDENCE = 0.7;
 
 export interface SignalStats {
   rms: number;
@@ -89,6 +89,7 @@ export function detectPitchYINEstimate(
   const minTau = Math.max(1, Math.floor(sampleRate / detectionRange.maxFrequency));
   const maxTau = Math.min(half, Math.floor(sampleRate / detectionRange.minFrequency));
   if (maxTau <= minTau + 2) return null;
+  const analysisLength = size - maxTau;
 
   // Gate on energy
   if (stats.rms < MIN_RMS || stats.maxAbs < MIN_PEAK) return null;
@@ -99,7 +100,7 @@ export function detectPitchYINEstimate(
   // selection is range-limited; this matches the Rust confidence scale.
   for (let tau = 1; tau < maxTau; tau++) {
     let sum = 0;
-    for (let i = 0; i < half; i++) {
+    for (let i = 0; i < analysisLength; i++) {
       const delta = buffer[i] - buffer[i + tau];
       sum += delta * delta;
     }
@@ -115,10 +116,9 @@ export function detectPitchYINEstimate(
   }
 
   // 3. Absolute threshold + find first dip below threshold (limited)
-  const adaptiveThreshold = YIN_THRESHOLD * (1 - 0.35 * Math.min(1, stats.rms * 15));
   let tauEstimate = -1;
   for (let tau = minTau; tau < maxTau; tau++) {
-    if (yin[tau] < adaptiveThreshold) {
+    if (yin[tau] < YIN_THRESHOLD) {
       // search for local minimum
       while (tau + 1 < maxTau && yin[tau + 1] < yin[tau]) {
         tau++;

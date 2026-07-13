@@ -93,6 +93,7 @@ mod tests {
             ..NativeAudioConfig::default()
         };
         let mut processor = NativeFrameProcessor::new(config);
+        assert!(processor.process(&samples, sample_rate).freq.is_none());
         let frame = processor.process(&samples, sample_rate);
 
         assert!((frame.freq.expect("pitch") - 440.0).abs() < 2.0);
@@ -126,6 +127,7 @@ mod tests {
             .collect();
         let mut processor = NativeFrameProcessor::new(config);
 
+        assert!(processor.process(&samples, sample_rate).freq.is_none());
         let frame = processor.process(&samples, sample_rate);
         assert_eq!(frame.note, "A4");
         assert_eq!(

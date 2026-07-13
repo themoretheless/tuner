@@ -4,6 +4,7 @@ import { useL10n } from '../stores/l10n'
 
 const props = defineProps<{
   confidence?: number
+  detectedFreq: number | null
   display: string | null
   formatFreq: (n: number) => string
   isDetected: boolean
@@ -15,38 +16,30 @@ const props = defineProps<{
 const { t } = useL10n()
 const confidencePercent = computed(() => Math.round(Math.max(0, Math.min(1, props.confidence ?? 0)) * 100))
 
-// Non-breaking space: keeps placeholder rows at their normal line height (a
-// plain space collapses and the row would contribute zero height).
-const NBSP = ' '
 </script>
 
 <template>
-  <div class="text-center pt-2 pb-1 select-none" aria-live="polite">
-    <!-- Both states render the same three rows so detection flickering on
-         and off never changes the block height and shifts the layout below. -->
-    <div class="flex flex-col items-center">
-      <span
-        v-if="isDetected"
-        data-testid="detected-note"
-        class="note-letter text-emerald-400"
-      >{{ display }}</span>
-      <span v-else class="note-letter text-slate-700">—</span>
-      <div class="text-sm text-slate-400 mt-0.5">{{ isDetected ? t('detected') : NBSP }}</div>
-      <div class="mt-1 text-[10px] text-slate-500">
-        <template v-if="isDetected && (confidence != null || isPowerChord)">
-          <span v-if="confidence != null">conf {{ confidencePercent }}%</span>
-          <span v-if="isPowerChord" class="text-amber-400 ml-1">(power)</span>
-        </template>
-        <template v-else>&nbsp;</template>
-      </div>
+  <div
+    class="tuner-note select-none"
+    aria-live="polite"
+    :data-confidence="confidencePercent"
+  >
+    <div class="tuner-note-kicker">{{ isDetected ? t('detected') : t('target') }}</div>
+    <div
+      :data-testid="isDetected ? 'detected-note' : 'target-note'"
+      class="note-letter"
+      :class="{ detected: isDetected }"
+    >
+      {{ isDetected ? display : targetName }}
     </div>
-
-    <div class="mt-6">
-      <div class="uppercase text-xs text-slate-500">{{ t('target') }}</div>
-      <div class="text-4xl font-semibold tabular-nums mt-1 text-slate-100">
-        {{ targetName }}
-        <span class="text-lg align-super ml-0.5 text-slate-400">{{ formatFreq(targetFreq) }} Hz</span>
-      </div>
+    <div class="tuner-primary-frequency tabular-nums">
+      {{ formatFreq(isDetected && detectedFreq ? detectedFreq : targetFreq) }} Hz
+    </div>
+    <div class="tuner-note-meta">
+      <template v-if="isDetected">
+        <span>{{ t('target') }} {{ targetName }} · {{ formatFreq(targetFreq) }} Hz</span>
+        <span v-if="isPowerChord" class="power-indicator">{{ t('power.chord') }}</span>
+      </template>
     </div>
   </div>
 </template>

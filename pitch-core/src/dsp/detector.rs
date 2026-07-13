@@ -7,7 +7,7 @@ const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
 ///
 /// Confidence is a signal-quality score, not a probability: `0.0` means no
 /// usable periodic estimate and `1.0` means an ideal periodic frame.
-pub const MIN_USABLE_CONFIDENCE: f32 = 0.5;
+pub const MIN_USABLE_CONFIDENCE: f32 = 0.7;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PitchEstimate {
@@ -118,6 +118,10 @@ impl HybridPitchDetector {
 
     pub(crate) fn has_unconfirmed_octave_correction(&self) -> bool {
         self.octave.has_unconfirmed_correction()
+    }
+
+    pub(crate) fn reset_tracking_state(&mut self) {
+        self.octave.reset();
     }
 
     fn prepare_centered(&mut self, buffer: &[f32]) -> bool {

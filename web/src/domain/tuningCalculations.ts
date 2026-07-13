@@ -41,8 +41,9 @@ export function defaultTuningForInstrument(
 export function detectionRangeForStrings(
   strings: Note[],
   instrument: InstrumentId,
+  selectedString: Note | null = null,
 ): PitchDetectionRange {
-  const frequencies = strings
+  const frequencies = (selectedString ? [selectedString] : strings)
     .map((string) => string.frequency)
     .filter((frequency) => Number.isFinite(frequency) && frequency > 0);
   if (!frequencies.length) {

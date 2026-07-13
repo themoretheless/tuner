@@ -137,20 +137,20 @@ export function useTuningState(
   const strings = computed(() => baseStrings.value.map((string, index) => (
     applyCentsOffset(string, activeStringOffsets.value[index] ?? 0)
   )));
+  const selectedString = computed<Note | null>(() => {
+    if (selectedStringIndex.value == null) return null;
+    return strings.value[selectedStringIndex.value] ?? null;
+  });
   const detectionRange = computed<PitchDetectionRange>(() => detectionRangeForStrings(
     strings.value,
     activeInstrument.value,
+    selectedString.value,
   ));
   const temperamentOffsets = computed(() => temperamentOffsetsByNote(
     temperament.value,
     temperamentRoot.value,
     temperamentOptions.value,
   ));
-
-  const selectedString = computed<Note | null>(() => {
-    if (selectedStringIndex.value == null) return null;
-    return strings.value[selectedStringIndex.value] ?? null;
-  });
 
   // Detection dropping out clears the stickiness so the next note picks its
   // target fresh. Sync flush: the clear must not be skipped when a null is

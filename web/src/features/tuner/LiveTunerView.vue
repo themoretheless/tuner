@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { useLiveTunerPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
+import { Play, Square } from '@lucide/vue';
 import CentsGauge from '../../components/CentsGauge.vue';
 import DebugOverlay from '../../components/DebugOverlay.vue';
 import DisplayModeSelector from '../../components/DisplayModeSelector.vue';
 import FreqReadout from '../../components/FreqReadout.vue';
-import HzGauge from '../../components/HzGauge.vue';
 import InputDeviceSelector from '../../components/InputDeviceSelector.vue';
 import LevelMeter from '../../components/LevelMeter.vue';
 import MicButton from '../../components/MicButton.vue';
@@ -40,13 +40,6 @@ function toggleMic() {
     />
     <div class="live-panel card">
       <div class="sr-only" id="live-tuner-heading">{{ t('nav.tuner') }}</div>
-      <MicButton
-        :is-listening="tuner.isListening"
-        :status="tuner.sessionStatus"
-        @toggle="toggleMic"
-      />
-      <LevelMeter :level="tuner.volume" :active="tuner.isListening" />
-
       <div v-if="tuner.error" class="error-banner" role="alert">
         <span>{{ tuner.error }}</span>
         <button type="button" @click="tuner.clearError()">{{ t('dismiss') }}</button>
@@ -54,6 +47,7 @@ function toggleMic() {
 
       <NoteDisplay
         :confidence="tuner.detectionFrame.confidence"
+        :detected-freq="tuner.detectionFrame.freq"
         :display="tuner.currentNoteDisplay"
         :is-power-chord="tuner.detectionFrame.isPower"
         :is-detected="tuner.hasDetection"
@@ -66,13 +60,19 @@ function toggleMic() {
         :mode="tuner.displayMode"
         :is-in-tune="tuner.isInTune"
         :is-detected="tuner.hasDetection"
+        :is-listening="tuner.isListening"
       />
-      <HzGauge
-        :detected="tuner.detectionFrame.freq"
-        :target="tuner.targetNote.frequency"
-        :is-in-tune="tuner.isInTune"
-      />
-      <DisplayModeSelector :mode="tuner.displayMode" @change="tuner.setDisplayMode" />
+      <div class="tuner-input-row">
+        <MicButton
+          :is-listening="tuner.isListening"
+          :status="tuner.sessionStatus"
+          @toggle="toggleMic"
+        />
+        <div class="tuner-input-level">
+          <LevelMeter :level="tuner.volume" :active="tuner.isListening" />
+        </div>
+        <DisplayModeSelector :mode="tuner.displayMode" @change="tuner.setDisplayMode" />
+      </div>
     </div>
 
     <aside class="control-rail" :aria-label="t('quick.controls')">
@@ -136,11 +136,9 @@ function toggleMic() {
 
       <div class="command-row">
         <button type="button" class="btn btn-ghost" @click="tuner.toggleReferenceTone">
-          <span aria-hidden="true">{{ tuner.referencePlaying ? '■' : '▶' }}</span>
+          <Square v-if="tuner.referencePlaying" :size="15" fill="currentColor" aria-hidden="true" />
+          <Play v-else :size="16" fill="currentColor" aria-hidden="true" />
           <span>{{ t('play.reference') }}</span>
-        </button>
-        <button type="button" class="btn btn-primary" @click="toggleMic">
-          {{ tuner.isListening ? t('stop.mic') : t('start.mic') }}
         </button>
       </div>
     </aside>

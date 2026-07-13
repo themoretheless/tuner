@@ -91,8 +91,8 @@ describe('PitchCoreAdapter', () => {
       backend: 'typescript',
       frame: {
         cents: 0,
-        confidence: 0.72,
-        freq: 220,
+        confidence: 0,
+        freq: null,
         rawFreq: 220,
         inTune: false,
         isPower: false,
@@ -103,7 +103,9 @@ describe('PitchCoreAdapter', () => {
       },
       semantics: 'unresolved',
     });
-    await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    expect(confirmed.frame.freq).toBeCloseTo(220);
+    expect(confirmed.frame.confidence).toBe(0.72);
 
     expect(loadModule).toHaveBeenCalledOnce();
     expect(fallback).toHaveBeenCalledTimes(2);
@@ -133,9 +135,11 @@ describe('PitchCoreAdapter', () => {
 
     const first = await adapter.process(BUFFER, 48_000, STATS, RANGE);
     expect(first.backend).toBe('typescript');
-    expect(first.frame.freq).toBeCloseTo(82.4069);
-    expect(first.frame.confidence).toBe(0.64);
-    await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    expect(first.frame.freq).toBeNull();
+    expect(first.frame.confidence).toBe(0);
+    const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    expect(confirmed.frame.freq).toBeCloseTo(82.4069);
+    expect(confirmed.frame.confidence).toBe(0.64);
 
     expect(process).toHaveBeenCalledOnce();
     expect(processorFree).toHaveBeenCalledOnce();

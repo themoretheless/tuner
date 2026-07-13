@@ -1,12 +1,12 @@
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
-  FrequencySmoother,
   normalizeLevel,
   type PitchDetectionRange,
   type PitchEstimate,
   type SignalStats,
 } from '../utils/pitch';
+import { StreamingPitchTracker } from '../utils/pitchTracking';
 import {
   applyFrameContext,
   readWasmFrame,
@@ -37,7 +37,7 @@ export type FallbackPitchDetector = (
 
 export class PitchCoreAdapter {
   private readonly fallback: FallbackPitchDetector;
-  private readonly fallbackSmoother = new FrequencySmoother();
+  private readonly fallbackTracker = new StreamingPitchTracker();
   private lastMaxFrequency: number | null = null;
   private lastMinFrequency: number | null = null;
   private readonly loadModule: PitchCoreModuleLoader;
@@ -62,6 +62,7 @@ export class PitchCoreAdapter {
     frameContext?: FrameContext,
   ): Promise<WorkerPitchFrame> {
     const rangeChanged = this.updateRange(range);
+    if (frameContext) this.fallbackTracker.setContext(frameContext);
     const processor = await this.getProcessor();
     if (!processor) return this.fallbackFrame(buffer, sampleRate, stats, range);
 
@@ -73,7 +74,7 @@ export class PitchCoreAdapter {
 
       const wasmFrame = processor.process(buffer, sampleRate);
       try {
-        this.fallbackSmoother.reset();
+        this.fallbackTracker.reset();
         return {
           backend: 'wasm',
           frame: readWasmFrame(wasmFrame),
@@ -93,13 +94,13 @@ export class PitchCoreAdapter {
     this.processorPromise = null;
     this.lastMinFrequency = null;
     this.lastMaxFrequency = null;
-    this.fallbackSmoother.reset();
+    this.fallbackTracker.reset();
     const processor = await pending?.catch(() => null);
     processor?.free();
   }
 
   async reset(): Promise<void> {
-    this.fallbackSmoother.reset();
+    this.fallbackTracker.reset();
     const processor = await this.processorPromise?.catch(() => null);
     processor?.reset();
   }
@@ -122,7 +123,7 @@ export class PitchCoreAdapter {
 
   private disableProcessor(processor: StatefulWasmTunerProcessor) {
     this.processorPromise = Promise.resolve(null);
-    this.fallbackSmoother.reset();
+    this.fallbackTracker.reset();
     processor.free();
   }
 
@@ -133,12 +134,12 @@ export class PitchCoreAdapter {
     range: PitchDetectionRange,
   ): WorkerPitchFrame {
     const estimate = this.fallback(buffer, sampleRate, stats, range);
-    const frequency = this.fallbackSmoother.add(estimate?.frequency ?? null);
+    const tracked = this.fallbackTracker.update(estimate, stats);
     return {
       backend: 'typescript',
       frame: createUnresolvedDetectionFrame({
-        confidence: frequency == null ? 0 : estimate?.confidence,
-        freq: frequency,
+        confidence: tracked?.confidence ?? 0,
+        freq: tracked?.frequency ?? null,
         rawFreq: estimate?.frequency ?? null,
         level: normalizeLevel(stats.rms),
         rms: stats.rms,
@@ -153,7 +154,7 @@ export class PitchCoreAdapter {
     if (changed) {
       this.lastMinFrequency = range.minFrequency;
       this.lastMaxFrequency = range.maxFrequency;
-      this.fallbackSmoother.reset();
+      this.fallbackTracker.reset();
     }
     return changed;
   }
