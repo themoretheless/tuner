@@ -34,6 +34,7 @@ impl NativeFrameProcessor {
                 a4: config.context.a4,
                 detector,
                 frame_context: Some(config.context.to_core()),
+                pipeline: config.pipeline.to_core(),
                 spectrum_bins: 0,
                 tuning: Some(Tuning {
                     name: "Chromatic",
@@ -54,6 +55,9 @@ impl NativeFrameProcessor {
         if config.context != self.config.context {
             self.engine
                 .set_frame_context(Some(config.context.to_core()));
+        }
+        if config.pipeline != self.config.pipeline {
+            self.engine.set_pipeline_config(config.pipeline.to_core());
         }
         self.config = config;
     }
@@ -77,7 +81,7 @@ impl NativeFrameProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native_audio::config::{NativeAudioRange, NativeFrameContext};
+    use crate::native_audio::config::{NativeAudioRange, NativeFrameContext, NativePipelineConfig};
 
     #[test]
     fn processor_uses_shared_pitch_core() {
@@ -116,6 +120,7 @@ mod tests {
                 selected_target: Some(target),
                 ..NativeFrameContext::default()
             },
+            pipeline: Default::default(),
             range: NativeAudioRange {
                 min_frequency: 400.0,
                 max_frequency: 500.0,
@@ -136,6 +141,34 @@ mod tests {
         );
         assert!(frame.cents < -7.0);
         assert!(!frame.in_tune);
+    }
+
+    #[test]
+    fn processor_applies_pipeline_configuration() {
+        let config = NativeAudioConfig {
+            pipeline: NativePipelineConfig {
+                adaptive_gate_enabled: false,
+                harmonic_enabled: false,
+                hold_enabled: false,
+                octave_enabled: false,
+                power_chord_enabled: false,
+                tracking_enabled: false,
+                ..NativePipelineConfig::default()
+            },
+            range: NativeAudioRange {
+                min_frequency: 180.0,
+                max_frequency: 260.0,
+            },
+            ..NativeAudioConfig::default()
+        };
+        let sample_rate = 48_000.0;
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| (std::f32::consts::TAU * 220.0 * index as f32 / sample_rate).sin())
+            .collect();
+        let mut processor = NativeFrameProcessor::new(config);
+
+        let frame = processor.process(&samples, sample_rate);
+        assert!((frame.freq.expect("raw pitch") - 220.0).abs() < 1.0);
     }
 
     #[test]

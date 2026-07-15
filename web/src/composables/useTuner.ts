@@ -9,6 +9,13 @@ import { useTuningState } from './useTuningState';
 import { useVisualizationFrames } from './useVisualizationFrames';
 import { summarizePractice } from '../domain/practice';
 import { createFrameContext } from '../domain/frameContext';
+import {
+  pipelinePresetConfig,
+  resolvePipelinePreset,
+  updatePipelineBlock,
+  type PipelineBlockId,
+  type PipelinePresetId,
+} from '../domain/pipelineConfig';
 import type { DetectionFrame } from '../types/frames';
 import { decodeUserProfile } from '../settings/profileCodec';
 import type { AudioBackend, DisplayMode, LayoutMode, PracticeHistoryEntry, ThemeMode } from '../utils/settingsStorage';
@@ -17,6 +24,7 @@ export function useTuner() {
   const settings = useSettings();
   const session = useTunerSession({
     audioBackend: settings.audioBackend,
+    pipelineConfig: settings.pipelineConfig,
     selectedInputDeviceId: settings.selectedInputDeviceId,
   });
   const detectedFrequency = computed(() => session.detectionFrame.value.freq);
@@ -60,6 +68,7 @@ export function useTuner() {
     settings.metronomeSubdivision,
   );
   const practiceSummary = computed(() => summarizePractice(settings.practiceHistory.value));
+  const pipelinePreset = computed(() => resolvePipelinePreset(settings.pipelineConfig.value));
   const shouldCaptureVisualizationFrames = computed(() => (
     !session.usingNativeAudio.value &&
     !session.usingSyntheticAudio.value &&
@@ -153,6 +162,18 @@ export function useTuner() {
     }, null, 2);
   }
 
+  function setPipelineBlock(block: PipelineBlockId, enabled: boolean) {
+    settings.pipelineConfig.value = updatePipelineBlock(
+      settings.pipelineConfig.value,
+      block,
+      enabled,
+    );
+  }
+
+  function applyPipelinePreset(preset: PipelinePresetId) {
+    settings.pipelineConfig.value = pipelinePresetConfig(preset);
+  }
+
   async function importUserProfile(payload: string) {
     if (!decodeUserProfile(payload)) return false;
     const currentStatus = session.status.value;
@@ -211,6 +232,8 @@ export function useTuner() {
     metronomeSubdivisionStep: metronome.subdivisionStep,
     practiceHistory: settings.practiceHistory,
     practiceSummary,
+    pipelineConfig: settings.pipelineConfig,
+    pipelinePreset,
     sweeteningProfile: tuning.sweeteningProfile,
     nativeAudioAvailable: session.nativeAudioAvailable,
     syntheticAudioFixture: session.syntheticAudioFixture,
@@ -252,6 +275,8 @@ export function useTuner() {
     setMetronomeBeats: metronome.setBeats,
     setMetronomeBpm: metronome.setBpm,
     setMetronomeSubdivision: metronome.setSubdivision,
+    setPipelineBlock,
+    applyPipelinePreset,
     setInstrument: tuning.setInstrument,
     setStringOffset: tuning.setStringOffset,
     setSweeteningProfile: tuning.setSweeteningProfile,

@@ -1,12 +1,18 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import { cloneFrameContext } from '../domain/frameContext';
+import {
+  createDefaultPipelineConfig,
+  normalizePipelineConfig,
+  type PipelineConfig,
+} from '../domain/pipelineConfig';
 import type { AudioFrame } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
   computeSignalStats,
   detectPitchEstimate,
+  isBelowPitchDetectionGate,
   normalizeLevel,
   type PitchDetectionRange,
   type PitchEstimate,
@@ -32,6 +38,7 @@ export function usePitchLoop(
   readFrame: () => AudioFrame | null,
   detectionRange: Ref<PitchDetectionRange> = ref(DEFAULT_PITCH_DETECTION_RANGE),
   frameContext?: Ref<FrameContext>,
+  pipelineConfig: Ref<PipelineConfig> = ref(createDefaultPipelineConfig()),
 ) {
   const detectionFrame = ref<DetectionFrame>(createUnresolvedDetectionFrame());
   const detectorBackend = ref<PitchDetectorBackend>('typescript');
@@ -49,11 +56,14 @@ export function usePitchLoop(
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
   let pendingPitchRequestId: number | null = null;
+  let pipelineRevision = 0;
   let sentContextRevision = -1;
+  let sentPipelineRevision = -1;
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
   let quietTicks = 0;
   const fallbackTracker = new StreamingPitchTracker();
+  fallbackTracker.setPipelineConfig(pipelineConfig.value);
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
   function ensurePitchWorker() {
@@ -62,6 +72,7 @@ export function usePitchLoop(
 
     pitchWorker = new Worker(new URL('../workers/pitchWorker.ts', import.meta.url), { type: 'module' });
     sentContextRevision = -1;
+    sentPipelineRevision = -1;
     pitchWorker.onmessage = (event: MessageEvent<{
       backend: PitchDetectorBackend;
       buffer: ArrayBuffer;
@@ -89,6 +100,7 @@ export function usePitchLoop(
       pitchWorker?.terminate();
       pitchWorker = null;
       sentContextRevision = -1;
+      sentPipelineRevision = -1;
       workerTransferBuffer = null;
     };
     return pitchWorker;
@@ -99,6 +111,7 @@ export function usePitchLoop(
     pitchWorker = null;
     pendingPitchRequestId = null;
     sentContextRevision = -1;
+    sentPipelineRevision = -1;
     workerTransferBuffer = null;
     pitchRequestId += 1;
   }
@@ -111,6 +124,12 @@ export function usePitchLoop(
     pitchRequestId += 1;
     quietTicks = 0;
     fallbackTracker.reset();
+    resetWorkerProcessor();
+  }
+
+  function resetWorkerProcessor() {
+    sentContextRevision = -1;
+    sentPipelineRevision = -1;
     pitchWorker?.postMessage({ type: 'reset' });
   }
 
@@ -137,7 +156,8 @@ export function usePitchLoop(
     volume.value = normalizeLevel(stats.rms);
 
     const now = performance.now();
-    const signalTooQuiet = stats.rms < 0.002 || stats.maxAbs < 0.01;
+    const signalTooQuiet = pipelineConfig.value.fixedGateEnabled
+      && isBelowPitchDetectionGate(stats);
     if (signalTooQuiet) {
       // Hold the current reading through brief dips (a decaying string
       // crossing the gate): skip detection, keep the last frame on screen,
@@ -145,10 +165,13 @@ export function usePitchLoop(
       // reset makes sure the next note starts from a clean smoother instead
       // of blending with the note that just ended.
       quietTicks += 1;
-      if (quietTicks >= QUIET_TICKS_BEFORE_CLEAR) {
-        if (quietTicks === QUIET_TICKS_BEFORE_CLEAR) {
-          pitchWorker?.postMessage({ type: 'reset' });
-        }
+      const shouldClear = !pipelineConfig.value.holdEnabled
+        || quietTicks >= QUIET_TICKS_BEFORE_CLEAR;
+      if (shouldClear) {
+        const resetAt = pipelineConfig.value.holdEnabled
+          ? QUIET_TICKS_BEFORE_CLEAR
+          : 1;
+        if (quietTicks === resetAt) resetWorkerProcessor();
         pitchRequestId += 1;
         applyFallbackEstimate(null, stats);
       }
@@ -173,7 +196,14 @@ export function usePitchLoop(
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
       applyFallbackEstimate(
-        detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range, fallbackPitchGuidance),
+        detectPitchEstimate(
+          frame.buffer,
+          frame.sampleRate,
+          stats,
+          range,
+          fallbackPitchGuidance,
+          pipelineConfig.value,
+        ),
         stats,
       );
       return;
@@ -189,12 +219,16 @@ export function usePitchLoop(
     new Float32Array(buffer).set(frame.buffer);
     workerTransferBuffer = null;
     const shouldSendContext = frameContext && sentContextRevision !== contextRevision;
+    const shouldSendPipeline = sentPipelineRevision !== pipelineRevision;
     try {
       worker.postMessage({
         type: 'process',
         id: pitchRequestId,
         buffer,
         frameContext: shouldSendContext ? cloneFrameContext(frameContext.value) : undefined,
+        pipelineConfig: shouldSendPipeline
+          ? normalizePipelineConfig(pipelineConfig.value)
+          : undefined,
         range,
         sampleRate: frame.sampleRate,
         stats: {
@@ -204,6 +238,7 @@ export function usePitchLoop(
         wasmModuleUrl,
       }, [buffer]);
       if (shouldSendContext) sentContextRevision = contextRevision;
+      if (shouldSendPipeline) sentPipelineRevision = pipelineRevision;
     } catch {
       pendingPitchRequestId = null;
       detectorBackend.value = 'typescript';
@@ -212,9 +247,17 @@ export function usePitchLoop(
       worker.terminate();
       pitchWorker = null;
       sentContextRevision = -1;
+      sentPipelineRevision = -1;
       workerTransferBuffer = null;
       applyFallbackEstimate(
-        detectPitchEstimate(frame.buffer, frame.sampleRate, stats, range, fallbackPitchGuidance),
+        detectPitchEstimate(
+          frame.buffer,
+          frame.sampleRate,
+          stats,
+          range,
+          fallbackPitchGuidance,
+          pipelineConfig.value,
+        ),
         stats,
       );
     }
@@ -253,6 +296,11 @@ export function usePitchLoop(
       reset();
     }, { deep: true });
   }
+  watch(pipelineConfig, (config) => {
+    fallbackTracker.setPipelineConfig(config);
+    pipelineRevision += 1;
+    reset();
+  }, { deep: true });
 
   return {
     confidence,

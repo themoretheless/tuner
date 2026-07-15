@@ -27,6 +27,10 @@ describe('versioned user profile', () => {
       a4: 900,
       metronomeBpm: -2,
       practiceHistory: [{ at: Number.NaN, correct: true, note: 'A4' }],
+      pipelineConfig: {
+        yinEnabled: false,
+        secondaryDetectorEnabled: false,
+      } as never,
       showSpectrogram: 'yes' as unknown as boolean,
       themeMode: 'unknown' as 'dark',
     });
@@ -34,6 +38,8 @@ describe('versioned user profile', () => {
     expect(normalized.a4).toBe(460);
     expect(normalized.metronomeBpm).toBe(30);
     expect(normalized.practiceHistory).toEqual([]);
+    expect(normalized.pipelineConfig.yinEnabled).toBe(true);
+    expect(normalized.pipelineConfig.secondaryDetectorEnabled).toBe(false);
     expect(normalized.showSpectrogram).toBe(false);
     expect(normalized.themeMode).toBe('dark');
   });

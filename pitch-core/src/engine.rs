@@ -1,7 +1,7 @@
 use crate::{gate::AdaptiveSignalGate, tracking::PitchTracker};
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
-    FrameContext, FrameResolver, HybridPitchDetector, SpectrumAnalyzer, Tuning,
+    FrameContext, FrameResolver, HybridPitchDetector, PipelineConfig, SpectrumAnalyzer, Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -21,6 +21,7 @@ pub struct EngineConfig {
     pub a4: f32,
     pub detector: DetectorConfig,
     pub frame_context: Option<FrameContext>,
+    pub pipeline: PipelineConfig,
     pub tuning: Option<Tuning>,
     pub spectrum_fft_size: usize,
     pub spectrum_bins: usize,
@@ -32,6 +33,7 @@ impl Default for EngineConfig {
             a4: 440.0,
             detector: DetectorConfig::default(),
             frame_context: None,
+            pipeline: PipelineConfig::default(),
             tuning: None,
             spectrum_fft_size: DEFAULT_SPECTRUM_FFT_SIZE,
             spectrum_bins: DEFAULT_SPECTRUM_BINS,
@@ -47,6 +49,7 @@ pub struct TunerEngine {
     spectrum_bins: usize,
     spectrum_fft_size: usize,
     rms_gate: f32,
+    pipeline: PipelineConfig,
     tracker: PitchTracker,
     hold_streak: u8,
     held_reading: Option<(f32, f32)>,
@@ -65,6 +68,7 @@ impl TunerEngine {
             a4,
             detector,
             frame_context,
+            pipeline,
             tuning,
             spectrum_fft_size,
             spectrum_bins,
@@ -81,8 +85,11 @@ impl TunerEngine {
                 name: "Chromatic",
                 strings: Vec::new(),
             });
+        let pipeline = pipeline.normalized();
+        let mut pitch_detector = HybridPitchDetector::new(detector);
+        pitch_detector.set_pipeline_config(pipeline);
         Self {
-            detector: HybridPitchDetector::new(detector),
+            detector: pitch_detector,
             gate: AdaptiveSignalGate::new(detector.rms_gate, detector.peak_gate),
             resolver: FrameResolver::new(a4, tuning, frame_context),
             spectrum: (spectrum_bins > 0)
@@ -90,6 +97,7 @@ impl TunerEngine {
             spectrum_bins: configured_spectrum_bins,
             spectrum_fft_size,
             rms_gate: detector.rms_gate,
+            pipeline,
             tracker: PitchTracker::new(),
             hold_streak: 0,
             held_reading: None,
@@ -130,6 +138,16 @@ impl TunerEngine {
         self.reset_pipeline();
     }
 
+    pub fn set_pipeline_config(&mut self, pipeline: PipelineConfig) {
+        let pipeline = pipeline.normalized();
+        if self.pipeline == pipeline {
+            return;
+        }
+        self.pipeline = pipeline;
+        self.detector.set_pipeline_config(pipeline);
+        self.reset_pipeline();
+    }
+
     pub fn set_spectrum_enabled(&mut self, enabled: bool) {
         match (enabled, self.spectrum.is_some()) {
             (true, false) => {
@@ -167,8 +185,9 @@ impl TunerEngine {
             estimate = None;
         }
 
-        let gate_open =
-            self.gate
+        let gate_open = !self.pipeline.adaptive_gate_enabled
+            || self
+                .gate
                 .observe(signal_stats, gate_estimate, self.resolver.tracking_prior());
 
         // Track only coherent estimates. Brief detector dropouts ride on the
@@ -184,18 +203,23 @@ impl TunerEngine {
                 // wrong. Start a fresh track at the corrected octave.
                 self.clear_tracking();
             }
-            let tracked = self
-                .tracker
-                .update(estimate, self.resolver.tracking_prior());
-            if let Some(tracked) = tracked {
+            let tracked = if self.pipeline.tracking_enabled {
+                self.tracker
+                    .update(estimate, self.resolver.tracking_prior())
+                    .map(|tracked| (tracked.frequency, tracked.confidence))
+            } else {
+                Some((estimate.frequency, estimate.confidence))
+            };
+            if let Some((tracked_frequency, tracked_confidence)) = tracked {
                 self.hold_streak = 0;
-                self.held_reading = Some((tracked.frequency, tracked.confidence));
-                (Some(tracked.frequency), tracked.confidence)
+                self.held_reading = Some((tracked_frequency, tracked_confidence));
+                (Some(tracked_frequency), tracked_confidence)
             } else {
                 self.held_reading = None;
                 (None, 0.0)
             }
-        } else if signal_stats.rms >= self.rms_gate
+        } else if self.pipeline.hold_enabled
+            && signal_stats.rms >= self.rms_gate
             && self.held_reading.is_some()
             && self.hold_streak < DETECTION_HOLD_FRAMES
         {
@@ -208,8 +232,10 @@ impl TunerEngine {
             (None, 0.0)
         };
 
-        let is_power = if let Some(f) = freq_opt {
-            is_likely_power_chord_native(buffer, sample_rate, f)
+        let is_power = if self.pipeline.power_chord_enabled {
+            freq_opt.is_some_and(|frequency| {
+                is_likely_power_chord_native(buffer, sample_rate, frequency)
+            })
         } else {
             false
         };

@@ -1,4 +1,9 @@
 import { createDefaultFrameContext } from '../domain/frameContext';
+import {
+  createDefaultPipelineConfig,
+  normalizePipelineConfig,
+  type PipelineConfig,
+} from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import { NOTE_NAMES, type Note, type NoteName } from '../utils/notes';
 import {
@@ -20,12 +25,14 @@ export interface NativeAudioFramePayload {
 
 export interface NativeAudioConfiguration {
   context: FrameContext;
+  pipeline: PipelineConfig;
   range: PitchDetectionRange;
 }
 
 export function createNativeAudioConfiguration(): NativeAudioConfiguration {
   return {
     context: createDefaultFrameContext(),
+    pipeline: createDefaultPipelineConfig(),
     range: { ...DEFAULT_PITCH_DETECTION_RANGE },
   };
 }
@@ -47,6 +54,13 @@ export function withNativeFrameContext(
   return { ...configuration, context };
 }
 
+export function withNativePipelineConfig(
+  configuration: NativeAudioConfiguration,
+  pipeline: PipelineConfig,
+): NativeAudioConfiguration {
+  return { ...configuration, pipeline: normalizePipelineConfig(pipeline) };
+}
+
 export function cloneNativeAudioConfiguration(
   configuration: NativeAudioConfiguration,
 ): NativeAudioConfiguration {
@@ -58,6 +72,7 @@ export function cloneNativeAudioConfiguration(
       selectedTarget: configuration.context.selectedTarget && copyNote(configuration.context.selectedTarget),
       tuningTargets: configuration.context.tuningTargets.map(copyNote),
     },
+    pipeline: { ...configuration.pipeline },
     range: { ...configuration.range },
   };
 }

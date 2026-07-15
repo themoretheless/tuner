@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
 import { useTunerSession } from '../src/composables/useTunerSession';
+import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
 import type { AudioBackend } from '../src/utils/settingsStorage';
@@ -72,5 +73,32 @@ describe('useTunerSession', () => {
     expect(session.detectedFrequency.value).toBeNull();
     expect(session.detectionFrame.value.freq).toBeNull();
     expect(session.detectionFrame.value.level).toBe(0);
+  });
+
+  it('lets the raw pipeline analyze frames below the fixed signal gate', async () => {
+    const session = useTunerSession({
+      audioBackend: ref<AudioBackend>('web'),
+      pipelineConfig: ref(pipelinePresetConfig('raw')),
+      selectedInputDeviceId: ref(''),
+      syntheticFixture: {
+        id: 'quiet-e2',
+        label: 'Quiet E2',
+        frequency: 82.4069,
+        sampleRate: 44_100,
+        gain: 0.006,
+      },
+    });
+
+    await session.start({ minFrequency: 60, maxFrequency: 120 });
+    for (let i = 0; i < 4; i += 1) {
+      await vi.runOnlyPendingTimersAsync();
+      await nextTick();
+    }
+
+    expect(session.detectionFrame.value.rms).toBeGreaterThan(0.002);
+    expect(session.detectionFrame.value.freq).not.toBeNull();
+    expect(Math.abs(session.detectionFrame.value.freq! - 82.4069)).toBeLessThan(1.5);
+
+    await session.stop();
   });
 });

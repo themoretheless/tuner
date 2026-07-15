@@ -1,4 +1,9 @@
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import {
+  createDefaultPipelineConfig,
+  normalizePipelineConfig,
+  type PipelineConfig,
+} from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   normalizeLevel,
@@ -10,6 +15,7 @@ import {
 import { StreamingPitchTracker } from '../utils/pitchTracking';
 import {
   applyFrameContext,
+  applyPipelineConfig,
   readWasmFrame,
   type StatefulWasmTunerProcessor,
 } from './pitchFrameCodec';
@@ -35,6 +41,7 @@ export type FallbackPitchDetector = (
   stats: SignalStats,
   range: PitchDetectionRange,
   guidance?: PitchGuidance,
+  pipelineConfig?: PipelineConfig,
 ) => PitchEstimate | null;
 
 export class PitchCoreAdapter {
@@ -45,6 +52,7 @@ export class PitchCoreAdapter {
   private lastMinFrequency: number | null = null;
   private readonly loadModule: PitchCoreModuleLoader;
   private readonly moduleUrl: string;
+  private pipelineConfig = createDefaultPipelineConfig();
   private processorPromise: Promise<StatefulWasmTunerProcessor | null> | null = null;
 
   constructor(
@@ -63,8 +71,14 @@ export class PitchCoreAdapter {
     stats: SignalStats,
     range: PitchDetectionRange,
     frameContext?: FrameContext,
+    pipelineConfig?: PipelineConfig,
   ): Promise<WorkerPitchFrame> {
     const rangeChanged = this.updateRange(range);
+    const pipelineChanged = pipelineConfig != null;
+    if (pipelineConfig) {
+      this.pipelineConfig = normalizePipelineConfig(pipelineConfig);
+      this.fallbackTracker.setPipelineConfig(this.pipelineConfig);
+    }
     if (frameContext) {
       this.fallbackGuidance = guidanceFromContext(frameContext);
       this.fallbackTracker.setContext(frameContext);
@@ -77,6 +91,7 @@ export class PitchCoreAdapter {
         processor.set_frequency_range(range.minFrequency, range.maxFrequency);
       }
       if (frameContext) applyFrameContext(processor, frameContext);
+      if (pipelineChanged) applyPipelineConfig(processor, this.pipelineConfig);
 
       const wasmFrame = processor.process(buffer, sampleRate);
       try {
@@ -101,6 +116,7 @@ export class PitchCoreAdapter {
     this.lastMinFrequency = null;
     this.lastMaxFrequency = null;
     this.fallbackGuidance = undefined;
+    this.pipelineConfig = createDefaultPipelineConfig();
     this.fallbackTracker.reset();
     const processor = await pending?.catch(() => null);
     processor?.free();
@@ -140,7 +156,14 @@ export class PitchCoreAdapter {
     stats: SignalStats,
     range: PitchDetectionRange,
   ): WorkerPitchFrame {
-    const estimate = this.fallback(buffer, sampleRate, stats, range, this.fallbackGuidance);
+    const estimate = this.fallback(
+      buffer,
+      sampleRate,
+      stats,
+      range,
+      this.fallbackGuidance,
+      this.pipelineConfig,
+    );
     const tracked = this.fallbackTracker.update(estimate, stats);
     return {
       backend: 'typescript',

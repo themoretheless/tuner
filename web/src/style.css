@@ -887,7 +887,7 @@ summary:focus-visible {
   .app-tabs button {
     min-width: 0;
     padding: 0 3px;
-    flex: 1 1 25%;
+    flex: 1 1 20%;
     font-size: 0.7rem;
   }
 

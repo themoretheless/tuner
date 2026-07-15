@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDefaultFrameContext } from '../src/domain/frameContext';
+import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { StreamingPitchTracker } from '../src/utils/pitchTracking';
 
 const loud = { maxAbs: 0.08, rms: 0.02 };
 
 describe('streaming pitch fallback', () => {
+  it('publishes the first estimate immediately in the raw preset', () => {
+    const tracker = new StreamingPitchTracker();
+    tracker.setPipelineConfig(pipelinePresetConfig('raw'));
+
+    expect(tracker.update(
+      { confidence: 0.9, frequency: 82.4069 },
+      { maxAbs: 0.1, rms: 0.03 },
+    )?.frequency).toBeCloseTo(82.4069);
+  });
+
   it('waits for a coherent pitch instead of blending attack estimates', () => {
     const tracker = new StreamingPitchTracker();
     expect(tracker.update({ confidence: 0.82, frequency: 67 }, loud)).toBeNull();

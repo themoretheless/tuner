@@ -30,6 +30,7 @@ const leftHanded = ref(defaults.leftHanded);
 const metronomeBeats = ref(defaults.metronomeBeats);
 const metronomeBpm = ref(defaults.metronomeBpm);
 const metronomeSubdivision = ref(defaults.metronomeSubdivision);
+const pipelineConfig = ref(defaults.pipelineConfig);
 const practiceHistory = ref<PracticeHistoryEntry[]>([]);
 const selectedInputDeviceId = ref(defaults.selectedInputDeviceId);
 const showSpectrogram = ref(defaults.showSpectrogram);
@@ -113,6 +114,7 @@ function applySettings(value: Partial<PersistedSettings>) {
   metronomeBeats.value = settings.metronomeBeats;
   metronomeBpm.value = settings.metronomeBpm;
   metronomeSubdivision.value = settings.metronomeSubdivision;
+  pipelineConfig.value = settings.pipelineConfig;
   practiceHistory.value = settings.practiceHistory;
   selectedInputDeviceId.value = settings.selectedInputDeviceId;
   showSpectrogram.value = settings.showSpectrogram;
@@ -144,6 +146,7 @@ function snapshotSettings(): PersistedSettings {
     metronomeBeats: metronomeBeats.value,
     metronomeBpm: metronomeBpm.value,
     metronomeSubdivision: metronomeSubdivision.value,
+    pipelineConfig: pipelineConfig.value,
     practiceHistory: practiceHistory.value,
     selectedInputDeviceId: selectedInputDeviceId.value,
     showSpectrogram: showSpectrogram.value,
@@ -188,6 +191,7 @@ function ensureWatcher() {
       metronomeBeats,
       metronomeBpm,
       metronomeSubdivision,
+      pipelineConfig,
       practiceHistory,
       selectedInputDeviceId,
       showSpectrogram,
@@ -228,6 +232,7 @@ export function useSettings() {
     metronomeBeats,
     metronomeBpm,
     metronomeSubdivision,
+    pipelineConfig,
     practiceHistory,
     save,
     selectedInputDeviceId,

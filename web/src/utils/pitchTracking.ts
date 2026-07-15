@@ -1,4 +1,10 @@
 import type { FrameContext } from '../types/frames';
+import {
+  createDefaultPipelineConfig,
+  normalizePipelineConfig,
+  pipelineConfigsEqual,
+  type PipelineConfig,
+} from '../domain/pipelineConfig';
 import type { PitchEstimate, SignalStats } from './pitch';
 
 const BASE_RMS = 0.0025;
@@ -22,6 +28,7 @@ export class StreamingPitchTracker {
   private history: number[] = [];
   private missingFrames = 0;
   private noiseFloor = BASE_RMS;
+  private pipelineConfig = createDefaultPipelineConfig();
   private pendingConfidence = 0;
   private pendingLog: number | null = null;
   private pendingStreak = 0;
@@ -48,15 +55,26 @@ export class StreamingPitchTracker {
     this.reset();
   }
 
+  setPipelineConfig(config: PipelineConfig) {
+    const normalized = normalizePipelineConfig(config);
+    if (pipelineConfigsEqual(this.pipelineConfig, normalized)) return;
+    this.pipelineConfig = normalized;
+    this.reset();
+  }
+
   update(estimate: PitchEstimate | null, stats: SignalStats): PitchEstimate | null {
     const resolvedEstimate = this.resolveEstimate(estimate);
-    if (!this.observeGate(stats, resolvedEstimate)) {
+    const gateOpen = !this.pipelineConfig.adaptiveGateEnabled
+      || this.observeGate(stats, resolvedEstimate);
+    if (!gateOpen) {
       this.resetTrack();
       return null;
     }
     if (!resolvedEstimate) {
       this.missingFrames += 1;
-      if (this.missingFrames <= HOLD_FRAMES) return this.current();
+      if (this.pipelineConfig.holdEnabled && this.missingFrames <= HOLD_FRAMES) {
+        return this.current();
+      }
       this.resetTrack();
       return null;
     }
@@ -64,6 +82,15 @@ export class StreamingPitchTracker {
     this.missingFrames = 0;
     const candidate = Math.log2(resolvedEstimate.frequency);
     if (!Number.isFinite(candidate)) return this.current();
+
+    if (!this.pipelineConfig.trackingEnabled) {
+      this.stableLog = candidate;
+      this.stableConfidence = resolvedEstimate.confidence;
+      this.history = [candidate];
+      this.clearPending();
+      this.unstableFrames = 0;
+      return this.current();
+    }
 
     if (this.stableLog == null) {
       this.updatePending(candidate, resolvedEstimate.confidence, ACQUIRE_CENTS);
@@ -175,7 +202,9 @@ export class StreamingPitchTracker {
 
   private resolveEstimate(estimate: PitchEstimate | null): PitchEstimate | null {
     if (!estimate) return null;
-    const frequency = this.correctOctave(estimate.frequency);
+    const frequency = this.pipelineConfig.octaveEnabled
+      ? this.correctOctave(estimate.frequency)
+      : estimate.frequency;
     const distance = this.directTargetDistance(frequency);
     if (distance == null) return { ...estimate, frequency };
     const limit = this.selectedTarget != null

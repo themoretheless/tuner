@@ -149,15 +149,38 @@ function createAnalysisPort(root: TunerRoot) {
   });
 }
 
+function createPipelinePort(root: TunerRoot) {
+  return reactive({
+    config: root.pipelineConfig,
+    detectionFrame: root.detectionFrame,
+    detectorBackend: root.detectorBackend,
+    error: root.error,
+    formatFreq: root.formatFreq,
+    getNoteDisplay: root.getNoteDisplay,
+    hasDetection: root.hasDetection,
+    isListening: root.isListening,
+    preset: root.pipelinePreset,
+    sessionStatus: root.sessionStatus,
+    targetNote: root.targetNote,
+    applyPreset: root.applyPipelinePreset,
+    clearError: root.clearError,
+    setBlock: root.setPipelineBlock,
+    start: root.start,
+    stop: root.stop,
+  });
+}
+
 export type LiveTunerPort = UnwrapNestedRefs<ReturnType<typeof createLiveTunerPort>>;
 export type LibraryPort = UnwrapNestedRefs<ReturnType<typeof createLibraryPort>>;
 export type PracticePort = UnwrapNestedRefs<ReturnType<typeof createPracticePort>>;
 export type AnalysisPort = UnwrapNestedRefs<ReturnType<typeof createAnalysisPort>>;
+export type PipelinePort = UnwrapNestedRefs<ReturnType<typeof createPipelinePort>>;
 
 const liveTunerKey: InjectionKey<LiveTunerPort> = Symbol('live-tuner-port');
 const libraryKey: InjectionKey<LibraryPort> = Symbol('library-port');
 const practiceKey: InjectionKey<PracticePort> = Symbol('practice-port');
 const analysisKey: InjectionKey<AnalysisPort> = Symbol('analysis-port');
+const pipelineKey: InjectionKey<PipelinePort> = Symbol('pipeline-port');
 
 export function createFeaturePorts(root: TunerRoot) {
   return {
@@ -165,6 +188,7 @@ export function createFeaturePorts(root: TunerRoot) {
     library: createLibraryPort(root),
     practice: createPracticePort(root),
     analysis: createAnalysisPort(root),
+    pipeline: createPipelinePort(root),
   };
 }
 
@@ -173,6 +197,7 @@ export const featurePortKeys = {
   library: libraryKey,
   practice: practiceKey,
   analysis: analysisKey,
+  pipeline: pipelineKey,
 };
 
 export function useLiveTunerPort() {
@@ -189,6 +214,10 @@ export function usePracticePort() {
 
 export function useAnalysisPort() {
   return injectRequired(analysisKey, 'analysis');
+}
+
+export function usePipelinePort() {
+  return injectRequired(pipelineKey, 'pipeline');
 }
 
 function injectRequired<T>(key: InjectionKey<T>, name: string) {

@@ -2,6 +2,7 @@ use super::{
     prefer_guided_harmonic, select_pitch_candidate, HarmonicPitchDetector, MpmDetector,
     OctaveDisambiguator, PitchGuidance, YinDetector,
 };
+use crate::PipelineConfig;
 
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
 const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
@@ -88,6 +89,7 @@ pub struct HybridPitchDetector {
     harmonic: HarmonicPitchDetector,
     mpm: MpmDetector,
     octave: OctaveDisambiguator,
+    pipeline: PipelineConfig,
     yin: YinDetector,
 }
 
@@ -107,6 +109,7 @@ impl HybridPitchDetector {
             harmonic: HarmonicPitchDetector::new(),
             mpm: MpmDetector::new(config),
             octave: OctaveDisambiguator::new(),
+            pipeline: PipelineConfig::default(),
             yin: YinDetector::new(config),
         }
     }
@@ -126,6 +129,15 @@ impl HybridPitchDetector {
     }
 
     pub(crate) fn reset_tracking_state(&mut self) {
+        self.octave.reset();
+    }
+
+    pub(crate) fn set_pipeline_config(&mut self, pipeline: PipelineConfig) {
+        let pipeline = pipeline.normalized();
+        if self.pipeline == pipeline {
+            return;
+        }
+        self.pipeline = pipeline;
         self.octave.reset();
     }
 
@@ -152,15 +164,24 @@ impl HybridPitchDetector {
         // Frame status is edge-triggered; never let an unread status leak
         // into a later detector call.
         self.octave.take_correction_started();
-        if !self.prepare_centered(buffer) {
+        if !self.prepare_samples(buffer) {
             self.octave.reset();
             return None;
         }
         let cleaned = std::mem::take(&mut self.cleaned);
-        let yin = self.yin.detect_centered(&cleaned, sample_rate);
-        let mpm = self.mpm.detect_centered(&cleaned, sample_rate);
+        let yin = self
+            .pipeline
+            .yin_enabled
+            .then(|| self.yin.detect_centered(&cleaned, sample_rate))
+            .flatten();
+        let mpm = self
+            .pipeline
+            .secondary_detector_enabled
+            .then(|| self.mpm.detect_centered(&cleaned, sample_rate))
+            .flatten();
         let mut estimate = select_pitch_candidate(yin, mpm, guidance);
-        let needs_harmonic_alternative = !guidance.is_empty()
+        let needs_harmonic_alternative = self.pipeline.harmonic_enabled
+            && !guidance.is_empty()
             && (yin.is_some() || mpm.is_some())
             && estimate.is_none_or(|estimate| !guidance.supports_resolved(estimate.frequency));
         if needs_harmonic_alternative {
@@ -177,32 +198,43 @@ impl HybridPitchDetector {
         let estimate = estimate
             .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
             .and_then(|estimate| {
-                let frequency = self.octave.resolve(
-                    &cleaned,
-                    sample_rate,
-                    estimate.frequency,
-                    self.config.min_frequency,
-                    self.config.max_frequency,
-                );
+                let frequency = if self.pipeline.octave_enabled {
+                    self.octave.resolve(
+                        &cleaned,
+                        sample_rate,
+                        estimate.frequency,
+                        self.config.min_frequency,
+                        self.config.max_frequency,
+                    )
+                } else {
+                    estimate.frequency
+                };
                 // A pending octave correction is deliberately held by the
                 // engine on this frame. Validate only settled decisions so a
                 // correct 2f candidate is not rejected before it folds to f.
-                (self.octave.has_unconfirmed_correction() || guidance.supports_resolved(frequency))
-                    .then_some(PitchEstimate {
+                let correction_pending =
+                    self.pipeline.octave_enabled && self.octave.has_unconfirmed_correction();
+                (correction_pending || guidance.supports_resolved(frequency)).then_some(
+                    PitchEstimate {
                         frequency,
                         ..estimate
-                    })
+                    },
+                )
             });
         self.cleaned = cleaned;
         estimate
     }
 
-    fn prepare_centered(&mut self, buffer: &[f32]) -> bool {
+    fn prepare_samples(&mut self, buffer: &[f32]) -> bool {
         if buffer.is_empty() {
             return false;
         }
 
-        let mean = buffer.iter().sum::<f32>() / buffer.len() as f32;
+        let mean = if self.pipeline.dc_removal_enabled {
+            buffer.iter().sum::<f32>() / buffer.len() as f32
+        } else {
+            0.0
+        };
         self.cleaned.resize(buffer.len(), 0.0);
         for (output, sample) in self.cleaned.iter_mut().zip(buffer) {
             *output = *sample - mean;
@@ -215,7 +247,9 @@ impl HybridPitchDetector {
             max_abs = max_abs.max(sample.abs());
         }
         let rms = (sum_sq / self.cleaned.len() as f32).sqrt();
-        if rms < self.config.rms_gate || max_abs < self.config.peak_gate {
+        if self.pipeline.fixed_gate_enabled
+            && (rms < self.config.rms_gate || max_abs < self.config.peak_gate)
+        {
             return false;
         }
 
@@ -243,5 +277,27 @@ fn normalize_confidence(value: f32, fallback: f32) -> f32 {
         value.clamp(0.0, 1.0)
     } else {
         fallback
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dc_removal_changes_the_fixed_gate_input() {
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| {
+                0.2 + 0.001 * (std::f32::consts::TAU * 220.0 * index as f32 / 48_000.0).sin()
+            })
+            .collect();
+        let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+
+        assert!(!detector.prepare_samples(&samples));
+        detector.set_pipeline_config(PipelineConfig {
+            dc_removal_enabled: false,
+            ..PipelineConfig::default()
+        });
+        assert!(detector.prepare_samples(&samples));
     }
 }

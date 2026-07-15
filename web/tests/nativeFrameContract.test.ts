@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeNativeFrame } from '../src/platform/nativeAudioContract';
+import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
+import {
+  cloneNativeAudioConfiguration,
+  createNativeAudioConfiguration,
+  normalizeNativeFrame,
+  withNativePipelineConfig,
+} from '../src/platform/nativeAudioContract';
 
 describe('native DetectionFrame wire contract', () => {
   it('normalizes the canonical frame shape', () => {
@@ -50,5 +56,16 @@ describe('native DetectionFrame wire contract', () => {
       rms: 0,
       target: null,
     });
+  });
+
+  it('clones pipeline configuration into the native payload', () => {
+    const configuration = withNativePipelineConfig(
+      createNativeAudioConfiguration(),
+      pipelinePresetConfig('raw'),
+    );
+    const cloned = cloneNativeAudioConfiguration(configuration);
+
+    expect(cloned.pipeline).toEqual(pipelinePresetConfig('raw'));
+    expect(cloned.pipeline).not.toBe(configuration.pipeline);
   });
 });

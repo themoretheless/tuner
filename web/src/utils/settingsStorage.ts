@@ -1,5 +1,6 @@
 import type { Store } from '@tauri-apps/plugin-store';
 import { createUserProfile, decodeUserProfile } from '../settings/profileCodec';
+import type { PipelineConfig } from '../domain/pipelineConfig';
 import type {
   InstrumentId,
   InstrumentPreset,
@@ -38,6 +39,7 @@ export interface PersistedSettings {
   metronomeBeats: number;
   metronomeBpm: number;
   metronomeSubdivision: number;
+  pipelineConfig: PipelineConfig;
   practiceHistory: PracticeHistoryEntry[];
   selectedInputDeviceId: string;
   showSpectrogram: boolean;
@@ -116,6 +118,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
       metronomeBeats: await s.get<number>('metronomeBeats') ?? undefined,
       metronomeBpm: await s.get<number>('metronomeBpm') ?? undefined,
       metronomeSubdivision: await s.get<number>('metronomeSubdivision') ?? undefined,
+      pipelineConfig: await s.get<PipelineConfig>('pipelineConfig') ?? undefined,
       practiceHistory: await s.get<PracticeHistoryEntry[]>('practiceHistory') ?? undefined,
       selectedInputDeviceId: await s.get<string>('selectedInputDeviceId') ?? undefined,
       showSpectrogram: await s.get<boolean>('showSpectrogram') ?? undefined,
@@ -159,6 +162,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
     metronomeBeats: readLocal('metronomeBeats') ? Number(readLocal('metronomeBeats')) : undefined,
     metronomeBpm: readLocal('metronomeBpm') ? Number(readLocal('metronomeBpm')) : undefined,
     metronomeSubdivision: readLocal('metronomeSubdivision') ? Number(readLocal('metronomeSubdivision')) : undefined,
+    pipelineConfig: readJson<PipelineConfig>('pipelineConfig'),
     practiceHistory: readJson<PracticeHistoryEntry[]>('practiceHistory'),
     selectedInputDeviceId: readLocal('selectedInputDeviceId'),
     showSpectrogram: savedShowSpectrogram != null

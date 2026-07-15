@@ -7,6 +7,7 @@ import {
 } from '../utils/pitch';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import type { FrameContext } from '../types/frames';
+import type { PipelineConfig } from '../domain/pipelineConfig';
 import {
   PitchCoreAdapter,
   type PitchCoreWasmModule,
@@ -18,6 +19,7 @@ interface PitchRequest {
   id: number;
   buffer: ArrayBuffer;
   frameContext?: FrameContext;
+  pipelineConfig?: PipelineConfig;
   range: PitchDetectionRange;
   sampleRate: number;
   stats?: SignalStats;
@@ -41,7 +43,16 @@ self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
     await adapter?.reset();
     return;
   }
-  const { id, buffer, frameContext, range, sampleRate, stats, wasmModuleUrl } = event.data;
+  const {
+    id,
+    buffer,
+    frameContext,
+    pipelineConfig,
+    range,
+    sampleRate,
+    stats,
+    wasmModuleUrl,
+  } = event.data;
   const frame = new Float32Array(buffer);
   const signalStats = stats ?? computeSignalStats(frame);
   let detection: WorkerPitchFrame;
@@ -52,6 +63,7 @@ self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
       signalStats,
       range,
       frameContext,
+      pipelineConfig,
     );
   } catch {
     detection = {
@@ -73,8 +85,8 @@ function getAdapter(moduleUrl: string) {
   adapter = new PitchCoreAdapter(
     moduleUrl,
     loadPitchCore,
-    (buffer, sampleRate, stats, range, guidance) => (
-      detectPitchEstimate(buffer, sampleRate, stats, range, guidance)
+    (buffer, sampleRate, stats, range, guidance, pipelineConfig) => (
+      detectPitchEstimate(buffer, sampleRate, stats, range, guidance, pipelineConfig)
     ),
   );
   return adapter;

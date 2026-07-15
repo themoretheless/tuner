@@ -20,9 +20,11 @@ import { syntheticAudioFixtureFromLocation, type SyntheticAudioFixture } from '.
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import { createDefaultFrameContext } from '../domain/frameContext';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import { createDefaultPipelineConfig, type PipelineConfig } from '../domain/pipelineConfig';
 
 interface TunerSessionOptions {
   audioBackend: Ref<AudioBackend>;
+  pipelineConfig?: Ref<PipelineConfig>;
   selectedInputDeviceId: Ref<string>;
   syntheticFixture?: SyntheticAudioFixture | null;
 }
@@ -40,6 +42,7 @@ export function useTunerSession(options: TunerSessionOptions) {
   };
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
   const frameContext = ref<FrameContext>(createDefaultFrameContext());
+  const pipelineConfig = options.pipelineConfig ?? ref(createDefaultPipelineConfig());
   const lifecycleSnapshot = ref<SessionLifecycleSnapshot>({
     activeBackend: null,
     status: 'idle',
@@ -68,7 +71,14 @@ export function useTunerSession(options: TunerSessionOptions) {
     },
     detectionRange,
     frameContext,
+    pipelineConfig,
   );
+
+  watch(pipelineConfig, (config) => {
+    for (const port of Object.values(inputPorts)) {
+      if (isDetectionFrameInputPort(port)) void port.setPipelineConfig(config);
+    }
+  }, { deep: true, immediate: true });
 
   const detectionFrame = computed<DetectionFrame>(() => {
     const port = activeInputPort.value;

@@ -1,5 +1,8 @@
 use super::WasmDetectionFrame;
-use crate::{note_name_from_midi, octave_from_midi, EngineConfig, FrameContext, Note, TunerEngine};
+use crate::{
+    note_name_from_midi, octave_from_midi, EngineConfig, FrameContext, Note, PipelineConfig,
+    TunerEngine,
+};
 use wasm_bindgen::prelude::*;
 
 /// High-level browser processor. It owns the same detector, smoother and frame
@@ -24,6 +27,34 @@ impl WasmTunerProcessor {
 
     pub fn set_frequency_range(&mut self, min_frequency: f32, max_frequency: f32) {
         self.inner.set_detection_range(min_frequency, max_frequency);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_pipeline_config(
+        &mut self,
+        adaptive_gate_enabled: bool,
+        dc_removal_enabled: bool,
+        fixed_gate_enabled: bool,
+        harmonic_enabled: bool,
+        hold_enabled: bool,
+        octave_enabled: bool,
+        power_chord_enabled: bool,
+        secondary_detector_enabled: bool,
+        tracking_enabled: bool,
+        yin_enabled: bool,
+    ) {
+        self.inner.set_pipeline_config(PipelineConfig {
+            adaptive_gate_enabled,
+            dc_removal_enabled,
+            fixed_gate_enabled,
+            harmonic_enabled,
+            hold_enabled,
+            octave_enabled,
+            power_chord_enabled,
+            secondary_detector_enabled,
+            tracking_enabled,
+            yin_enabled,
+        });
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -139,5 +170,22 @@ mod tests {
         assert_eq!(silent.note(), "—");
         assert_eq!(silent.target_midi(), 69);
         assert!(!silent.in_tune());
+    }
+
+    #[test]
+    fn tuner_processor_applies_runtime_pipeline_switches() {
+        let sample_rate = 48_000.0;
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| (std::f32::consts::TAU * 220.0 * index as f32 / sample_rate).sin())
+            .collect();
+        let mut processor = WasmTunerProcessor::new();
+        processor.set_frequency_range(180.0, 260.0);
+        processor.set_pipeline_config(
+            false, true, true, false, false, false, false, true, false, true,
+        );
+
+        let frame = processor.process(&samples, sample_rate);
+        assert!(frame.has_frequency());
+        assert!((frame.freq() - 220.0).abs() < 1.0);
     }
 }

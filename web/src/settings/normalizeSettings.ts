@@ -14,6 +14,7 @@ import {
   type TemperamentId,
   type Tuning,
 } from '../utils/notes';
+import { createDefaultPipelineConfig, normalizePipelineConfig } from '../domain/pipelineConfig';
 import type {
   AudioBackend,
   DisplayMode,
@@ -47,6 +48,7 @@ export function createDefaultSettings(): PersistedSettings {
     metronomeBeats: 4,
     metronomeBpm: 96,
     metronomeSubdivision: 1,
+    pipelineConfig: createDefaultPipelineConfig(),
     practiceHistory: [],
     selectedInputDeviceId: '',
     showSpectrogram: false,
@@ -125,6 +127,7 @@ export function normalizePersistedSettings(
       8,
       defaults.metronomeSubdivision,
     ),
+    pipelineConfig: normalizePipelineConfig(value.pipelineConfig),
     practiceHistory: normalizePracticeHistory(value.practiceHistory),
     selectedInputDeviceId: boundedString(
       value.selectedInputDeviceId,

@@ -1,4 +1,5 @@
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { PitchDetectionRange } from '../utils/pitch';
 
 export type AudioInputId = 'web' | 'native' | 'synthetic';
@@ -36,6 +37,7 @@ export interface DetectionFrameInputPort extends AudioInputPortBase {
   readonly output: 'detection-frame';
   setDetectionRange(range: PitchDetectionRange): Promise<void>;
   setFrameContext(context: FrameContext): Promise<void>;
+  setPipelineConfig(config: PipelineConfig): Promise<void>;
 }
 
 export type AudioInputPort = AudioFrameInputPort | DetectionFrameInputPort;

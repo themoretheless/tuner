@@ -2,6 +2,12 @@
 // YIN algorithm (much better for guitar than plain autocorrelation)
 // + fallback to improved autocorrelation
 
+import {
+  createDefaultPipelineConfig,
+  normalizePipelineConfig,
+  type PipelineConfig,
+} from '../domain/pipelineConfig';
+
 export interface PitchDetectionRange {
   minFrequency: number;
   maxFrequency: number;
@@ -55,9 +61,28 @@ export function computeSignalStats(buffer: Float32Array): SignalStats {
   };
 }
 
+export function isBelowPitchDetectionGate(stats: SignalStats) {
+  return stats.rms < 0.002 || stats.maxAbs < 0.01;
+}
+
 // Reusable buffers
 let yinBuffer: Float32Array | null = null;
 let diffBuffer: Float32Array | null = null;
+let centeredBuffer: Float32Array | null = null;
+
+function removeDcOffset(buffer: Float32Array) {
+  if (buffer.length === 0) return buffer;
+  if (!centeredBuffer || centeredBuffer.length !== buffer.length) {
+    centeredBuffer = new Float32Array(buffer.length);
+  }
+  let sum = 0;
+  for (let index = 0; index < buffer.length; index += 1) sum += buffer[index];
+  const mean = sum / buffer.length;
+  for (let index = 0; index < buffer.length; index += 1) {
+    centeredBuffer[index] = buffer[index] - mean;
+  }
+  return centeredBuffer;
+}
 
 function ensureYinBuffers(size: number) {
   const half = Math.floor(size / 2);
@@ -90,6 +115,7 @@ export function detectPitchYINEstimate(
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+  enforceSignalGate = true,
 ): PitchEstimate | null {
   const size = buffer.length;
   const half = Math.floor(size / 2);
@@ -102,7 +128,7 @@ export function detectPitchYINEstimate(
   const analysisLength = size - maxTau;
 
   // Gate on energy
-  if (stats.rms < MIN_RMS || stats.maxAbs < MIN_PEAK) return null;
+  if (enforceSignalGate && (stats.rms < MIN_RMS || stats.maxAbs < MIN_PEAK)) return null;
 
   const { yin, diff } = ensureYinBuffers(size);
 
@@ -197,6 +223,7 @@ export function autoCorrelateEstimate(
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+  enforceSignalGate = true,
 ): PitchEstimate | null {
   const SIZE = buffer.length;
   const detectionRange = normalizePitchDetectionRange(range);
@@ -204,7 +231,7 @@ export function autoCorrelateEstimate(
   const maxLag = Math.min(Math.floor(sampleRate / detectionRange.minFrequency), Math.floor(SIZE / 2));
   if (maxLag <= minLag + 2) return null;
 
-  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
+  if (enforceSignalGate && isBelowPitchDetectionGate(stats)) return null;
 
   let start = 0, end = SIZE - 1;
   while (start < SIZE / 2 && Math.abs(buffer[start]) < 1e-4) start++;
@@ -262,11 +289,31 @@ export function detectPitchEstimate(
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
   guidance?: PitchGuidance,
+  pipelineConfig: PipelineConfig = createDefaultPipelineConfig(),
 ): PitchEstimate | null {
-  if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
+  const pipeline = normalizePipelineConfig(pipelineConfig);
+  const detectorBuffer = pipeline.dcRemovalEnabled ? removeDcOffset(buffer) : buffer;
+  const detectorStats = detectorBuffer === buffer ? stats : computeSignalStats(detectorBuffer);
+  if (pipeline.fixedGateEnabled && isBelowPitchDetectionGate(detectorStats)) return null;
 
-  const yin = detectPitchYINEstimate(buffer, sampleRate, stats, range);
-  const autocorrelation = autoCorrelateEstimate(buffer, sampleRate, stats, range);
+  const yin = pipeline.yinEnabled
+    ? detectPitchYINEstimate(
+      detectorBuffer,
+      sampleRate,
+      detectorStats,
+      range,
+      pipeline.fixedGateEnabled,
+    )
+    : null;
+  const autocorrelation = pipeline.secondaryDetectorEnabled
+    ? autoCorrelateEstimate(
+      detectorBuffer,
+      sampleRate,
+      detectorStats,
+      range,
+      pipeline.fixedGateEnabled,
+    )
+    : null;
   return selectPitchCandidate(yin, autocorrelation, guidance);
 }
 
@@ -357,8 +404,16 @@ export function detectPitch(
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
   guidance?: PitchGuidance,
+  pipelineConfig: PipelineConfig = createDefaultPipelineConfig(),
 ): number | null {
-  return detectPitchEstimate(buffer, sampleRate, stats, range, guidance)?.frequency ?? null;
+  return detectPitchEstimate(
+    buffer,
+    sampleRate,
+    stats,
+    range,
+    guidance,
+    pipelineConfig,
+  )?.frequency ?? null;
 }
 
 export class FrequencySmoother {

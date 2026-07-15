@@ -31,6 +31,10 @@ Remaining weaknesses:
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
 
+External evidence from 100 pitch/MIR/realtime-audio repositories, primary papers and official Web Audio material is recorded in [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md). Its `X#` entries are research hypotheses, not canonical backlog IDs; promote them only after the proposed real-WAV benchmark/design gate.
+
+The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/native/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
+
 The current list contains 109 open/partial `R#` findings and a 71-item closure registry. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
 
 ## Implemented Dependency Shape

@@ -1,4 +1,4 @@
-use pitch_core::{canonical_note_name, FrameContext, Note};
+use pitch_core::{canonical_note_name, FrameContext, Note, PipelineConfig};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -9,14 +9,74 @@ const MAX_TUNING_TARGETS: usize = 24;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NativeAudioConfig {
     pub(crate) context: NativeFrameContext,
+    #[serde(default)]
+    pub(crate) pipeline: NativePipelineConfig,
     pub(crate) range: NativeAudioRange,
 }
 
 impl NativeAudioConfig {
     pub(crate) fn normalized(mut self) -> Self {
         self.context = self.context.normalized();
+        self.pipeline = self.pipeline.normalized();
         self.range = self.range.normalized();
         self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub(crate) struct NativePipelineConfig {
+    pub(crate) adaptive_gate_enabled: bool,
+    pub(crate) dc_removal_enabled: bool,
+    pub(crate) fixed_gate_enabled: bool,
+    pub(crate) harmonic_enabled: bool,
+    pub(crate) hold_enabled: bool,
+    pub(crate) octave_enabled: bool,
+    pub(crate) power_chord_enabled: bool,
+    pub(crate) secondary_detector_enabled: bool,
+    pub(crate) tracking_enabled: bool,
+    pub(crate) yin_enabled: bool,
+}
+
+impl Default for NativePipelineConfig {
+    fn default() -> Self {
+        Self::from_core(PipelineConfig::default())
+    }
+}
+
+impl NativePipelineConfig {
+    fn normalized(self) -> Self {
+        Self::from_core(self.to_core().normalized())
+    }
+
+    pub(crate) fn to_core(self) -> PipelineConfig {
+        PipelineConfig {
+            adaptive_gate_enabled: self.adaptive_gate_enabled,
+            dc_removal_enabled: self.dc_removal_enabled,
+            fixed_gate_enabled: self.fixed_gate_enabled,
+            harmonic_enabled: self.harmonic_enabled,
+            hold_enabled: self.hold_enabled,
+            octave_enabled: self.octave_enabled,
+            power_chord_enabled: self.power_chord_enabled,
+            secondary_detector_enabled: self.secondary_detector_enabled,
+            tracking_enabled: self.tracking_enabled,
+            yin_enabled: self.yin_enabled,
+        }
+    }
+
+    fn from_core(config: PipelineConfig) -> Self {
+        Self {
+            adaptive_gate_enabled: config.adaptive_gate_enabled,
+            dc_removal_enabled: config.dc_removal_enabled,
+            fixed_gate_enabled: config.fixed_gate_enabled,
+            harmonic_enabled: config.harmonic_enabled,
+            hold_enabled: config.hold_enabled,
+            octave_enabled: config.octave_enabled,
+            power_chord_enabled: config.power_chord_enabled,
+            secondary_detector_enabled: config.secondary_detector_enabled,
+            tracking_enabled: config.tracking_enabled,
+            yin_enabled: config.yin_enabled,
+        }
     }
 }
 
@@ -251,5 +311,18 @@ mod tests {
         assert_ne!(revision, 0);
         settings.update(config);
         assert!(settings.snapshot_after(revision).is_none());
+    }
+
+    #[test]
+    fn pipeline_normalization_keeps_a_detector_enabled() {
+        let pipeline = NativePipelineConfig {
+            yin_enabled: false,
+            secondary_detector_enabled: false,
+            ..NativePipelineConfig::default()
+        }
+        .normalized();
+
+        assert!(pipeline.yin_enabled);
+        assert!(!pipeline.secondary_detector_enabled);
     }
 }

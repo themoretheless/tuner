@@ -4,6 +4,7 @@ import type {
   DetectionFrameInputPort,
 } from '../ports/audioInput';
 import type { PitchDetectionRange } from '../utils/pitch';
+import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   cloneNativeAudioConfiguration,
@@ -11,6 +12,7 @@ import {
   normalizeNativeFrame,
   withNativeAudioRange,
   withNativeFrameContext,
+  withNativePipelineConfig,
   type NativeAudioConfiguration,
   type NativeAudioFramePayload,
 } from '../platform/nativeAudioContract';
@@ -124,6 +126,12 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     await syncConfiguration();
   }
 
+  async function setPipelineConfig(config: PipelineConfig) {
+    configuration = withNativePipelineConfig(configuration, config);
+    configurationRevision += 1;
+    await syncConfiguration();
+  }
+
   function updateRange(range: PitchDetectionRange) {
     configuration = withNativeAudioRange(configuration, range);
     configurationRevision += 1;
@@ -190,6 +198,7 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     refreshAvailability,
     setDetectionRange,
     setFrameContext,
+    setPipelineConfig,
     start,
     stop,
   };

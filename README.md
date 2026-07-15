@@ -42,7 +42,11 @@
 - Не хватает real-guitar WAV fixtures, permission/device-loss E2E, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
 - Release hardening (signing/notarization/CSP/checksums), diagnostics и общая typed error taxonomy остаются открытыми.
 
+Фактическая блок-схема определения высоты, внутренний decision flow и целевой модульный pipeline: [TUNER-PIPELINE.md](TUNER-PIPELINE.md).
+
 Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
+
+Внешний research-срез 100 pitch/MIR/realtime-audio репозиториев, научных публикаций и 28 дедуплицированных кандидатов: [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md). Это evidence annex; он не перенумеровывает канонические `M#`/`R#` до измеримого design/benchmark pass.
 
 ## Три итерации и review
 
@@ -91,6 +95,8 @@ Tuner/
 ├── TOP-500-backlog.md   # Ranked Top 500 (M#) + historical grounded audit (C#)
 ├── PLAN.md              # Порядок выполнения и DoD
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
+├── RESEARCH-100-PITCH-REPOSITORIES.md # External evidence + новые X# hypotheses
+├── TUNER-PIPELINE.md    # Фактическая и целевая блок-схемы определения pitch
 └── README.md
 ```
 
@@ -269,6 +275,8 @@ npx tauri icon ./icon.png
 - Tauri упаковывает Vue frontend в нативное приложение и уже имеет дополнительный native cpal audio backend.
 - egui версия использует cpal напрямую и частично общий `pitch-core`.
 - Цель рефакторинга: убрать платформенные утечки из UI, вести всё через audio ports, session controller и shared frame contracts.
+
+Полный путь от microphone samples до `DetectionFrame`, развилка YIN/MPM/harmonic/octave/tracking и схема диагностики ошибки `E2 -> E3` показаны в [TUNER-PIPELINE.md](TUNER-PIPELINE.md).
 
 ## Советы по использованию
 

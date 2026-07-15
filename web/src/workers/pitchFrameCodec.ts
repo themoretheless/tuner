@@ -9,6 +9,7 @@ import {
   octaveFromMidi,
 } from '../generated/noteMath';
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import type { PipelineConfig } from '../domain/pipelineConfig';
 
 interface WasmTunerFrame {
   readonly cents: number;
@@ -47,6 +48,36 @@ export interface StatefulWasmTunerProcessor {
     inTuneExitCents: number,
   ): void;
   set_frequency_range(minFrequency: number, maxFrequency: number): void;
+  set_pipeline_config(
+    adaptiveGateEnabled: boolean,
+    dcRemovalEnabled: boolean,
+    fixedGateEnabled: boolean,
+    harmonicEnabled: boolean,
+    holdEnabled: boolean,
+    octaveEnabled: boolean,
+    powerChordEnabled: boolean,
+    secondaryDetectorEnabled: boolean,
+    trackingEnabled: boolean,
+    yinEnabled: boolean,
+  ): void;
+}
+
+export function applyPipelineConfig(
+  processor: StatefulWasmTunerProcessor,
+  config: PipelineConfig,
+) {
+  processor.set_pipeline_config(
+    config.adaptiveGateEnabled,
+    config.dcRemovalEnabled,
+    config.fixedGateEnabled,
+    config.harmonicEnabled,
+    config.holdEnabled,
+    config.octaveEnabled,
+    config.powerChordEnabled,
+    config.secondaryDetectorEnabled,
+    config.trackingEnabled,
+    config.yinEnabled,
+  );
 }
 
 export function applyFrameContext(

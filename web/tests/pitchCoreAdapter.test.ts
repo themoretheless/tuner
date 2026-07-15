@@ -5,6 +5,7 @@ import {
   type PitchCoreModuleLoader,
 } from '../src/workers/pitchCoreAdapter';
 import type { FrameContext } from '../src/types/frames';
+import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import type { PitchDetectionRange, SignalStats } from '../src/utils/pitch';
 
 const BUFFER = new Float32Array([0, 0.25, -0.25, 0]);
@@ -29,6 +30,7 @@ describe('PitchCoreAdapter', () => {
     const resetProcessor = vi.fn();
     const setFrameContext = vi.fn();
     const setFrequencyRange = vi.fn();
+    const setPipelineConfig = vi.fn();
 
     class FakeProcessor {
       clear_frame_context() {}
@@ -37,6 +39,7 @@ describe('PitchCoreAdapter', () => {
       reset = resetProcessor;
       set_frame_context = setFrameContext;
       set_frequency_range = setFrequencyRange;
+      set_pipeline_config = setPipelineConfig;
     }
 
     const loadModule: PitchCoreModuleLoader = vi.fn(async () => ({
@@ -46,7 +49,14 @@ describe('PitchCoreAdapter', () => {
     const fallback = vi.fn(() => ({ confidence: 0.7, frequency: 220 }));
     const adapter = new PitchCoreAdapter('/wasm/pitch_core.js', loadModule, fallback);
 
-    await expect(adapter.process(BUFFER, 48_000, STATS, RANGE, CONTEXT)).resolves.toEqual({
+    await expect(adapter.process(
+      BUFFER,
+      48_000,
+      STATS,
+      RANGE,
+      CONTEXT,
+      pipelinePresetConfig('raw'),
+    )).resolves.toEqual({
       backend: 'wasm',
       frame: {
         cents: 0,
@@ -69,6 +79,19 @@ describe('PitchCoreAdapter', () => {
     expect(setFrequencyRange).toHaveBeenCalledOnce();
     expect(setFrequencyRange).toHaveBeenCalledWith(60, 1_200);
     expect(setFrameContext).toHaveBeenCalledOnce();
+    expect(setPipelineConfig).toHaveBeenCalledOnce();
+    expect(setPipelineConfig).toHaveBeenCalledWith(
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+    );
     expect(setFrameContext.mock.calls[0]?.[1]).toEqual(new Int32Array([69]));
     expect(process).toHaveBeenCalledTimes(2);
     expect(resultFree).toHaveBeenCalledTimes(2);
@@ -140,6 +163,7 @@ describe('PitchCoreAdapter', () => {
       reset() {}
       set_frame_context() {}
       set_frequency_range() {}
+      set_pipeline_config() {}
     }
 
     const loadModule: PitchCoreModuleLoader = vi.fn(async () => ({
