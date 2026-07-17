@@ -6,6 +6,7 @@ import { useL10n } from '../../stores/l10n';
 import PipelineBlock from './PipelineBlock.vue';
 import type { PipelineBlockHelp } from './pipelineBlockHelp';
 import PipelineLiveResult from './PipelineLiveResult.vue';
+import PipelineDiagnosticsWorkspace from './PipelineDiagnosticsWorkspace.vue';
 
 type PipelineHelpId =
   | 'adaptive'
@@ -124,6 +125,16 @@ function blockHelp(block: PipelineHelpId): PipelineBlockHelp {
       :target-name="pipeline.getNoteDisplay(pipeline.targetNote)"
       @dismiss-error="pipeline.clearError()"
       @toggle-microphone="toggleMicrophone"
+    />
+
+    <PipelineDiagnosticsWorkspace
+      :backend="pipeline.detectorBackend"
+      :config="pipeline.config"
+      :format-freq="pipeline.formatFreq"
+      :frame="pipeline.detectionFrame"
+      :is-listening="pipeline.isListening"
+      :preset="pipeline.preset"
+      :target-frequency="pipeline.targetNote.frequency"
     />
 
     <section class="pipeline-stage pipeline-stage-input" :aria-labelledby="'pipeline-stage-input'">

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Info } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { PipelineBlockHelp } from './pipelineBlockHelp';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   detail: string;
   disabled?: boolean;
   disabledReason?: string;
@@ -33,7 +33,67 @@ const emit = defineEmits<{
 const infoFocused = ref(false);
 const infoHovered = ref(false);
 const infoPinned = ref(false);
+const infoButton = ref<HTMLButtonElement | null>(null);
+const infoPanel = ref<HTMLElement | null>(null);
+const infoPanelStyle = ref<Record<string, string>>({});
 const infoVisible = computed(() => infoFocused.value || infoHovered.value || infoPinned.value);
+
+function updateInfoPosition() {
+  if (!infoVisible.value || !infoButton.value || !infoPanel.value) return;
+
+  const viewportPadding = 16;
+  const gap = 8;
+  const buttonRect = infoButton.value.getBoundingClientRect();
+  const nodeRect = infoButton.value.closest<HTMLElement>('.pipeline-node')?.getBoundingClientRect();
+  const panelRect = infoPanel.value.getBoundingClientRect();
+  const naturalHeight = infoPanel.value.scrollHeight;
+  const availableAbove = Math.max(0, buttonRect.top - viewportPadding - gap);
+  const availableBelow = Math.max(0, window.innerHeight - buttonRect.bottom - viewportPadding - gap);
+  const placeAbove = availableBelow < naturalHeight && availableAbove > availableBelow;
+  const availableHeight = placeAbove ? availableAbove : availableBelow;
+  const maxHeight = Math.max(96, Math.floor(availableHeight));
+  const renderedHeight = Math.min(naturalHeight, maxHeight);
+  const top = placeAbove
+    ? buttonRect.top - gap - renderedHeight
+    : buttonRect.bottom + gap;
+
+  const panelWidth = panelRect.width;
+  const anchorLeft = nodeRect?.left ?? buttonRect.left;
+  const anchorRight = nodeRect?.right ?? buttonRect.right;
+  const desiredLeft = props.infoPlacement === 'start'
+    ? anchorLeft
+    : props.infoPlacement === 'end'
+      ? anchorRight - panelWidth
+      : buttonRect.left + (buttonRect.width - panelWidth) / 2;
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding);
+  const left = Math.min(Math.max(desiredLeft, viewportPadding), maxLeft);
+
+  infoPanelStyle.value = {
+    left: `${Math.round(left)}px`,
+    maxHeight: `${maxHeight}px`,
+    top: `${Math.max(viewportPadding, Math.round(top))}px`,
+  };
+}
+
+function onViewportChange() {
+  updateInfoPosition();
+}
+
+watch(infoVisible, async (visible) => {
+  if (!visible) return;
+  await nextTick();
+  updateInfoPosition();
+}, { flush: 'post' });
+
+onMounted(() => {
+  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('scroll', onViewportChange, true);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportChange);
+  window.removeEventListener('scroll', onViewportChange, true);
+});
 
 function onToggle(event: Event) {
   emit('toggle', (event.target as HTMLInputElement).checked);
@@ -107,8 +167,10 @@ function closeInfo(event: KeyboardEvent) {
           @focusout="onInfoFocusOut"
         >
           <button
+            ref="infoButton"
             type="button"
             class="pipeline-node-info-button"
+            :data-testid="`pipeline-info-${nodeId}`"
             :aria-label="`${help.buttonLabel}: ${title}`"
             :aria-expanded="infoVisible"
             :aria-controls="`${nodeId}-info`"
@@ -120,9 +182,12 @@ function closeInfo(event: KeyboardEvent) {
           </button>
           <section
             v-show="infoVisible"
+            ref="infoPanel"
             :id="`${nodeId}-info`"
             class="pipeline-node-info-panel"
             :class="`pipeline-node-info-panel-${infoPlacement}`"
+            :data-testid="`pipeline-info-panel-${nodeId}`"
+            :style="infoPanelStyle"
             role="tooltip"
           >
             <strong>{{ title }}</strong>
@@ -272,29 +337,20 @@ function closeInfo(event: KeyboardEvent) {
 }
 
 .pipeline-node-info-panel {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: 36px;
-  left: 50%;
+  top: 16px;
+  left: 16px;
   width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   color: var(--text);
   background: var(--surface-raised);
   box-shadow: 0 14px 32px rgb(0 0 0 / 35%);
-  transform: translateX(-50%);
-}
-
-.pipeline-node-info-panel-start {
-  left: 0;
-  transform: none;
-}
-
-.pipeline-node-info-panel-end {
-  right: 0;
-  left: auto;
-  transform: none;
 }
 
 .pipeline-node-info-panel > strong {
@@ -370,14 +426,4 @@ function closeInfo(event: KeyboardEvent) {
   color: var(--warning);
 }
 
-@media (max-width: 900px) {
-  .pipeline-node-info-panel,
-  .pipeline-node-info-panel-start,
-  .pipeline-node-info-panel-end {
-    right: auto;
-    left: 50%;
-    width: 100%;
-    transform: translateX(-50%);
-  }
-}
 </style>
