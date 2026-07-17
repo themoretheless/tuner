@@ -1,14 +1,14 @@
 # Recommendations & Current Problems Backlog
 
-**Current state audit (synced 2026-07-12, after three implementation iterations and review)**
+**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-18 after three implementation iterations and review)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-After this pass, **71 findings are verified closed or obsolete and 109 `R#` findings remain open/partial**. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+In the first audit range, **71 findings are verified closed or obsolete and 109 `R#` findings remain open/partial**. The independent `R181`-`R394` pass adds 214 open findings, so the combined current total is 323. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `52` Vitest tests; `17` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; four Playwright flows including shared confidence parity, full-frame WASM, synthetic detection and `360 px` Library navigation; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `82` Vitest tests; `57` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; five Playwright flows covering shared confidence parity, full-frame WASM, synthetic detection, Algorithm diagnostics and `360 px` Library navigation; manual `1280x720`/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -16,6 +16,8 @@ Synced documents:
 - [PLAN.md](PLAN.md) is the execution-order source of truth.
 - [RECOMMENDATIONS.md](RECOMMENDATIONS.md) turns the same debt into detailed refactor recommendations.
 - [TOP-500-backlog.md](TOP-500-backlog.md) is the unified master ranked Top 500 (`M#`) and historical grounded audit (`C#`).
+- [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md) records the focused pitch/DSP evidence and `X#` hypotheses.
+- [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md) records the 473-repository competitor scan and 50 synthesized `G#` proposals. `G#` does not increase the current-open count unless a proposal is promoted through a grounded design/benchmark pass.
 
 Priority key: **P0** correctness / realtime safety / blocking architecture, **P1** high-impact coupling or duplication, **P2** quality / DX / product risk, **P3** cleanup.
 
@@ -1358,6 +1360,9 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Added shared Rust/TypeScript smoothing traces with immediate silence reset, removed the top-level `frequency` compatibility alias, hardened frame/range normalization, and passed the full workspace/WASM/Playwright/Tauri release gate.
 - Added registry/expression-driven Rust/TypeScript note-math generation, migrated web/core/egui facades, gated stale output in CI and added deterministic A4/MIDI/cents/temperament/capo property sweeps.
 - Added normalized-periodicity confidence semantics, a high-level full-frame WASM `TunerProcessor`, revisioned browser `FrameContext`, measured TS fallback confidence and explicit worker reset on session restart.
+- Added the live Algorithm workspace with candidate/arbitration telemetry, uncertainty history, decision timeline, freeze/replay inspector, spectral/noise evidence, latency budget, virtual bypass and baseline comparison.
+- Made detailed block help viewport-aware and internally scrollable, fixed the baseline action width selector, and added Playwright regression assertions for both layouts.
+- Completed the 473-repository music/instrument scan and recorded 50 deduplicated `G#` proposals in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md).
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary

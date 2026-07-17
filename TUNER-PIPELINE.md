@@ -9,10 +9,14 @@
 Главный сквозной контракт после обработки сигнала - `DetectionFrame`:
 
 ```text
-freq | raw_freq | confidence | rms | level | cents | note | target | in_tune | is_power | spectrum
+freq | raw_freq | confidence | rms | level | cents | note | target | in_tune | is_power | pipeline | spectrum
 ```
 
 `raw_freq` показывает оценку детектора до подавления, tracking и hold. `freq` содержит уже принятую и стабилизированную частоту, которую можно показывать пользователю.
+
+`pipeline` содержит ограниченный operational summary: не более двух временных кандидатов, выбранный кандидат, arbitration/decision enums, состояния fixed/adaptive gate, tracker/hold, sample rate/размер окна, noise floor/текущий gate threshold и фиксированные массивы из пяти harmonic strengths и трёх octave scores. Форма одинакова для WASM, native и TypeScript fallback и нужна live-визуализации без повторного запуска DSP в Vue.
+
+Диагностический UI хранит максимум 120 таких кадров. Из них строятся uncertainty band, decision timeline, noise map, freeze/replay, наблюдаемый latency budget и baseline A/B. Virtual bypass пересчитывает только выводимые из snapshot последствия; если upstream-блок не запускался или не сохранено pre-rescue evidence, UI честно требует audio replay.
 
 ## 1. Фактический end-to-end pipeline
 
@@ -275,7 +279,7 @@ flowchart LR
 - Web ошибается, native нет: сначала сравниваются sample rate, window size, браузерные audio settings и WASM/fallback semantics.
 - Оба backend-а ошибаются одинаково: нужен replay одного и того же WAV через `TunerEngine` с trace каждого блока.
 
-Для полного объяснения одного сбоя текущему `DetectionFrame` не хватает массива кандидатов, причин gate decision, octave evidence, tracker phase и sample timestamp. Эти данные следует отдавать в отдельный opt-in diagnostics frame, а не раздувать UI contract.
+Текущий bounded `PipelineTelemetry` уже показывает YIN/MPM, выбранный результат, gate decision, tracker/hold, noise threshold, компактное harmonic/octave evidence и причину публикации. Для полного объяснения сложного сбоя всё ещё не хватает внутренних YIN/NSDF массивов, точной tracker phase и sample timestamp. Эти тяжёлые данные следует отдавать отдельным opt-in diagnostics frame, а не добавлять в постоянный UI contract.
 
 ## 6. Целевой модульный pipeline
 

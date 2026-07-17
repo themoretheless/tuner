@@ -16,7 +16,7 @@ Strengths:
 - Native Rust, browser WASM and TS fallback share one B0-E5 fixture manifest with explicit cents and normalized-periodicity confidence budgets.
 - `registry/music-registry.json` generates Rust tunings and feeds web domain data; custom-library CRUD has its own injected controller.
 - Session lifecycle is an explicit serialized state machine with cancellation, backend switching and runtime-failure recovery tests.
-- Vue is a small shell over four feature views and restricted feature ports; optional views are lazy chunks.
+- Vue is a small shell over five feature views and restricted feature ports; optional views are lazy chunks.
 - Settings use a complete versioned profile with strict normalization, relational validation, legacy fallback and serialized persistence.
 - Offline web build, responsive themes/canvases and full native Tauri bundles are verified.
 
@@ -26,12 +26,14 @@ Remaining weaknesses:
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - A file/WAV input adapter is still missing; Tauri now resolves A4/tuning/selected-target context natively through a typed revisioned configuration.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
-- Error taxonomy, diagnostics, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
+- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency; mic self-test, exported diagnostic bundles, typed errors, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
 - egui persistence and the egui WASM singleton are still separate platform-specific designs.
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
 
 External evidence from 100 pitch/MIR/realtime-audio repositories, primary papers and official Web Audio material is recorded in [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md). Its `X#` entries are research hypotheses, not canonical backlog IDs; promote them only after the proposed real-WAV benchmark/design gate.
+
+The broader competitor pass in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md) screens 473 unique music/instrument repositories, deeply reads 139 README files and reviews 10 source trees. Its final 50 `G#` proposals are a synthesis layer, not 50 new canonical defects. Existing `M#`/`X#`/`R#` links must be strengthened instead of duplicated.
 
 The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/native/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
 
@@ -59,11 +61,14 @@ flowchart LR
   Fixtures --> WasmWorker
   WasmWorker --> Composition["useTuner composition root"]
   Tauri --> Composition
+  WasmWorker --> Telemetry["bounded PipelineTelemetry"]
+  Tauri --> Telemetry
+  Telemetry --> Diagnostics["timeline + spectral/noise + inspector + A/B"]
   Composition --> FrameContext["resolved FrameContext value"]
   FrameContext --> Tauri
   Profile["UserProfileV1 + storage adapter"] --> Composition
   Composition --> Ports["Feature ports"]
-  Ports --> Views["Tuner / Library / Practice / Analysis"]
+  Ports --> Views["Tuner / Library / Practice / Analysis / Algorithm"]
 ```
 
 ## Resolved Native Frame Boundary
@@ -74,9 +79,32 @@ The native path now separates configuration from streaming data:
 2. `FrameContext` carries only values: display targets, tuning targets, selected/idle targets and in-tune thresholds. Tauri does not import or know Vue settings concepts.
 3. Tauri validates and caps the payload, stores it with a revision, and clones target arrays only when that revision changes. The audio worker checks the revision before updating its processor.
 4. `pitch-core::FrameResolver` owns closest-target selection, note display, cents and 5/7-cent hysteresis; `TunerEngine` remains responsible for detector/smoother/spectrum orchestration.
-5. Tauri emits one canonical `DetectionFrame`; Vue uses that native frame directly. The removed top-level `frequency` alias cannot silently revive because Rust serialization and TypeScript normalization both have contract tests.
+5. Tauri emits one canonical `DetectionFrame`; Vue uses that native frame directly. Its fixed-size `PipelineTelemetry` summary carries two candidates, decision/gate state, sample/window metadata, noise threshold and only five harmonic plus three octave strengths. Vue stores at most 120 cloned samples for timeline/freeze/A-B and never receives FFT buffers through this path. Internal YIN/NSDF arrays, tracker phase and sample timestamps remain a separate future opt-in trace. The removed top-level `frequency` alias cannot silently revive because Rust serialization and TypeScript normalization both have contract tests.
+
+## Pipeline Diagnostics Boundary
+
+The Algorithm view keeps collection, derivation and rendering separate:
+
+- `pitch-core::PipelineTelemetry` owns measured, fixed-size backend evidence; native and WASM adapters preserve the same meanings.
+- `web/src/domain/pipelineDiagnostics.ts` contains pure uncertainty, octave, comparison and virtual-bypass models. Unsupported counterfactuals say that replay is required instead of inventing data.
+- `usePipelineDiagnostics.ts` owns the bounded 120-frame buffer, freeze/replay cursor and baseline snapshot.
+- `PipelineTelemetryPanel`, `PipelineDecisionTimeline`, `PipelineSpectralPanel`, `PipelineFrameInspector` and `PipelineExperimentPanel` are presentation-only modules.
+
+This is intentionally operational observability, not a full DSP trace. It adds no unbounded arrays and no coupling from Vue back into detector internals.
 
 This shape deliberately sends resolved targets instead of teaching Tauri about every custom temperament/profile schema. It keeps the platform adapter weakly coupled to product settings; generated note math now gives both sides the same primitives without making synchronous UI startup depend on WASM availability.
+
+## Competitive Research Boundary
+
+The 473-repository pass changes the architecture roadmap in five concrete ways:
+
+1. **Accuracy work starts with evidence.** Real-WAV corpus, temporal failure metrics and replay envelopes precede new detector complexity. Top-K candidates and phase-aware policy are core contracts, not Vue experiments.
+2. **Musical formats are adapters.** Scala `.scl`, `.kbm`, AnaMark `.tun`, MIDI and MusicXML parsers belong behind explicit format ports. They validate into versioned domain values and commit only after preview.
+3. **Practice gets its own application layer.** Exercise generation, playback, evaluation, scheduling and persistence must not expand `useTuner.ts`; Practice consumes narrow ports like every other feature.
+4. **Output audio has one owner.** Reference tones, ear training and metronome need a shared resumed `AudioContext`, mixer and cancellable playback scopes. The metronome clock is audio/sample time, never the paint or `setInterval` clock.
+5. **Platform APIs are capabilities.** AudioWorklet, MIDI, Wake Lock, fullscreen, native capture and file formats expose availability/failure state through ports instead of ad hoc global checks in components.
+
+The product boundary is equally important: local-first custom data and focused detector-backed practice fit this architecture; a cloud account system or licensed song catalog does not.
 
 ## 10 Different Critics — From-Scratch Design Perspectives
 
@@ -257,7 +285,7 @@ egui/src/
 - Add explicit view models for sidebar vs live feedback.
 - Only render heavy viz when listening.
 
-**Status 2026-07-11: UI split done, state split partial.** Tuner/Library/Practice/Analysis views, feature ports, semantic themes, responsive `320 px` layout and idle visualizer states are implemented. Settings remains a module-global store and diagnostics/accessibility verification are incomplete.
+**Status 2026-07-18: UI split done, state split partial.** Tuner/Algorithm/Library/Practice/Analysis views, feature ports, semantic themes, responsive `320 px` layout and idle visualizer states are implemented. Algorithm exposes the live canonical frame, decision timeline, spectral evidence, freeze/replay, A/B and viewport-safe block help. Settings remains a module-global store and broader diagnostics/accessibility verification are incomplete.
 
 ### Phase 6 — Testing, Perf, Tooling
 - Property-based + unit tests for domain/dsp.
@@ -265,13 +293,13 @@ egui/src/
 - AudioWorklet spike for web.
 - Better WASM packaging.
 
-**Status 2026-07-12: baseline done.** `52` Vitest tests, `17` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, four Playwright flows, workspace strict clippy, both WASM target checks, production web and full Tauri bundle pass. Remaining: real WAV/benchmark/soak/visual/permission suites, broader DSP fuzzing and pinned WASM tooling.
+**Status 2026-07-18: baseline done.** `82` Vitest tests, `57` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, five Playwright flows, workspace strict clippy, both WASM target checks, production web, manual `1280x720`/`390x844` visual QA and full Tauri bundle pass. Remaining: real WAV/benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
 - Update all docs, examples, onboarding guide.
 
-**Status 2026-07-12: documentation synchronized.** README, architecture, recommendation and plan use the same counts/evidence. Thin note-math facades preserve consumer APIs; full-frame WASM and confidence migration are complete.
+**Status 2026-07-18: documentation synchronized.** README, architecture and recommendation use the same validation counts and link the focused 100-repository and broader 473-repository evidence annexes. Thin note-math facades preserve consumer APIs; full-frame WASM, confidence migration and the diagnostic Algorithm view are complete.
 
 ## Immediate Next Actions (Concrete)
 

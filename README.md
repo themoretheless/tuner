@@ -18,7 +18,7 @@
 - Worker помечает кадр как `resolved` или `unresolved`, поэтому presentation не определяет полноту кадра по имени backend-а.
 - `registry/music-registry.json` является единым источником 14 инструментов и 33 строев для Rust и web.
 - Shared B0-E5 fixtures измеряют native/WASM/TS точность в центах и normalized-periodicity confidence; Library CRUD вынесен в controller и разбит на рабочие вкладки.
-- Vue 3 web UI с четырьмя рабочими экранами: Tuner, Library, Practice и Analysis; тяжёлые экраны грузятся отдельными чанками.
+- Vue 3 web UI с пятью рабочими экранами: Tuner, Library, Practice, Analysis и Algorithm; тяжёлые экраны грузятся отдельными чанками.
 - Явный session lifecycle `idle | starting | listening | stopping | error` с сериализацией start/stop/restart и восстановлением после runtime-ошибки.
 - Пресеты инструментов и строев, A4, capo, transpose, temperaments, custom tunings, practice history, metronome, themes.
 - Waveform/spectrum/spectrogram, cents history, reference tone и ear training.
@@ -35,18 +35,21 @@
 
 Главные проблемы:
 - Instrument/tuning registry и note/cents math имеют единые registry/expression owners; Rust и TypeScript получают проверяемые generated-модули.
-- Primary browser WASM и native используют один полный `DetectionFrame`; TS fallback измеряет ту же normalized-periodicity confidence, а backend остаётся явным. Power flag fallback-а всё ещё намеренно ограничен.
+- Primary browser WASM и native используют один полный `DetectionFrame`; его bounded `PipelineTelemetry` одинаково показывает YIN/MPM, arbitration, gate/tracker/hold, noise threshold, пять гармоник, три octave hypotheses и итоговое решение без повторного DSP в Vue. TS fallback формирует тот же фиксированный diagnostic shape, а backend остаётся явным. Power flag fallback-а всё ещё намеренно ограничен.
 - Custom-library CRUD извлечён, но `useTuningState.ts` всё ещё broad controller (~340 строк), а `useTuner.ts` остаётся broad composition root.
 - Web/native/synthetic adapters уже реализуют один TS `AudioInputPort`; native получает A4/tuning/selected-target `FrameContext`, но file/WAV adapter пока отсутствует.
 - Spectrum больше не считается, когда скрыт, но включённый Rust frame всё ещё клонирует `Vec<f32>`.
 - Не хватает real-guitar WAV fixtures, permission/device-loss E2E, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
-- Release hardening (signing/notarization/CSP/checksums), diagnostics и общая typed error taxonomy остаются открытыми.
+- На вкладке Algorithm работают live route, uncertainty band, decision timeline, freeze/replay inspector, harmonic/octave/noise views, наблюдаемый latency budget, virtual bypass и baseline A/B overlay. Mic self-test, экспорт diagnostic bundle и общая typed error taxonomy остаются открытыми.
+- Release hardening (signing/notarization/CSP/checksums) остаётся открытым.
 
 Фактическая блок-схема определения высоты, внутренний decision flow и целевой модульный pipeline: [TUNER-PIPELINE.md](TUNER-PIPELINE.md).
 
 Целевая архитектура и фазы рефакторинга: [ARCHITECTURE.md](ARCHITECTURE.md). Практический порядок работ: [PLAN.md](PLAN.md). Подробные рекомендации по рефакторингу: [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
 
-Внешний research-срез 100 pitch/MIR/realtime-audio репозиториев, научных публикаций и 28 дедуплицированных кандидатов: [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md). Это evidence annex; он не перенумеровывает канонические `M#`/`R#` до измеримого design/benchmark pass.
+Внешний pitch/DSP-срез 100 репозиториев, научных публикаций и 28 дедуплицированных кандидатов: [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-REPOSITORIES.md).
+
+Расширенный конкурентный аудит охватил **473 уникальных музыкальных репозитория**: 405 стратифицированных проектов из 18 GitHub topics плюс предыдущие 100, с пересечением 32. Из 139 README и 10 source-tree разборов получены **50 итоговых `G#` предложений** по точности, профессиональному workflow, temperament interoperability, practice, metronome и архитектуре: [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md). Оба файла являются evidence annex: они усиливают или группируют существующие `M#`/`X#`/`R#`, но не меняют канонический backlog без design/benchmark gate.
 
 ## Три итерации и review
 
@@ -54,7 +57,7 @@
 2. **Full-frame ownership:** browser worker получает revisioned `FrameContext`, а `TunerProcessor` возвращает уже сглаженный и разрешённый кадр с target/cents/inTune/power.
 3. **Lifecycle review:** TS fallback получил измеряемый confidence, двойной smoothing удалён, worker processor явно сбрасывается между сессиями.
 
-После трёх проходов отдельное review поймало и устранило перенос stale smoothing state через stop/restart. Проверки: `52` Vitest, `17` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, обе WASM-цели, production Vue build, четыре Playwright flow и полный Tauri `.app`/`.dmg` bundle.
+После трёх проходов отдельное review поймало и устранило перенос stale smoothing state через stop/restart. Последняя полная проверка 2026-07-18: `82` Vitest, `57` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, обе WASM-цели, production Vue build, пять Playwright flow, ручная desktop/mobile проверка вкладки Algorithm и полный Tauri `.app`/`.dmg` bundle.
 
 ## Возможности
 
@@ -62,6 +65,7 @@
 - Поддержка нескольких строев (Standard, Drop D, DADGAD, Open G, Open D + свои)
 - Реал-тайм визуализация формы волны
 - Большой индикатор ноты + шкала центов с гистерезисом
+- Интерактивная диагностика алгоритма с timeline, freeze/replay, octave/harmonic evidence, noise floor, latency и A/B what-if
 - Клавиатурные сокращения
 - Референсный тон
 - Полностью оффлайн в десктопной версии
@@ -96,6 +100,7 @@ Tuner/
 ├── PLAN.md              # Порядок выполнения и DoD
 ├── RECOMMENDATIONS.md   # Приоритизированный план исправлений
 ├── RESEARCH-100-PITCH-REPOSITORIES.md # External evidence + новые X# hypotheses
+├── RESEARCH-473-MUSIC-REPOSITORIES.md # Competitor scan + финальные 50 G# proposals
 ├── TUNER-PIPELINE.md    # Фактическая и целевая блок-схемы определения pitch
 └── README.md
 ```
@@ -289,7 +294,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `52` Vitest tests, `17` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и четыре Playwright flow.
+M0 safety net закрыт для текущего refactor gate: `82` Vitest tests, `57` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и пять Playwright flow.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
