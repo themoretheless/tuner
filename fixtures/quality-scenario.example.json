@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "sampleRate": 48000,
+  "windowSamples": 8192,
+  "hopSeconds": 0.033,
+  "toleranceCents": 5,
+  "minimumCorrectHoldSeconds": 0.1,
+  "referenceA4": 440,
+  "minFrequency": 60,
+  "maxFrequency": 360,
+  "segments": [
+    {
+      "id": "low-e-sustain",
+      "startSeconds": 0.0,
+      "endSeconds": 4.0,
+      "targetFrequency": 82.4069,
+      "stableAfterSeconds": 0.4
+    }
+  ]
+}

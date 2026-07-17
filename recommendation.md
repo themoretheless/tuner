@@ -8,7 +8,7 @@ This is the canonical **current open-problems extract** for the worktree. It kee
 
 In the first audit range, **71 findings are verified closed or obsolete and 109 `R#` findings remain open/partial**. The independent `R181`-`R394` pass adds 214 open findings, so the combined current total is 323. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `82` Vitest tests; `57` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; five Playwright flows covering shared confidence parity, full-frame WASM, synthetic detection, Algorithm diagnostics and `360 px` Library navigation; manual `1280x720`/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `82` Vitest tests; `62` pitch-core tests with all features; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; five Playwright flows covering shared confidence parity, full-frame WASM, synthetic detection, Algorithm diagnostics and `360 px` Library navigation; manual `1280x720`/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -1363,6 +1363,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Added the live Algorithm workspace with candidate/arbitration telemetry, uncertainty history, decision timeline, freeze/replay inspector, spectral/noise evidence, latency budget, virtual bypass and baseline comparison.
 - Made detailed block help viewport-aware and internally scrollable, fixed the baseline action width selector, and added Playwright regression assertions for both layouts.
 - Completed the 473-repository music/instrument scan and recorded 50 deduplicated `G#` proposals in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md).
+- Added a pure offline quality evaluator plus JSON CLI for confirmed acquisition, false locks, reacquisition, note-switch rate, sustain cents MAE and detection coverage; real licensed capture thresholds remain open.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary

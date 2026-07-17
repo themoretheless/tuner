@@ -57,7 +57,7 @@
 2. **Full-frame ownership:** browser worker получает revisioned `FrameContext`, а `TunerProcessor` возвращает уже сглаженный и разрешённый кадр с target/cents/inTune/power.
 3. **Lifecycle review:** TS fallback получил измеряемый confidence, двойной smoothing удалён, worker processor явно сбрасывается между сессиями.
 
-После трёх проходов отдельное review поймало и устранило перенос stale smoothing state через stop/restart. Последняя полная проверка 2026-07-18: `82` Vitest, `57` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, обе WASM-цели, production Vue build, пять Playwright flow, ручная desktop/mobile проверка вкладки Algorithm и полный Tauri `.app`/`.dmg` bundle.
+После трёх проходов отдельное review поймало и устранило перенос stale smoothing state через stop/restart. Последняя полная проверка 2026-07-18: `82` Vitest, `62` pitch-core all-feature tests, весь Rust workspace, strict clippy/fmt/codegen, обе WASM-цели, production Vue build, пять Playwright flow, ручная desktop/mobile проверка вкладки Algorithm и полный Tauri `.app`/`.dmg` bundle.
 
 ## Возможности
 
@@ -89,6 +89,7 @@ Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
 Tuner/
 ├── audio-input/         # Shared realtime-safe cpal adapter for native shells
 ├── pitch-core/          # Shared Rust pitch core (YIN + MPM) - used by egui, WASM for web
+├── fixtures/            # Shared parity traces and quality-scenario manifests
 ├── registry/            # Canonical instruments/tunings/note-name data
 ├── scripts/             # Reproducible cross-language note-math code generation
 ├── web/                 # Vue 3 — онлайн сайт (GitHub Pages)
@@ -113,7 +114,7 @@ Tuner/
 2. `pitch-core/src/generated_note_math.rs`, `web/src/generated/noteMath.ts` - generated primitives; вручную не редактировать.
 3. `pitch-core/src/domain.rs` - адаптация `Note`/`Tuning` и тонкий доменный фасад поверх primitives.
 4. `pitch-core/src/dsp/{detector,yin,mpm,power}.rs` - независимые detector implementations и fusion policy.
-5. `pitch-core/src/resolution.rs`, `engine.rs`, `frames.rs`, `spectrum.rs` - target/hysteresis policy, orchestration и plain `DetectionFrame`.
+5. `pitch-core/src/resolution.rs`, `engine.rs`, `frames.rs`, `spectrum.rs` - target/hysteresis policy, orchestration и plain `DetectionFrame`; `quality/` только оценивает готовые traces и не влияет на live DSP.
 6. `audio-input/src/lib.rs` и `desktop/src-tauri/src/native_audio/` - realtime input и тонкий Tauri adapter.
 7. `egui/src/{app,audio,state,visualization}.rs` - native UI, разделённый по ответственности.
 8. `web/src/platform/`, `session/`, `composables/useTunerSession.ts` - wire contract, state machine и выбор adapter.
@@ -294,7 +295,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `82` Vitest tests, `57` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и пять Playwright flow.
+M0 safety net закрыт для текущего refactor gate: `82` Vitest tests, `62` pitch-core tests с all-features, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic session harness и пять Playwright flow.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
@@ -304,6 +305,18 @@ M0 safety net закрыт для текущего refactor gate: `82` Vitest te
 - egui пока не в feature parity с web UI.
 
 Нативный egui запуск: `cargo run -p guitar-tuner-egui`.
+
+### Offline quality gate
+
+`pitch-core/src/quality/` оценивает временное поведение уже готовых `DetectionFrame`, не импортируя UI, capture adapters или внутренности детектора. Метрики включают подтверждённое время первого корректного захвата, false-lock duration/ratio, reacquisition latency, note switches per second, time-weighted sustain cents MAE и detection coverage.
+
+```bash
+ffmpeg -i capture.wav -f f32le -ac 1 -ar 48000 capture.f32le
+cargo run -p pitch-core --example quality -- \
+  capture.f32le fixtures/quality-scenario.example.json
+```
+
+CLI использует тот же stateful `TunerEngine`, считает timestamp кадра по концу analysis window и печатает versioned JSON для CI/регрессионного сравнения. Пример manifest задаёт sample rate, window/hop, tolerance, минимальный stable hold, detector range и ожидаемые pitch-сегменты.
 
 ## Следующие улучшения (рекомендуемые)
 

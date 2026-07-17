@@ -98,7 +98,7 @@ This shape deliberately sends resolved targets instead of teaching Tauri about e
 
 The 473-repository pass changes the architecture roadmap in five concrete ways:
 
-1. **Accuracy work starts with evidence.** Real-WAV corpus, temporal failure metrics and replay envelopes precede new detector complexity. Top-K candidates and phase-aware policy are core contracts, not Vue experiments.
+1. **Accuracy work starts with evidence.** `pitch-core::quality` now owns pure temporal failure metrics and the offline quality CLI emits versioned JSON; the licensed real-WAV corpus, thresholds and replay envelopes remain next. Top-K candidates and phase-aware policy are core contracts, not Vue experiments.
 2. **Musical formats are adapters.** Scala `.scl`, `.kbm`, AnaMark `.tun`, MIDI and MusicXML parsers belong behind explicit format ports. They validate into versioned domain values and commit only after preview.
 3. **Practice gets its own application layer.** Exercise generation, playback, evaluation, scheduling and persistence must not expand `useTuner.ts`; Practice consumes narrow ports like every other feature.
 4. **Output audio has one owner.** Reference tones, ear training and metronome need a shared resumed `AudioContext`, mixer and cancellable playback scopes. The metronome clock is audio/sample time, never the paint or `setInterval` clock.
@@ -208,6 +208,7 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 ```
 pitch-core/
   domain -> dsp/{detector,yin,mpm,power} -> engine -> frames
+  quality observes frame traces; it never feeds the live engine
   signal / smoother / spectrum are independent services
   wasm is an adapter, not the domain owner
 
@@ -293,7 +294,7 @@ egui/src/
 - AudioWorklet spike for web.
 - Better WASM packaging.
 
-**Status 2026-07-18: baseline done.** `82` Vitest tests, `57` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, five Playwright flows, workspace strict clippy, both WASM target checks, production web, manual `1280x720`/`390x844` visual QA and full Tauri bundle pass. Remaining: real WAV/benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
+**Status 2026-07-18: baseline done.** `82` Vitest tests, `62` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, five Playwright flows, workspace strict clippy, both WASM target checks, production web, manual `1280x720`/`390x844` visual QA and full Tauri bundle pass. Temporal acquisition/false-lock/reacquisition/sustain metrics and a JSON quality CLI are implemented. Remaining: licensed real-WAV scenarios and thresholds, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
