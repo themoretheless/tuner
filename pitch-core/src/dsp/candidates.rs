@@ -8,6 +8,25 @@ const TUNING_RESOLVED_DISTANCE_CENTS: f32 = 450.0;
 const UNGUIDED_CONFIDENCE_MARGIN: f32 = 0.12;
 const UNGUIDED_STRONG_CONFIDENCE: f32 = 0.90;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CandidateSelectionReason {
+    None,
+    YinOnly,
+    SecondaryOnly,
+    Fused,
+    GuidedYin,
+    GuidedSecondary,
+    ConfidenceYin,
+    ConfidenceSecondary,
+    RejectedDisagreement,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CandidateSelection {
+    pub(crate) estimate: Option<PitchEstimate>,
+    pub(crate) reason: CandidateSelectionReason,
+}
+
 /// Pitch-domain hints supplied by the application layer.
 ///
 /// Hints may choose between independently measured candidates, but they never
@@ -80,15 +99,27 @@ impl<'a> PitchGuidance<'a> {
 /// hint can prefer the independently measured candidate that is musically
 /// plausible; without a hint, only a decisive confidence advantage is enough
 /// to publish one side.
-pub(crate) fn select_pitch_candidate(
+#[cfg(test)]
+fn select_pitch_candidate(
     yin: Option<PitchEstimate>,
     mpm: Option<PitchEstimate>,
     guidance: PitchGuidance<'_>,
 ) -> Option<PitchEstimate> {
+    select_pitch_candidate_with_reason(yin, mpm, guidance).estimate
+}
+
+pub(crate) fn select_pitch_candidate_with_reason(
+    yin: Option<PitchEstimate>,
+    mpm: Option<PitchEstimate>,
+    guidance: PitchGuidance<'_>,
+) -> CandidateSelection {
     match (yin.filter(valid_estimate), mpm.filter(valid_estimate)) {
         (Some(yin), Some(mpm)) => {
             if cents_distance(yin.frequency, mpm.frequency) <= AGREEMENT_CENTS {
-                return Some(fuse(yin, mpm));
+                return CandidateSelection {
+                    estimate: Some(fuse(yin, mpm)),
+                    reason: CandidateSelectionReason::Fused,
+                };
             }
 
             if !guidance.is_empty() {
@@ -105,22 +136,47 @@ pub(crate) fn select_pitch_candidate(
                     if preferred_distance <= GUIDED_RAW_DISTANCE_CENTS
                         && other_distance - preferred_distance >= GUIDED_IMPROVEMENT_CENTS
                     {
-                        return Some(preferred);
+                        return CandidateSelection {
+                            estimate: Some(preferred),
+                            reason: if preferred == yin {
+                                CandidateSelectionReason::GuidedYin
+                            } else {
+                                CandidateSelectionReason::GuidedSecondary
+                            },
+                        };
                     }
                 }
             }
 
-            let (stronger, weaker) = if yin.confidence >= mpm.confidence {
-                (yin, mpm)
+            let (stronger, weaker, reason) = if yin.confidence >= mpm.confidence {
+                (yin, mpm, CandidateSelectionReason::ConfidenceYin)
             } else {
-                (mpm, yin)
+                (mpm, yin, CandidateSelectionReason::ConfidenceSecondary)
             };
-            (stronger.confidence >= UNGUIDED_STRONG_CONFIDENCE
+            let estimate = (stronger.confidence >= UNGUIDED_STRONG_CONFIDENCE
                 && stronger.confidence - weaker.confidence >= UNGUIDED_CONFIDENCE_MARGIN)
-                .then_some(stronger)
+                .then_some(stronger);
+            CandidateSelection {
+                estimate,
+                reason: if estimate.is_some() {
+                    reason
+                } else {
+                    CandidateSelectionReason::RejectedDisagreement
+                },
+            }
         }
-        (Some(estimate), None) | (None, Some(estimate)) => Some(estimate),
-        (None, None) => None,
+        (Some(estimate), None) => CandidateSelection {
+            estimate: Some(estimate),
+            reason: CandidateSelectionReason::YinOnly,
+        },
+        (None, Some(estimate)) => CandidateSelection {
+            estimate: Some(estimate),
+            reason: CandidateSelectionReason::SecondaryOnly,
+        },
+        (None, None) => CandidateSelection {
+            estimate: None,
+            reason: CandidateSelectionReason::None,
+        },
     }
 }
 

@@ -1,8 +1,10 @@
 use super::{
-    prefer_guided_harmonic, select_pitch_candidate, HarmonicPitchDetector, MpmDetector,
-    OctaveDisambiguator, PitchGuidance, YinDetector,
+    prefer_guided_harmonic, select_pitch_candidate_with_reason, CandidateSelectionReason,
+    HarmonicPitchDetector, MpmDetector, OctaveDisambiguator, PitchGuidance, YinDetector,
 };
-use crate::PipelineConfig;
+use crate::{
+    PipelineArbitration, PipelineCandidate, PipelineConfig, PipelineDecision, PipelineTelemetry,
+};
 
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
 const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
@@ -90,6 +92,7 @@ pub struct HybridPitchDetector {
     mpm: MpmDetector,
     octave: OctaveDisambiguator,
     pipeline: PipelineConfig,
+    telemetry: PipelineTelemetry,
     yin: YinDetector,
 }
 
@@ -110,6 +113,7 @@ impl HybridPitchDetector {
             mpm: MpmDetector::new(config),
             octave: OctaveDisambiguator::new(),
             pipeline: PipelineConfig::default(),
+            telemetry: PipelineTelemetry::default(),
             yin: YinDetector::new(config),
         }
     }
@@ -130,6 +134,10 @@ impl HybridPitchDetector {
 
     pub(crate) fn reset_tracking_state(&mut self) {
         self.octave.reset();
+    }
+
+    pub(crate) fn telemetry(&self) -> PipelineTelemetry {
+        self.telemetry
     }
 
     pub(crate) fn set_pipeline_config(&mut self, pipeline: PipelineConfig) {
@@ -163,7 +171,11 @@ impl HybridPitchDetector {
     ) -> Option<PitchEstimate> {
         // Frame status is edge-triggered; never let an unread status leak
         // into a later detector call.
+        self.telemetry = PipelineTelemetry::default();
+        self.telemetry.sample_rate = sample_rate;
+        self.telemetry.window_samples = buffer.len().min(u32::MAX as usize) as u32;
         self.octave.take_correction_started();
+        self.octave.begin_frame();
         if !self.prepare_samples(buffer) {
             self.octave.reset();
             return None;
@@ -179,7 +191,11 @@ impl HybridPitchDetector {
             .secondary_detector_enabled
             .then(|| self.mpm.detect_centered(&cleaned, sample_rate))
             .flatten();
-        let mut estimate = select_pitch_candidate(yin, mpm, guidance);
+        self.telemetry.yin = yin.map(pipeline_candidate);
+        self.telemetry.secondary = mpm.map(pipeline_candidate);
+        let selection = select_pitch_candidate_with_reason(yin, mpm, guidance);
+        self.telemetry.arbitration = arbitration_from_selection(selection.reason);
+        let mut estimate = selection.estimate;
         let needs_harmonic_alternative = self.pipeline.harmonic_enabled
             && !guidance.is_empty()
             && (yin.is_some() || mpm.is_some())
@@ -193,34 +209,46 @@ impl HybridPitchDetector {
                 self.config.min_frequency,
                 self.config.max_frequency,
             );
-            estimate = prefer_guided_harmonic(estimate, harmonic, guidance);
+            let preferred = prefer_guided_harmonic(estimate, harmonic, guidance);
+            if harmonic.is_some() && preferred == harmonic && preferred != estimate {
+                self.telemetry.arbitration = PipelineArbitration::HarmonicRescue;
+            }
+            estimate = preferred;
         }
-        let estimate = estimate
-            .filter(|estimate| self.config.accepts_confidence(estimate.confidence))
-            .and_then(|estimate| {
-                let frequency = if self.pipeline.octave_enabled {
-                    self.octave.resolve(
-                        &cleaned,
-                        sample_rate,
-                        estimate.frequency,
-                        self.config.min_frequency,
-                        self.config.max_frequency,
-                    )
-                } else {
-                    estimate.frequency
-                };
-                // A pending octave correction is deliberately held by the
-                // engine on this frame. Validate only settled decisions so a
-                // correct 2f candidate is not rejected before it folds to f.
-                let correction_pending =
-                    self.pipeline.octave_enabled && self.octave.has_unconfirmed_correction();
-                (correction_pending || guidance.supports_resolved(frequency)).then_some(
-                    PitchEstimate {
-                        frequency,
-                        ..estimate
-                    },
+        let had_candidate = estimate.is_some();
+        estimate = estimate.filter(|estimate| self.config.accepts_confidence(estimate.confidence));
+        if had_candidate && estimate.is_none() {
+            self.telemetry.decision = PipelineDecision::BelowConfidence;
+        }
+        estimate = estimate.and_then(|estimate| {
+            let frequency = if self.pipeline.octave_enabled {
+                self.octave.resolve(
+                    &cleaned,
+                    sample_rate,
+                    estimate.frequency,
+                    self.config.min_frequency,
+                    self.config.max_frequency,
                 )
-            });
+            } else {
+                estimate.frequency
+            };
+            // A pending octave correction is deliberately held by the
+            // engine on this frame. Validate only settled decisions so a
+            // correct 2f candidate is not rejected before it folds to f.
+            let correction_pending =
+                self.pipeline.octave_enabled && self.octave.has_unconfirmed_correction();
+            if correction_pending || guidance.supports_resolved(frequency) {
+                Some(PitchEstimate {
+                    frequency,
+                    ..estimate
+                })
+            } else {
+                self.telemetry.decision = PipelineDecision::TargetRejected;
+                None
+            }
+        });
+        self.telemetry.spectral = self.octave.evidence();
+        self.telemetry.selected = estimate.map(pipeline_candidate);
         self.cleaned = cleaned;
         estimate
     }
@@ -250,10 +278,33 @@ impl HybridPitchDetector {
         if self.pipeline.fixed_gate_enabled
             && (rms < self.config.rms_gate || max_abs < self.config.peak_gate)
         {
+            self.telemetry.decision = PipelineDecision::FixedGateRejected;
             return false;
         }
 
+        self.telemetry.fixed_gate_open = true;
         true
+    }
+}
+
+fn pipeline_candidate(estimate: PitchEstimate) -> PipelineCandidate {
+    PipelineCandidate {
+        confidence: estimate.confidence,
+        frequency: estimate.frequency,
+    }
+}
+
+fn arbitration_from_selection(reason: CandidateSelectionReason) -> PipelineArbitration {
+    match reason {
+        CandidateSelectionReason::None => PipelineArbitration::None,
+        CandidateSelectionReason::YinOnly => PipelineArbitration::YinOnly,
+        CandidateSelectionReason::SecondaryOnly => PipelineArbitration::SecondaryOnly,
+        CandidateSelectionReason::Fused => PipelineArbitration::Fused,
+        CandidateSelectionReason::GuidedYin => PipelineArbitration::GuidedYin,
+        CandidateSelectionReason::GuidedSecondary => PipelineArbitration::GuidedSecondary,
+        CandidateSelectionReason::ConfidenceYin => PipelineArbitration::ConfidenceYin,
+        CandidateSelectionReason::ConfidenceSecondary => PipelineArbitration::ConfidenceSecondary,
+        CandidateSelectionReason::RejectedDisagreement => PipelineArbitration::RejectedDisagreement,
     }
 }
 

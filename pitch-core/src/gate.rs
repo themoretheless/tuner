@@ -103,6 +103,18 @@ impl AdaptiveSignalGate {
         self.previous_rms = 0.0;
     }
 
+    pub(crate) fn noise_floor(&self) -> f32 {
+        self.noise_floor
+    }
+
+    pub(crate) fn threshold(&self) -> f32 {
+        if self.open {
+            (self.noise_floor * CLOSE_NOISE_RATIO).max(self.base_rms * 0.9)
+        } else {
+            (self.noise_floor * OPEN_NOISE_RATIO).max(self.base_rms * 1.2)
+        }
+    }
+
     fn update_noise_floor(&mut self, rms: f32) {
         if !rms.is_finite() || rms < 0.0 {
             return;

@@ -7,7 +7,10 @@ mod power;
 mod spectral;
 mod yin;
 
-pub(crate) use candidates::{prefer_guided_harmonic, select_pitch_candidate, PitchGuidance};
+pub(crate) use candidates::{
+    prefer_guided_harmonic, select_pitch_candidate_with_reason, CandidateSelectionReason,
+    PitchGuidance,
+};
 pub use detector::{
     DetectorConfig, HybridPitchDetector, PitchDetector, PitchEstimate, MIN_USABLE_CONFIDENCE,
 };

@@ -5,6 +5,7 @@ import {
   type PipelineConfig,
 } from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import { normalizePipelineTelemetry } from '../domain/pipelineTelemetry';
 import { NOTE_NAMES, type Note, type NoteName } from '../utils/notes';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
@@ -19,6 +20,8 @@ export interface NativeAudioFramePayload {
   isPower?: unknown;
   level?: unknown;
   note?: unknown;
+  pipeline?: unknown;
+  rawFreq?: unknown;
   rms?: unknown;
   target?: unknown;
 }
@@ -82,9 +85,7 @@ export function normalizeNativeFrame(payload: NativeAudioFramePayload = {}): Det
   const freq = Number.isFinite(rawFrequency) && rawFrequency > 0 ? rawFrequency : null;
   return {
     freq,
-    // The native (Tauri) bridge does not carry the pre-smoothing detector
-    // value; the diagnostic field is web/WASM-only for now.
-    rawFreq: null,
+    rawFreq: positiveFrequency(payload.rawFreq),
     confidence: clamp01(finiteNumber(payload.confidence)),
     rms: Math.max(0, finiteNumber(payload.rms)),
     level: clamp01(finiteNumber(payload.level)),
@@ -93,7 +94,13 @@ export function normalizeNativeFrame(payload: NativeAudioFramePayload = {}): Det
     target: normalizeNote(payload.target),
     inTune: Boolean(payload.inTune),
     isPower: Boolean(payload.isPower),
+    pipeline: normalizePipelineTelemetry(payload.pipeline),
   };
+}
+
+function positiveFrequency(value: unknown) {
+  const frequency = Number(value);
+  return Number.isFinite(frequency) && frequency > 0 ? frequency : null;
 }
 
 function normalizeNote(value: unknown): Note | null {

@@ -56,6 +56,7 @@ describe('streaming pitch fallback', () => {
     expect(tracker.update({ confidence: 0.9, frequency: 160 }, loud)).toBeNull();
     expect(tracker.update({ confidence: 0.92, frequency: 160.2 }, loud)?.frequency)
       .toBeCloseTo(80.05, 1);
+    expect(tracker.telemetry().selected?.frequency).toBeCloseTo(80.1, 1);
   });
 
   it('rejects a loud shared subharmonic outside the selected string', () => {
@@ -71,5 +72,19 @@ describe('streaming pitch fallback', () => {
     for (let frame = 0; frame < 5; frame += 1) {
       expect(tracker.update({ confidence: 0.96, frequency: 110 }, loud)).toBeNull();
     }
+    expect(tracker.telemetry().selected).toBeNull();
+  });
+
+  it('never folds a fallback estimate outside the configured detection range', () => {
+    const tracker = new StreamingPitchTracker();
+    tracker.setDetectionRange({ minFrequency: 100, maxFrequency: 500 });
+    tracker.setContext({
+      ...createDefaultFrameContext(),
+      selectedTarget: { frequency: 82.4069, name: 'E', octave: 2 },
+      tuningTargets: [{ frequency: 82.4069, name: 'E', octave: 2 }],
+    });
+
+    expect(tracker.update({ confidence: 0.95, frequency: 160 }, loud)).toBeNull();
+    expect(tracker.telemetry().selected).toBeNull();
   });
 });

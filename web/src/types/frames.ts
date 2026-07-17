@@ -1,4 +1,5 @@
 import type { Note } from '../utils/notes';
+import type { PipelineTelemetry } from '../domain/pipelineTelemetry';
 
 export interface DetectionFrame {
   freq: number | null;
@@ -13,6 +14,7 @@ export interface DetectionFrame {
   target: Note | null;
   inTune: boolean;
   isPower: boolean;
+  pipeline: PipelineTelemetry;
 }
 
 export interface FrameContext {

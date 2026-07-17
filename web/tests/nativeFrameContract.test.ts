@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
+import { createPipelineTelemetry } from '../src/domain/pipelineTelemetry';
 import {
   cloneNativeAudioConfiguration,
   createNativeAudioConfiguration,
@@ -18,6 +19,7 @@ describe('native DetectionFrame wire contract', () => {
       isPower: false,
       level: 0.4,
       note: 'A4',
+      pipeline: createPipelineTelemetry(),
       rms: 0.1,
       target: { frequency: 442, name: 'A', octave: 4 },
     })).toEqual({
@@ -29,6 +31,7 @@ describe('native DetectionFrame wire contract', () => {
       isPower: false,
       level: 0.4,
       note: 'A4',
+      pipeline: createPipelineTelemetry(),
       rms: 0.1,
       target: { frequency: 442, name: 'A', octave: 4 },
     });

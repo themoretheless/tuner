@@ -10,22 +10,54 @@ import {
 } from '../generated/noteMath';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import type { PipelineConfig } from '../domain/pipelineConfig';
+import { normalizePipelineTelemetry } from '../domain/pipelineTelemetry';
 
 interface WasmTunerFrame {
+  readonly adaptive_gate_open: boolean;
+  readonly arbitration: string;
   readonly cents: number;
   readonly confidence: number;
+  readonly decision: string;
   readonly freq: number;
+  readonly fixed_gate_open: boolean;
+  readonly gate_threshold: number;
+  readonly harmonic_1: number;
+  readonly harmonic_2: number;
+  readonly harmonic_3: number;
+  readonly harmonic_4: number;
+  readonly harmonic_5: number;
+  readonly held: boolean;
   readonly raw_freq: number;
   readonly has_frequency: boolean;
   readonly has_raw_frequency: boolean;
+  readonly has_secondary_candidate: boolean;
+  readonly has_selected_candidate: boolean;
+  readonly has_spectral_evidence: boolean;
   readonly has_target: boolean;
+  readonly has_yin_candidate: boolean;
   readonly in_tune: boolean;
   readonly is_power: boolean;
   readonly level: number;
+  readonly noise_floor: number;
   readonly note: string;
+  readonly octave_active: number;
+  readonly octave_base_frequency: number;
+  readonly octave_center_score: number;
+  readonly octave_down_score: number;
+  readonly octave_pending: number;
+  readonly octave_up_score: number;
   readonly rms: number;
+  readonly sample_rate: number;
+  readonly secondary_confidence: number;
+  readonly secondary_frequency: number;
+  readonly selected_confidence: number;
+  readonly selected_frequency: number;
   readonly target_frequency: number;
   readonly target_midi: number;
+  readonly tracked: boolean;
+  readonly window_samples: number;
+  readonly yin_confidence: number;
+  readonly yin_frequency: number;
   free(): void;
 }
 
@@ -127,6 +159,47 @@ export function readWasmFrame(frame: WasmTunerFrame): DetectionFrame {
     target,
     inTune: freq != null && Boolean(frame.in_tune),
     isPower: freq != null && Boolean(frame.is_power),
+    pipeline: normalizePipelineTelemetry({
+      adaptiveGateOpen: frame.adaptive_gate_open,
+      arbitration: frame.arbitration,
+      decision: frame.decision,
+      fixedGateOpen: frame.fixed_gate_open,
+      gateThreshold: frame.gate_threshold,
+      held: frame.held,
+      noiseFloor: frame.noise_floor,
+      sampleRate: frame.sample_rate,
+      secondary: frame.has_secondary_candidate ? {
+        confidence: frame.secondary_confidence,
+        frequency: frame.secondary_frequency,
+      } : null,
+      selected: frame.has_selected_candidate ? {
+        confidence: frame.selected_confidence,
+        frequency: frame.selected_frequency,
+      } : null,
+      spectral: frame.has_spectral_evidence ? {
+        activeOctave: frame.octave_active,
+        baseFrequency: frame.octave_base_frequency,
+        harmonics: [
+          frame.harmonic_1,
+          frame.harmonic_2,
+          frame.harmonic_3,
+          frame.harmonic_4,
+          frame.harmonic_5,
+        ],
+        octaveScores: [
+          frame.octave_down_score,
+          frame.octave_center_score,
+          frame.octave_up_score,
+        ],
+        pendingOctave: frame.octave_pending,
+      } : null,
+      tracked: frame.tracked,
+      windowSamples: frame.window_samples,
+      yin: frame.has_yin_candidate ? {
+        confidence: frame.yin_confidence,
+        frequency: frame.yin_frequency,
+      } : null,
+    }),
   };
 }
 

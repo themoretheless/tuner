@@ -1,11 +1,17 @@
 import type { FrameContext } from '../types/frames';
+import type { PipelineDecision } from '../domain/pipelineTelemetry';
 import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
   pipelineConfigsEqual,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
-import type { PitchEstimate, SignalStats } from './pitch';
+import {
+  normalizePitchDetectionRange,
+  type PitchDetectionRange,
+  type PitchEstimate,
+  type SignalStats,
+} from './pitch';
 
 const BASE_RMS = 0.0025;
 const BASE_PEAK = 0.012;
@@ -26,6 +32,11 @@ export class StreamingPitchTracker {
   private contextKey = '';
   private gateOpen = false;
   private history: number[] = [];
+  private lastAdaptiveGateOpen = false;
+  private lastDecision: PipelineDecision = 'no-candidate';
+  private lastSelected: PitchEstimate | null = null;
+  private maxFrequency = 1_200;
+  private minFrequency = 24;
   private missingFrames = 0;
   private noiseFloor = BASE_RMS;
   private pipelineConfig = createDefaultPipelineConfig();
@@ -62,19 +73,38 @@ export class StreamingPitchTracker {
     this.reset();
   }
 
+  setDetectionRange(range: PitchDetectionRange) {
+    const normalized = normalizePitchDetectionRange(range);
+    if (
+      normalized.minFrequency === this.minFrequency
+      && normalized.maxFrequency === this.maxFrequency
+    ) return;
+    this.minFrequency = normalized.minFrequency;
+    this.maxFrequency = normalized.maxFrequency;
+    this.reset();
+  }
+
   update(estimate: PitchEstimate | null, stats: SignalStats): PitchEstimate | null {
     const resolvedEstimate = this.resolveEstimate(estimate);
+    this.lastSelected = resolvedEstimate;
     const gateOpen = !this.pipelineConfig.adaptiveGateEnabled
       || this.observeGate(stats, resolvedEstimate);
+    this.lastAdaptiveGateOpen = gateOpen;
     if (!gateOpen) {
+      this.lastDecision = 'adaptive-gate-rejected';
       this.resetTrack();
       return null;
     }
     if (!resolvedEstimate) {
       this.missingFrames += 1;
       if (this.pipelineConfig.holdEnabled && this.missingFrames <= HOLD_FRAMES) {
-        return this.current();
+        const held = this.current();
+        this.lastDecision = held
+          ? 'held'
+          : estimate ? 'target-rejected' : 'no-candidate';
+        return held;
       }
+      this.lastDecision = estimate ? 'target-rejected' : 'no-candidate';
       this.resetTrack();
       return null;
     }
@@ -89,13 +119,18 @@ export class StreamingPitchTracker {
       this.history = [candidate];
       this.clearPending();
       this.unstableFrames = 0;
+      this.lastDecision = 'published';
       return this.current();
     }
 
     if (this.stableLog == null) {
       this.updatePending(candidate, resolvedEstimate.confidence, ACQUIRE_CENTS);
-      if (this.pendingStreak < ACQUIRE_FRAMES) return null;
+      if (this.pendingStreak < ACQUIRE_FRAMES) {
+        this.lastDecision = 'tracking-acquiring';
+        return null;
+      }
       this.commitPending();
+      this.lastDecision = 'published';
       return this.current();
     }
 
@@ -111,6 +146,7 @@ export class StreamingPitchTracker {
       const alpha = residual < 12 ? 0.2 : residual < 35 ? 0.35 : 0.55;
       this.stableLog += alpha * (median - this.stableLog);
       this.stableConfidence = 0.25 * resolvedEstimate.confidence + 0.75 * this.stableConfidence;
+      this.lastDecision = 'published';
       return this.current();
     }
 
@@ -121,6 +157,7 @@ export class StreamingPitchTracker {
       : CHANGE_FRAMES;
     if (this.pendingStreak >= required) {
       this.commitPending();
+      this.lastDecision = 'published';
       return this.current();
     }
     if (this.unstableFrames >= 7) {
@@ -130,9 +167,23 @@ export class StreamingPitchTracker {
       this.pendingLog = pendingLog;
       this.pendingConfidence = pendingConfidence;
       this.pendingStreak = pendingLog == null ? 0 : 1;
+      this.lastDecision = 'tracking-acquiring';
       return null;
     }
+    this.lastDecision = 'tracking-acquiring';
     return this.current();
+  }
+
+  telemetry() {
+    return {
+      adaptiveGateOpen: this.lastAdaptiveGateOpen,
+      decision: this.lastDecision,
+      gateThreshold: this.gateOpen
+        ? Math.max(BASE_RMS * 0.9, this.noiseFloor * 1.25)
+        : Math.max(BASE_RMS * 1.2, this.noiseFloor * 1.8),
+      noiseFloor: this.noiseFloor,
+      selected: this.lastSelected,
+    } as const;
   }
 
   reset() {
@@ -140,6 +191,9 @@ export class StreamingPitchTracker {
     this.belowGateFrames = 0;
     this.calibratedFrames = 0;
     this.gateOpen = false;
+    this.lastAdaptiveGateOpen = false;
+    this.lastDecision = 'no-candidate';
+    this.lastSelected = null;
     this.noiseFloor = BASE_RMS;
     this.previousRms = 0;
   }
@@ -193,10 +247,13 @@ export class StreamingPitchTracker {
 
   private correctOctave(frequency: number) {
     const direct = this.directTargetDistance(frequency);
-    const folded = this.directTargetDistance(frequency * 0.5);
+    const foldedFrequency = frequency * 0.5;
+    const folded = this.inDetectionRange(foldedFrequency)
+      ? this.directTargetDistance(foldedFrequency)
+      : null;
     return direct != null && folded != null
       && folded <= 80 && direct >= 120 && direct - folded >= 50
-      ? frequency * 0.5
+      ? foldedFrequency
       : frequency;
   }
 
@@ -205,6 +262,7 @@ export class StreamingPitchTracker {
     const frequency = this.pipelineConfig.octaveEnabled
       ? this.correctOctave(estimate.frequency)
       : estimate.frequency;
+    if (!this.inDetectionRange(frequency)) return null;
     const distance = this.directTargetDistance(frequency);
     if (distance == null) return { ...estimate, frequency };
     const limit = this.selectedTarget != null
@@ -217,6 +275,10 @@ export class StreamingPitchTracker {
     const targets = this.selectedTarget != null ? [this.selectedTarget] : this.targets;
     if (!validFrequency(frequency) || targets.length === 0) return null;
     return Math.min(...targets.map((target) => Math.abs(1_200 * Math.log2(frequency / target))));
+  }
+
+  private inDetectionRange(frequency: number) {
+    return frequency >= this.minFrequency && frequency <= this.maxFrequency;
   }
 
   private updatePending(candidate: number, confidence: number, tolerance: number) {

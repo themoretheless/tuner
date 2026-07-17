@@ -1,4 +1,8 @@
 import type { DetectionFrame } from '../types/frames';
+import {
+  createPipelineTelemetry,
+  type PipelineTelemetry,
+} from './pipelineTelemetry';
 
 interface UnresolvedDetectionInput {
   confidence?: number;
@@ -6,6 +10,7 @@ interface UnresolvedDetectionInput {
   rawFreq?: number | null;
   level?: number;
   rms?: number;
+  pipeline?: Partial<PipelineTelemetry>;
 }
 
 export function createUnresolvedDetectionFrame(
@@ -23,6 +28,7 @@ export function createUnresolvedDetectionFrame(
     target: null,
     inTune: false,
     isPower: false,
+    pipeline: createPipelineTelemetry(input.pipeline),
   };
 }
 

@@ -10,16 +10,17 @@ import type { AudioFrame } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
+  analyzePitchFrame,
   computeSignalStats,
-  detectPitchEstimate,
   isBelowPitchDetectionGate,
   normalizeLevel,
   type PitchDetectionRange,
-  type PitchEstimate,
+  type PitchAnalysis,
   type PitchGuidance,
   type SignalStats,
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
+import { PipelineSpectralAnalyzer } from '../utils/pipelineSpectralAnalyzer';
 import type {
   DetectionFrameSemantics,
   PitchDetectorBackend,
@@ -56,6 +57,7 @@ export function usePitchLoop(
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
   let pendingPitchRequestId: number | null = null;
+  let pendingPitchStartedAt: number | null = null;
   let pipelineRevision = 0;
   let sentContextRevision = -1;
   let sentPipelineRevision = -1;
@@ -63,7 +65,9 @@ export function usePitchLoop(
   let pitchRequestId = 0;
   let quietTicks = 0;
   const fallbackTracker = new StreamingPitchTracker();
+  const spectralAnalyzer = new PipelineSpectralAnalyzer();
   fallbackTracker.setPipelineConfig(pipelineConfig.value);
+  fallbackTracker.setDetectionRange(detectionRange.value);
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
   function ensurePitchWorker() {
@@ -83,15 +87,26 @@ export function usePitchLoop(
       workerTransferBuffer = event.data.buffer;
       if (event.data.id !== pendingPitchRequestId) return;
       pendingPitchRequestId = null;
+      const roundTripMs = pendingPitchStartedAt == null
+        ? 0
+        : Math.max(0, performance.now() - pendingPitchStartedAt);
+      pendingPitchStartedAt = null;
       if (event.data.id !== pitchRequestId) return;
       detectorBackend.value = event.data.backend;
       frameSemantics.value = event.data.semantics;
       fallbackTracker.reset();
-      detectionFrame.value = event.data.frame;
+      detectionFrame.value = {
+        ...event.data.frame,
+        pipeline: {
+          ...event.data.frame.pipeline,
+          roundTripMs,
+        },
+      };
       volume.value = event.data.frame.level;
     };
     pitchWorker.onerror = () => {
       pendingPitchRequestId = null;
+      pendingPitchStartedAt = null;
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
       detectionFrame.value = createUnresolvedDetectionFrame({ level: volume.value });
@@ -110,6 +125,7 @@ export function usePitchLoop(
     pitchWorker?.terminate();
     pitchWorker = null;
     pendingPitchRequestId = null;
+    pendingPitchStartedAt = null;
     sentContextRevision = -1;
     sentPipelineRevision = -1;
     workerTransferBuffer = null;
@@ -133,16 +149,51 @@ export function usePitchLoop(
     pitchWorker?.postMessage({ type: 'reset' });
   }
 
-  function applyFallbackEstimate(estimate: PitchEstimate | null, stats: SignalStats) {
+  function applyFallbackAnalysis(
+    analysis: PitchAnalysis | null,
+    stats: SignalStats,
+    audioFrame?: AudioFrame,
+    startedAt = performance.now(),
+  ) {
     if (frameContext) fallbackTracker.setContext(frameContext.value);
-    const tracked = fallbackTracker.update(estimate, stats);
-    detectionFrame.value = createUnresolvedDetectionFrame({
+    const tracked = fallbackTracker.update(analysis?.estimate ?? null, stats);
+    const trackerTelemetry = fallbackTracker.telemetry();
+    const fixedGateOpen = analysis?.fixedGateOpen ?? false;
+    const decision = !fixedGateOpen && !tracked
+      ? 'fixed-gate-rejected'
+      : trackerTelemetry.decision;
+    const nextFrame = createUnresolvedDetectionFrame({
       confidence: tracked?.confidence ?? 0,
       freq: tracked?.frequency ?? null,
-      rawFreq: estimate?.frequency ?? null,
+      rawFreq: trackerTelemetry.selected?.frequency ?? null,
       level: normalizeLevel(stats.rms),
+      pipeline: {
+        adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
+        arbitration: analysis?.arbitration ?? 'none',
+        decision,
+        fixedGateOpen,
+        gateThreshold: trackerTelemetry.gateThreshold,
+        held: decision === 'held',
+        noiseFloor: trackerTelemetry.noiseFloor,
+        sampleRate: audioFrame?.sampleRate ?? 0,
+        secondary: analysis?.secondary ?? null,
+        selected: trackerTelemetry.selected,
+        spectral: pipelineConfig.value.octaveEnabled && audioFrame
+          ? spectralAnalyzer.analyze(
+            audioFrame.buffer,
+            audioFrame.sampleRate,
+            analysis?.estimate?.frequency,
+            detectionRange.value,
+          )
+          : null,
+        tracked: pipelineConfig.value.trackingEnabled && decision === 'published',
+        windowSamples: audioFrame?.buffer.length ?? 0,
+        yin: analysis?.yin ?? null,
+      },
       rms: stats.rms,
     });
+    nextFrame.pipeline.processingMs = Math.max(0, performance.now() - startedAt);
+    detectionFrame.value = nextFrame;
   }
 
   function tick() {
@@ -173,7 +224,7 @@ export function usePitchLoop(
           : 1;
         if (quietTicks === resetAt) resetWorkerProcessor();
         pitchRequestId += 1;
-        applyFallbackEstimate(null, stats);
+        applyFallbackAnalysis(null, stats, frame);
       }
     } else {
       quietTicks = 0;
@@ -193,25 +244,25 @@ export function usePitchLoop(
       maxFrequency: detectionRange.value.maxFrequency,
     };
     if (!worker) {
+      const startedAt = performance.now();
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
-      applyFallbackEstimate(
-        detectPitchEstimate(
+      const analysis = analyzePitchFrame(
           frame.buffer,
           frame.sampleRate,
           stats,
           range,
           fallbackPitchGuidance,
           pipelineConfig.value,
-        ),
-        stats,
-      );
+        );
+      applyFallbackAnalysis(analysis, stats, frame, startedAt);
       return;
     }
     if (pendingPitchRequestId != null) return;
 
     pitchRequestId += 1;
     pendingPitchRequestId = pitchRequestId;
+    pendingPitchStartedAt = performance.now();
     const byteLength = frame.buffer.byteLength;
     const buffer = workerTransferBuffer?.byteLength === byteLength
       ? workerTransferBuffer
@@ -241,6 +292,7 @@ export function usePitchLoop(
       if (shouldSendPipeline) sentPipelineRevision = pipelineRevision;
     } catch {
       pendingPitchRequestId = null;
+      pendingPitchStartedAt = null;
       detectorBackend.value = 'typescript';
       frameSemantics.value = 'unresolved';
       worker.onerror = null;
@@ -249,17 +301,16 @@ export function usePitchLoop(
       sentContextRevision = -1;
       sentPipelineRevision = -1;
       workerTransferBuffer = null;
-      applyFallbackEstimate(
-        detectPitchEstimate(
+      const startedAt = performance.now();
+      const analysis = analyzePitchFrame(
           frame.buffer,
           frame.sampleRate,
           stats,
           range,
           fallbackPitchGuidance,
           pipelineConfig.value,
-        ),
-        stats,
-      );
+        );
+      applyFallbackAnalysis(analysis, stats, frame, startedAt);
     }
   }
 
@@ -288,7 +339,10 @@ export function usePitchLoop(
     stop();
     disposePitchWorker();
   });
-  watch(detectionRange, reset, { deep: true });
+  watch(detectionRange, (range) => {
+    fallbackTracker.setDetectionRange(range);
+    reset();
+  }, { deep: true });
   if (frameContext) {
     watch(frameContext, (context) => {
       fallbackPitchGuidance = pitchGuidanceFromContext(context);

@@ -1,7 +1,8 @@
 use crate::{gate::AdaptiveSignalGate, tracking::PitchTracker};
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
-    FrameContext, FrameResolver, HybridPitchDetector, PipelineConfig, SpectrumAnalyzer, Tuning,
+    FrameContext, FrameResolver, HybridPitchDetector, PipelineConfig, PipelineDecision,
+    SpectrumAnalyzer, Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -172,6 +173,7 @@ impl TunerEngine {
             prior.selected_frequency(),
             prior.target_frequencies(),
         );
+        let mut pipeline_telemetry = self.detector.telemetry();
         // Diagnostic: what the detector itself said this frame, before any
         // suppression, gating, or tracking touches it.
         let raw_freq = estimate.map(|estimate| estimate.frequency);
@@ -183,17 +185,22 @@ impl TunerEngine {
             // provisional octave would seed smoothing with a value the
             // detector already suspects is wrong.
             estimate = None;
+            pipeline_telemetry.decision = PipelineDecision::OctavePending;
         }
 
         let gate_open = !self.pipeline.adaptive_gate_enabled
             || self
                 .gate
                 .observe(signal_stats, gate_estimate, self.resolver.tracking_prior());
+        pipeline_telemetry.adaptive_gate_open = gate_open;
+        pipeline_telemetry.noise_floor = self.gate.noise_floor();
+        pipeline_telemetry.gate_threshold = self.gate.threshold();
 
         // Track only coherent estimates. Brief detector dropouts ride on the
         // settled track while the signal remains open; sustained uncertainty
         // or a closed adaptive gate clears it before the next acquisition.
         let (freq_opt, confidence) = if !gate_open {
+            pipeline_telemetry.decision = PipelineDecision::AdaptiveGateRejected;
             self.clear_tracking();
             self.detector.reset_tracking_state();
             (None, 0.0)
@@ -211,10 +218,13 @@ impl TunerEngine {
                 Some((estimate.frequency, estimate.confidence))
             };
             if let Some((tracked_frequency, tracked_confidence)) = tracked {
+                pipeline_telemetry.decision = PipelineDecision::Published;
+                pipeline_telemetry.tracked = self.pipeline.tracking_enabled;
                 self.hold_streak = 0;
                 self.held_reading = Some((tracked_frequency, tracked_confidence));
                 (Some(tracked_frequency), tracked_confidence)
             } else {
+                pipeline_telemetry.decision = PipelineDecision::TrackingAcquiring;
                 self.held_reading = None;
                 (None, 0.0)
             }
@@ -223,6 +233,8 @@ impl TunerEngine {
             && self.held_reading.is_some()
             && self.hold_streak < DETECTION_HOLD_FRAMES
         {
+            pipeline_telemetry.decision = PipelineDecision::Held;
+            pipeline_telemetry.held = true;
             self.hold_streak += 1;
             let (frequency, held_confidence) = self.held_reading.unwrap_or_default();
             (Some(frequency), held_confidence)
@@ -259,6 +271,7 @@ impl TunerEngine {
             note: resolution.note,
             target: resolution.target,
             in_tune: resolution.in_tune,
+            pipeline: pipeline_telemetry,
             spectrum,
         }
     }

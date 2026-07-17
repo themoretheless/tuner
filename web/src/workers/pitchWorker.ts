@@ -1,6 +1,6 @@
 import {
+  analyzePitchFrame,
   computeSignalStats,
-  detectPitchEstimate,
   normalizeLevel,
   type PitchDetectionRange,
   type SignalStats,
@@ -86,7 +86,7 @@ function getAdapter(moduleUrl: string) {
     moduleUrl,
     loadPitchCore,
     (buffer, sampleRate, stats, range, guidance, pipelineConfig) => (
-      detectPitchEstimate(buffer, sampleRate, stats, range, guidance, pipelineConfig)
+      analyzePitchFrame(buffer, sampleRate, stats, range, guidance, pipelineConfig)
     ),
   );
   return adapter;

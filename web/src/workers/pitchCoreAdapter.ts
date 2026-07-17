@@ -7,12 +7,14 @@ import {
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   normalizeLevel,
+  type PitchAnalysis,
   type PitchDetectionRange,
   type PitchEstimate,
   type PitchGuidance,
   type SignalStats,
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
+import { PipelineSpectralAnalyzer } from '../utils/pipelineSpectralAnalyzer';
 import {
   applyFrameContext,
   applyPipelineConfig,
@@ -42,7 +44,7 @@ export type FallbackPitchDetector = (
   range: PitchDetectionRange,
   guidance?: PitchGuidance,
   pipelineConfig?: PipelineConfig,
-) => PitchEstimate | null;
+) => PitchAnalysis | PitchEstimate | null;
 
 export class PitchCoreAdapter {
   private readonly fallback: FallbackPitchDetector;
@@ -54,6 +56,7 @@ export class PitchCoreAdapter {
   private readonly moduleUrl: string;
   private pipelineConfig = createDefaultPipelineConfig();
   private processorPromise: Promise<StatefulWasmTunerProcessor | null> | null = null;
+  private readonly spectralAnalyzer = new PipelineSpectralAnalyzer();
 
   constructor(
     moduleUrl: string,
@@ -93,12 +96,15 @@ export class PitchCoreAdapter {
       if (frameContext) applyFrameContext(processor, frameContext);
       if (pipelineChanged) applyPipelineConfig(processor, this.pipelineConfig);
 
+      const started = nowMs();
       const wasmFrame = processor.process(buffer, sampleRate);
       try {
         this.fallbackTracker.reset();
+        const frame = readWasmFrame(wasmFrame);
+        frame.pipeline.processingMs = nowMs() - started;
         return {
           backend: 'wasm',
-          frame: readWasmFrame(wasmFrame),
+          frame,
           semantics: 'resolved',
         };
       } finally {
@@ -156,24 +162,54 @@ export class PitchCoreAdapter {
     stats: SignalStats,
     range: PitchDetectionRange,
   ): WorkerPitchFrame {
-    const estimate = this.fallback(
+    const started = nowMs();
+    const analysis = normalizeFallbackAnalysis(this.fallback(
       buffer,
       sampleRate,
       stats,
       range,
       this.fallbackGuidance,
       this.pipelineConfig,
-    );
-    const tracked = this.fallbackTracker.update(estimate, stats);
+    ));
+    const tracked = this.fallbackTracker.update(analysis.estimate, stats);
+    const trackerTelemetry = this.fallbackTracker.telemetry();
+    const decision = !analysis.fixedGateOpen && !tracked
+      ? 'fixed-gate-rejected'
+      : trackerTelemetry.decision;
+    const frame = createUnresolvedDetectionFrame({
+      confidence: tracked?.confidence ?? 0,
+      freq: tracked?.frequency ?? null,
+      rawFreq: trackerTelemetry.selected?.frequency ?? null,
+      level: normalizeLevel(stats.rms),
+      pipeline: {
+        adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
+        arbitration: analysis.arbitration,
+        decision,
+        fixedGateOpen: analysis.fixedGateOpen,
+        gateThreshold: trackerTelemetry.gateThreshold,
+        held: decision === 'held',
+        noiseFloor: trackerTelemetry.noiseFloor,
+        sampleRate,
+        secondary: analysis.secondary,
+        selected: trackerTelemetry.selected,
+        spectral: this.pipelineConfig.octaveEnabled
+          ? this.spectralAnalyzer.analyze(
+            buffer,
+            sampleRate,
+            analysis.estimate?.frequency,
+            range,
+          )
+          : null,
+        tracked: this.pipelineConfig.trackingEnabled && decision === 'published',
+        windowSamples: buffer.length,
+        yin: analysis.yin,
+      },
+      rms: stats.rms,
+    });
+    frame.pipeline.processingMs = nowMs() - started;
     return {
       backend: 'typescript',
-      frame: createUnresolvedDetectionFrame({
-        confidence: tracked?.confidence ?? 0,
-        freq: tracked?.frequency ?? null,
-        rawFreq: estimate?.frequency ?? null,
-        level: normalizeLevel(stats.rms),
-        rms: stats.rms,
-      }),
+      frame,
       semantics: 'unresolved',
     };
   }
@@ -184,10 +220,27 @@ export class PitchCoreAdapter {
     if (changed) {
       this.lastMinFrequency = range.minFrequency;
       this.lastMaxFrequency = range.maxFrequency;
-      this.fallbackTracker.reset();
+      this.fallbackTracker.setDetectionRange(range);
     }
     return changed;
   }
+}
+
+function nowMs() {
+  return globalThis.performance?.now() ?? Date.now();
+}
+
+function normalizeFallbackAnalysis(
+  result: PitchAnalysis | PitchEstimate | null,
+): PitchAnalysis {
+  if (result && 'estimate' in result) return result;
+  return {
+    arbitration: result ? 'yin-only' : 'none',
+    estimate: result,
+    fixedGateOpen: true,
+    secondary: null,
+    yin: result,
+  };
 }
 
 function guidanceFromContext(context: FrameContext): PitchGuidance {

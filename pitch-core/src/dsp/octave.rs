@@ -11,6 +11,7 @@
 //! evidence contradicts it.
 
 use super::spectral::{apply_hann_window, goertzel_power};
+use crate::PipelineSpectralTelemetry;
 
 /// Power at the sub-octave's odd multiples (0.5f, 1.5f, 2.5f) must exceed
 /// this fraction of the power at the estimate's own harmonics (f, 2f, 3f)
@@ -45,19 +46,42 @@ const FOLD_UP_EXIT_RATIO: f32 = 0.05;
 /// hysteresis on that side).
 const FOLD_CONFIRM_FRAMES: u8 = 2;
 
-/// Probes per parity group. Three odd and three even multiples are enough
-/// to separate the octave hypotheses without probing into the noise floor.
-const PROBES_PER_GROUP: usize = 3;
-
 /// Skip probe frequencies above this fraction of the sample rate; Goertzel
 /// responses degrade approaching Nyquist.
 const MAX_PROBE_NYQUIST_FRACTION: f32 = 0.45;
+const DIAGNOSTIC_HARMONICS: usize = 5;
+const OCTAVE_HARMONIC_PROBES: usize = 6;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum FoldDirection {
     None,
     Down,
     Up,
+}
+
+/// All spectral powers needed by both octave correction and diagnostics.
+/// Keeping this as one frame snapshot avoids repeating Goertzel probes for
+/// the UI after the realtime decision has already measured the same bins.
+#[derive(Clone, Copy, Debug, Default)]
+struct FrameSpectralPowers {
+    /// Integer multiples f..6f of the reported estimate.
+    harmonics: [f32; OCTAVE_HARMONIC_PROBES],
+    /// Odd multiples of the sub-octave: 0.5f, 1.5f and 2.5f.
+    half_odd: f32,
+}
+
+impl FrameSpectralPowers {
+    fn base_support(self) -> f32 {
+        self.harmonics[0] + self.harmonics[1] + self.harmonics[2]
+    }
+
+    fn odd_support(self) -> f32 {
+        self.harmonics[0] + self.harmonics[2] + self.harmonics[4]
+    }
+
+    fn even_support(self) -> f32 {
+        self.harmonics[1] + self.harmonics[3] + self.harmonics[5]
+    }
 }
 
 /// Cross-checks a time-domain pitch estimate against the frame's actual
@@ -72,6 +96,7 @@ pub struct OctaveDisambiguator {
     pending: FoldDirection,
     pending_streak: u8,
     correction_started: bool,
+    evidence: Option<PipelineSpectralTelemetry>,
 }
 
 impl Default for OctaveDisambiguator {
@@ -88,6 +113,7 @@ impl OctaveDisambiguator {
             pending: FoldDirection::None,
             pending_streak: 0,
             correction_started: false,
+            evidence: None,
         }
     }
 
@@ -98,6 +124,7 @@ impl OctaveDisambiguator {
         self.pending = FoldDirection::None;
         self.pending_streak = 0;
         self.correction_started = false;
+        self.evidence = None;
     }
 
     /// A pending fold has spectral evidence, but has not yet survived enough
@@ -110,6 +137,14 @@ impl OctaveDisambiguator {
     /// discard smoothing history that was seeded by the wrong octave.
     pub(crate) fn take_correction_started(&mut self) -> bool {
         std::mem::take(&mut self.correction_started)
+    }
+
+    pub(crate) fn evidence(&self) -> Option<PipelineSpectralTelemetry> {
+        self.evidence
+    }
+
+    pub(crate) fn begin_frame(&mut self) {
+        self.evidence = None;
     }
 
     /// Returns `frequency` unchanged when the spectrum supports it, `frequency / 2`
@@ -134,11 +169,13 @@ impl OctaveDisambiguator {
             || !frequency.is_finite()
             || frequency <= 0.0
         {
+            self.evidence = None;
             return frequency;
         }
         apply_hann_window(buffer, &mut self.windowed);
 
-        let desired = self.desired_fold(sample_rate, frequency, min_frequency, max_frequency);
+        let powers = self.measure_powers(sample_rate, frequency, min_frequency);
+        let desired = self.desired_fold(powers, frequency, min_frequency, max_frequency);
         let previous_active = self.active;
 
         if desired == self.active {
@@ -167,6 +204,13 @@ impl OctaveDisambiguator {
         self.correction_started =
             self.active != FoldDirection::None && self.active != previous_active;
 
+        self.evidence = Some(self.measure_evidence(
+            powers,
+            frequency,
+            frequency * 0.5 >= min_frequency,
+            frequency * 2.0 <= max_frequency,
+        ));
+
         match self.active {
             FoldDirection::Down => frequency * 0.5,
             FoldDirection::Up => frequency * 2.0,
@@ -179,33 +223,29 @@ impl OctaveDisambiguator {
     /// inactive one the stricter enter ratio.
     fn desired_fold(
         &self,
-        sample_rate: f32,
+        powers: FrameSpectralPowers,
         frequency: f32,
         min_frequency: f32,
         max_frequency: f32,
     ) -> FoldDirection {
         if frequency * 0.5 >= min_frequency {
-            let odd_of_half = self.parity_power(sample_rate, frequency * 0.5, 1);
-            let base_harmonics = self.group_power(sample_rate, frequency, [1.0, 2.0, 3.0]);
             let ratio = if self.active == FoldDirection::Down {
                 FOLD_DOWN_EXIT_RATIO
             } else {
                 FOLD_DOWN_ENTER_RATIO
             };
-            if odd_of_half > 0.0 && odd_of_half > ratio * base_harmonics {
+            if powers.half_odd > 0.0 && powers.half_odd > ratio * powers.base_support() {
                 return FoldDirection::Down;
             }
         }
 
         if frequency * 2.0 <= max_frequency {
-            let odd = self.parity_power(sample_rate, frequency, 1);
-            let even = self.parity_power(sample_rate, frequency, 2);
             let ratio = if self.active == FoldDirection::Up {
                 FOLD_UP_EXIT_RATIO
             } else {
                 FOLD_UP_ENTER_RATIO
             };
-            if even > 0.0 && odd < ratio * even {
+            if powers.even_support() > 0.0 && powers.odd_support() < ratio * powers.even_support() {
                 return FoldDirection::Up;
             }
         }
@@ -213,25 +253,83 @@ impl OctaveDisambiguator {
         FoldDirection::None
     }
 
-    /// Sum of spectral power at `fundamental` times each multiplier, skipping
-    /// probes too close to Nyquist.
-    fn group_power(&self, sample_rate: f32, fundamental: f32, multipliers: [f32; 3]) -> f32 {
+    /// Measure each unique frequency used by the decision exactly once. The
+    /// previous diagnostics path repeated overlapping groups and added up to
+    /// twenty extra Goertzel passes per frame; this snapshot needs at most
+    /// nine total probes (f..6f plus 0.5f, 1.5f and 2.5f).
+    fn measure_powers(
+        &self,
+        sample_rate: f32,
+        frequency: f32,
+        min_frequency: f32,
+    ) -> FrameSpectralPowers {
         let limit = sample_rate * MAX_PROBE_NYQUIST_FRACTION;
-        multipliers
-            .into_iter()
-            .map(|multiplier| fundamental * multiplier)
-            .filter(|probe| *probe > 0.0 && *probe < limit)
-            .map(|probe| goertzel_power(&self.windowed, sample_rate, probe))
-            .sum()
+        let mut powers = FrameSpectralPowers::default();
+        for (index, power) in powers.harmonics.iter_mut().enumerate() {
+            let probe = frequency * (index + 1) as f32;
+            if probe > 0.0 && probe < limit {
+                *power = goertzel_power(&self.windowed, sample_rate, probe);
+            }
+        }
+
+        if frequency * 0.5 >= min_frequency {
+            for multiplier in [0.5_f32, 1.5, 2.5] {
+                let probe = frequency * multiplier;
+                if probe > 0.0 && probe < limit {
+                    powers.half_odd += goertzel_power(&self.windowed, sample_rate, probe);
+                }
+            }
+        }
+        powers
     }
 
-    /// Power at `fundamental`'s odd (`start = 1`: f, 3f, 5f) or even
-    /// (`start = 2`: 2f, 4f, 6f) multiples.
-    fn parity_power(&self, sample_rate: f32, fundamental: f32, start: u32) -> f32 {
-        let mut multipliers = [0.0_f32; PROBES_PER_GROUP];
-        for (index, multiplier) in multipliers.iter_mut().enumerate() {
-            *multiplier = (start + 2 * index as u32) as f32;
+    fn measure_evidence(
+        &self,
+        powers: FrameSpectralPowers,
+        frequency: f32,
+        down_available: bool,
+        up_available: bool,
+    ) -> PipelineSpectralTelemetry {
+        let mut harmonics = [0.0; DIAGNOSTIC_HARMONICS];
+        harmonics.copy_from_slice(&powers.harmonics[..DIAGNOSTIC_HARMONICS]);
+        normalize_strengths(&mut harmonics);
+
+        let mut octave_scores = [
+            if down_available { powers.half_odd } else { 0.0 },
+            powers.base_support(),
+            if up_available {
+                powers.even_support()
+            } else {
+                0.0
+            },
+        ];
+        normalize_strengths(&mut octave_scores);
+
+        PipelineSpectralTelemetry {
+            active_octave: fold_shift(self.active),
+            base_frequency: frequency,
+            harmonics,
+            octave_scores,
+            pending_octave: fold_shift(self.pending),
         }
-        self.group_power(sample_rate, fundamental, multipliers)
+    }
+}
+
+fn fold_shift(direction: FoldDirection) -> i8 {
+    match direction {
+        FoldDirection::Down => -1,
+        FoldDirection::None => 0,
+        FoldDirection::Up => 1,
+    }
+}
+
+fn normalize_strengths<const N: usize>(values: &mut [f32; N]) {
+    let maximum = values.iter().copied().fold(0.0_f32, f32::max);
+    if maximum <= f32::EPSILON || !maximum.is_finite() {
+        values.fill(0.0);
+        return;
+    }
+    for value in values {
+        *value = (*value / maximum).clamp(0.0, 1.0);
     }
 }

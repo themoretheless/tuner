@@ -6,6 +6,7 @@ import {
 } from '../src/workers/pitchCoreAdapter';
 import type { FrameContext } from '../src/types/frames';
 import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
+import { createPipelineTelemetry } from '../src/domain/pipelineTelemetry';
 import type { PitchDetectionRange, SignalStats } from '../src/utils/pitch';
 
 const BUFFER = new Float32Array([0, 0.25, -0.25, 0]);
@@ -49,24 +50,36 @@ describe('PitchCoreAdapter', () => {
     const fallback = vi.fn(() => ({ confidence: 0.7, frequency: 220 }));
     const adapter = new PitchCoreAdapter('/wasm/pitch_core.js', loadModule, fallback);
 
-    await expect(adapter.process(
+    const first = await adapter.process(
       BUFFER,
       48_000,
       STATS,
       RANGE,
       CONTEXT,
       pipelinePresetConfig('raw'),
-    )).resolves.toEqual({
+    );
+    first.frame.pipeline.processingMs = 0;
+    expect(first).toEqual({
       backend: 'wasm',
       frame: {
         cents: 0,
         confidence: 1,
         freq: 440,
-        rawFreq: null,
+        rawFreq: 439.5,
         inTune: true,
         isPower: false,
         level: 1,
         note: 'A4',
+        pipeline: createPipelineTelemetry({
+          adaptiveGateOpen: true,
+          arbitration: 'fused',
+          decision: 'published',
+          fixedGateOpen: true,
+          secondary: { confidence: 0.88, frequency: 440.2 },
+          selected: { confidence: 0.9, frequency: 440 },
+          tracked: true,
+          yin: { confidence: 0.92, frequency: 439.8 },
+        }),
         rms: 0.125,
         target: { frequency: 440, name: 'A', octave: 4 },
       },
@@ -110,7 +123,9 @@ describe('PitchCoreAdapter', () => {
     const fallback = vi.fn(() => ({ confidence: 0.72, frequency: 220 }));
     const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
 
-    await expect(adapter.process(BUFFER, 48_000, STATS, RANGE)).resolves.toEqual({
+    const first = await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    first.frame.pipeline.processingMs = 0;
+    expect(first).toEqual({
       backend: 'typescript',
       frame: {
         cents: 0,
@@ -121,6 +136,18 @@ describe('PitchCoreAdapter', () => {
         isPower: false,
         level: 1,
         note: '\u2014',
+        pipeline: createPipelineTelemetry({
+          adaptiveGateOpen: true,
+          arbitration: 'yin-only',
+          decision: 'tracking-acquiring',
+          fixedGateOpen: true,
+          gateThreshold: 0.003125,
+          noiseFloor: 0.0025,
+          sampleRate: 48_000,
+          selected: { confidence: 0.72, frequency: 220 },
+          windowSamples: BUFFER.length,
+          yin: { confidence: 0.72, frequency: 220 },
+        }),
         rms: 0.125,
         target: null,
       },
@@ -189,18 +216,51 @@ describe('PitchCoreAdapter', () => {
 
 function createWasmFrame(free: () => void) {
   return {
+    adaptive_gate_open: true,
+    arbitration: 'fused',
     cents: 0,
     confidence: 1.2,
+    decision: 'published',
     freq: 440,
+    fixed_gate_open: true,
+    gate_threshold: 0,
     free,
+    harmonic_1: 0,
+    harmonic_2: 0,
+    harmonic_3: 0,
+    harmonic_4: 0,
+    harmonic_5: 0,
     has_frequency: true,
+    has_raw_frequency: true,
+    has_secondary_candidate: true,
+    has_selected_candidate: true,
+    has_spectral_evidence: false,
     has_target: true,
+    has_yin_candidate: true,
+    held: false,
     in_tune: true,
     is_power: false,
     level: 1.2,
+    noise_floor: 0,
     note: 'A4',
+    octave_active: 0,
+    octave_base_frequency: 0,
+    octave_center_score: 0,
+    octave_down_score: 0,
+    octave_pending: 0,
+    octave_up_score: 0,
+    raw_freq: 439.5,
     rms: 0.125,
+    sample_rate: 0,
+    secondary_confidence: 0.88,
+    secondary_frequency: 440.2,
+    selected_confidence: 0.9,
+    selected_frequency: 440,
     target_frequency: 440,
     target_midi: 69,
+    tracked: true,
+    window_samples: 0,
+    yin_confidence: 0.92,
+    yin_frequency: 439.8,
   };
 }

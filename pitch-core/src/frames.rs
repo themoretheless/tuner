@@ -1,4 +1,4 @@
-use crate::domain::Note;
+use crate::{domain::Note, PipelineTelemetry};
 
 #[derive(Default, Clone, Debug, PartialEq)]
 pub struct DetectionFrame {
@@ -16,6 +16,7 @@ pub struct DetectionFrame {
     pub target: Option<Note>,
     pub in_tune: bool,
     pub is_power: bool,
+    pub pipeline: PipelineTelemetry,
     pub spectrum: Vec<f32>,
 }
 

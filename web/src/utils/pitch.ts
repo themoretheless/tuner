@@ -7,6 +7,7 @@ import {
   normalizePipelineConfig,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
+import type { PipelineArbitration } from '../domain/pipelineTelemetry';
 
 export interface PitchDetectionRange {
   minFrequency: number;
@@ -16,6 +17,14 @@ export interface PitchDetectionRange {
 export interface PitchEstimate {
   confidence: number;
   frequency: number;
+}
+
+export interface PitchAnalysis {
+  arbitration: PipelineArbitration;
+  estimate: PitchEstimate | null;
+  fixedGateOpen: boolean;
+  secondary: PitchEstimate | null;
+  yin: PitchEstimate | null;
 }
 
 export interface PitchGuidance {
@@ -291,10 +300,36 @@ export function detectPitchEstimate(
   guidance?: PitchGuidance,
   pipelineConfig: PipelineConfig = createDefaultPipelineConfig(),
 ): PitchEstimate | null {
+  return analyzePitchFrame(
+    buffer,
+    sampleRate,
+    stats,
+    range,
+    guidance,
+    pipelineConfig,
+  ).estimate;
+}
+
+export function analyzePitchFrame(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+  guidance?: PitchGuidance,
+  pipelineConfig: PipelineConfig = createDefaultPipelineConfig(),
+): PitchAnalysis {
   const pipeline = normalizePipelineConfig(pipelineConfig);
   const detectorBuffer = pipeline.dcRemovalEnabled ? removeDcOffset(buffer) : buffer;
   const detectorStats = detectorBuffer === buffer ? stats : computeSignalStats(detectorBuffer);
-  if (pipeline.fixedGateEnabled && isBelowPitchDetectionGate(detectorStats)) return null;
+  if (pipeline.fixedGateEnabled && isBelowPitchDetectionGate(detectorStats)) {
+    return {
+      arbitration: 'none',
+      estimate: null,
+      fixedGateOpen: false,
+      secondary: null,
+      yin: null,
+    };
+  }
 
   const yin = pipeline.yinEnabled
     ? detectPitchYINEstimate(
@@ -305,7 +340,7 @@ export function detectPitchEstimate(
       pipeline.fixedGateEnabled,
     )
     : null;
-  const autocorrelation = pipeline.secondaryDetectorEnabled
+  const secondary = pipeline.secondaryDetectorEnabled
     ? autoCorrelateEstimate(
       detectorBuffer,
       sampleRate,
@@ -314,7 +349,13 @@ export function detectPitchEstimate(
       pipeline.fixedGateEnabled,
     )
     : null;
-  return selectPitchCandidate(yin, autocorrelation, guidance);
+  const selection = selectPitchCandidateWithReason(yin, secondary, guidance);
+  return {
+    ...selection,
+    fixedGateOpen: true,
+    secondary,
+    yin,
+  };
 }
 
 export function selectPitchCandidate(
@@ -322,20 +363,32 @@ export function selectPitchCandidate(
   right: PitchEstimate | null,
   guidance?: PitchGuidance,
 ): PitchEstimate | null {
+  return selectPitchCandidateWithReason(left, right, guidance).estimate;
+}
+
+function selectPitchCandidateWithReason(
+  left: PitchEstimate | null,
+  right: PitchEstimate | null,
+  guidance?: PitchGuidance,
+): Pick<PitchAnalysis, 'arbitration' | 'estimate'> {
   left = validEstimate(left) ? left : null;
   right = validEstimate(right) ? right : null;
-  if (!left) return right;
-  if (!right) return left;
+  if (!left && !right) return { arbitration: 'none', estimate: null };
+  if (!left) return { arbitration: 'secondary-only', estimate: right };
+  if (!right) return { arbitration: 'yin-only', estimate: left };
 
   if (centsDistance(left.frequency, right.frequency) <= DETECTOR_AGREEMENT_CENTS) {
     const leftWeight = Math.max(0.01, left.confidence);
     const rightWeight = Math.max(0.01, right.confidence);
     return {
-      confidence: Math.max(0, Math.min(1, (left.confidence + right.confidence) * 0.5)),
-      frequency: 2 ** (
-        (Math.log2(left.frequency) * leftWeight + Math.log2(right.frequency) * rightWeight)
-        / (leftWeight + rightWeight)
-      ),
+      arbitration: 'fused',
+      estimate: {
+        confidence: Math.max(0, Math.min(1, (left.confidence + right.confidence) * 0.5)),
+        frequency: 2 ** (
+          (Math.log2(left.frequency) * leftWeight + Math.log2(right.frequency) * rightWeight)
+          / (leftWeight + rightWeight)
+        ),
+      },
     };
   }
 
@@ -347,17 +400,25 @@ export function selectPitchCandidate(
       : [right, rightDistance, leftDistance];
     if (preferredDistance <= GUIDED_RAW_DISTANCE_CENTS
       && otherDistance - preferredDistance >= GUIDED_IMPROVEMENT_CENTS) {
-      return preferred;
+      return {
+        arbitration: preferred === left ? 'guided-yin' : 'guided-secondary',
+        estimate: preferred,
+      };
     }
   }
 
-  const [stronger, weaker] = left.confidence >= right.confidence
-    ? [left, right]
-    : [right, left];
-  return stronger.confidence >= STRONG_DISAGREEMENT_CONFIDENCE
+  const leftIsStronger = left.confidence >= right.confidence;
+  const [stronger, weaker] = leftIsStronger ? [left, right] : [right, left];
+  const estimate = stronger.confidence >= STRONG_DISAGREEMENT_CONFIDENCE
     && stronger.confidence - weaker.confidence >= DECISIVE_CONFIDENCE_MARGIN
     ? stronger
     : null;
+  return {
+    arbitration: estimate
+      ? leftIsStronger ? 'confidence-yin' : 'confidence-secondary'
+      : 'rejected-disagreement',
+    estimate,
+  };
 }
 
 function centsDistance(left: number, right: number) {

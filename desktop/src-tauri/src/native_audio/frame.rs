@@ -1,6 +1,10 @@
 use super::config::{NativeAudioConfig, NativeAudioNote};
-use pitch_core::{DetectorConfig, EngineConfig, TunerEngine, Tuning};
+use pitch_core::{
+    DetectorConfig, EngineConfig, PipelineCandidate, PipelineSpectralTelemetry, PipelineTelemetry,
+    TunerEngine, Tuning,
+};
 use serde::Serialize;
+use std::time::Instant;
 
 pub(crate) const EVENT_NAME: &str = "native-audio-frame";
 
@@ -10,12 +14,96 @@ pub(crate) struct NativeAudioFrame {
     cents: f32,
     confidence: f32,
     freq: Option<f32>,
+    raw_freq: Option<f32>,
     in_tune: bool,
     is_power: bool,
     level: f32,
     note: String,
     rms: f32,
+    pipeline: NativePipelineTelemetry,
     target: Option<NativeAudioNote>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePipelineCandidate {
+    confidence: f32,
+    frequency: f32,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePipelineTelemetry {
+    adaptive_gate_open: bool,
+    arbitration: &'static str,
+    decision: &'static str,
+    fixed_gate_open: bool,
+    gate_threshold: f32,
+    held: bool,
+    noise_floor: f32,
+    processing_ms: f32,
+    sample_rate: f32,
+    secondary: Option<NativePipelineCandidate>,
+    selected: Option<NativePipelineCandidate>,
+    spectral: Option<NativePipelineSpectralTelemetry>,
+    tracked: bool,
+    window_samples: u32,
+    yin: Option<NativePipelineCandidate>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePipelineSpectralTelemetry {
+    active_octave: i8,
+    base_frequency: f32,
+    harmonics: [f32; 5],
+    octave_scores: [f32; 3],
+    pending_octave: i8,
+}
+
+impl NativePipelineTelemetry {
+    fn from_core(telemetry: PipelineTelemetry) -> Self {
+        Self {
+            adaptive_gate_open: telemetry.adaptive_gate_open,
+            arbitration: telemetry.arbitration.as_str(),
+            decision: telemetry.decision.as_str(),
+            fixed_gate_open: telemetry.fixed_gate_open,
+            gate_threshold: telemetry.gate_threshold,
+            held: telemetry.held,
+            noise_floor: telemetry.noise_floor,
+            processing_ms: telemetry.processing_ms,
+            sample_rate: telemetry.sample_rate,
+            secondary: telemetry.secondary.map(NativePipelineCandidate::from_core),
+            selected: telemetry.selected.map(NativePipelineCandidate::from_core),
+            spectral: telemetry
+                .spectral
+                .map(NativePipelineSpectralTelemetry::from_core),
+            tracked: telemetry.tracked,
+            window_samples: telemetry.window_samples,
+            yin: telemetry.yin.map(NativePipelineCandidate::from_core),
+        }
+    }
+}
+
+impl NativePipelineSpectralTelemetry {
+    fn from_core(telemetry: PipelineSpectralTelemetry) -> Self {
+        Self {
+            active_octave: telemetry.active_octave,
+            base_frequency: telemetry.base_frequency,
+            harmonics: telemetry.harmonics,
+            octave_scores: telemetry.octave_scores,
+            pending_octave: telemetry.pending_octave,
+        }
+    }
+}
+
+impl NativePipelineCandidate {
+    fn from_core(candidate: PipelineCandidate) -> Self {
+        Self {
+            confidence: candidate.confidence,
+            frequency: candidate.frequency,
+        }
+    }
 }
 
 pub(crate) struct NativeFrameProcessor {
@@ -63,16 +151,20 @@ impl NativeFrameProcessor {
     }
 
     pub(crate) fn process(&mut self, samples: &[f32], sample_rate: f32) -> NativeAudioFrame {
-        let frame = self.engine.process(samples, sample_rate);
+        let started = Instant::now();
+        let mut frame = self.engine.process(samples, sample_rate);
+        frame.pipeline.processing_ms = started.elapsed().as_secs_f32() * 1_000.0;
         NativeAudioFrame {
             cents: frame.cents,
             confidence: frame.confidence,
             freq: frame.freq,
+            raw_freq: frame.raw_freq,
             in_tune: frame.in_tune,
             is_power: frame.is_power,
             level: frame.level.clamp(0.0, 1.0),
             note: frame.note,
             rms: frame.rms,
+            pipeline: NativePipelineTelemetry::from_core(frame.pipeline),
             target: frame.target.map(NativeAudioNote::from_core),
         }
     }
@@ -177,11 +269,13 @@ mod tests {
             cents: 0.0,
             confidence: 1.0,
             freq: Some(440.0),
+            raw_freq: Some(439.5),
             in_tune: true,
             is_power: false,
             level: 0.5,
             note: "A4".to_string(),
             rms: 0.125,
+            pipeline: NativePipelineTelemetry::from_core(PipelineTelemetry::default()),
             target: None,
         };
         let serialized = serde_json::to_value(frame).expect("serializable frame");
@@ -192,11 +286,29 @@ mod tests {
                 "cents": 0.0,
                 "confidence": 1.0,
                 "freq": 440.0,
+                "rawFreq": 439.5,
                 "inTune": true,
                 "isPower": false,
                 "level": 0.5,
                 "note": "A4",
                 "rms": 0.125,
+                "pipeline": {
+                    "adaptiveGateOpen": false,
+                    "arbitration": "none",
+                    "decision": "no-candidate",
+                    "fixedGateOpen": false,
+                    "gateThreshold": 0.0,
+                    "held": false,
+                    "noiseFloor": 0.0,
+                    "processingMs": 0.0,
+                    "sampleRate": 0.0,
+                    "secondary": null,
+                    "selected": null,
+                    "spectral": null,
+                    "tracked": false,
+                    "windowSamples": 0,
+                    "yin": null,
+                },
                 "target": null,
             })
         );
