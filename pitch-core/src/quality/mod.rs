@@ -4,8 +4,10 @@
 //! realtime detector, tracker, or resolver path.
 
 mod evaluator;
+mod thresholds;
 mod types;
 mod validation;
 
 pub use evaluator::evaluate_pitch_quality;
+pub use thresholds::evaluate_quality_thresholds;
 pub use types::*;

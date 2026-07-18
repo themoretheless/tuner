@@ -19,18 +19,20 @@ pub(crate) struct App {
 
 impl Default for App {
     fn default() -> Self {
+        let tunings = get_tunings();
         Self {
             a4: 440.0,
             audio: AudioManager::default(),
             engine: Arc::new(Mutex::new(TunerEngine::with_config(EngineConfig {
                 spectrum_bins: 0,
+                tuning: tunings.first().cloned(),
                 ..EngineConfig::default()
             }))),
             listening: false,
             show_spectrum: false,
             state: Arc::new(Mutex::new(TunerViewState::default())),
             tuning_index: 0,
-            tunings: get_tunings(),
+            tunings,
             visualization: VisualizationHistory::default(),
         }
     }

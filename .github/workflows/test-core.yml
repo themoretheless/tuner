@@ -43,6 +43,22 @@ jobs:
         env:
           CARGO_INCREMENTAL: 0
 
+      - name: Gate real-instrument pitch quality
+        run: >-
+          cargo run --release -p pitch-core --example quality --
+          --check --corpus fixtures/corpus/manifest.json
+          > pitch-quality-report.json
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: Upload pitch quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitch-quality-report
+          path: pitch-quality-report.json
+          if-no-files-found: error
+
       - name: Check pitch-core wasm feature
         run: cargo check -p pitch-core --target wasm32-unknown-unknown --features wasm
         env:

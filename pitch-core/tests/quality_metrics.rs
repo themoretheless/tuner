@@ -1,7 +1,8 @@
 use approx::assert_abs_diff_eq;
 use pitch_core::{
-    evaluate_pitch_quality, ExpectedPitchSegment, PitchObservation, QualityEvaluationConfig,
-    QualityEvaluationError,
+    evaluate_pitch_quality, evaluate_quality_thresholds, ExpectedPitchSegment, PitchObservation,
+    PitchQualityThresholds, QualityEvaluationConfig, QualityEvaluationError, QualityMetric,
+    QualityThresholdError,
 };
 
 fn observation(time_seconds: f32, frequency: Option<f32>) -> PitchObservation {
@@ -146,5 +147,56 @@ fn rejects_invalid_and_overlapping_scenarios() {
             previous: 0,
             current: 1,
         })
+    );
+}
+
+#[test]
+fn reports_release_threshold_violations_without_hiding_missing_metrics() {
+    let metrics = evaluate_pitch_quality(
+        &[observation(0.0, None), observation(0.4, Some(100.0))],
+        &[segment(0.0, 1.0, 100.0, 0.2)],
+        QualityEvaluationConfig::default(),
+    )
+    .expect("valid quality trace");
+
+    let violations = evaluate_quality_thresholds(
+        &metrics,
+        PitchQualityThresholds {
+            max_time_to_first_correct_ms: Some(300.0),
+            max_mean_reacquisition_latency_ms: Some(300.0),
+            min_stable_detection_coverage: Some(0.9),
+            ..PitchQualityThresholds::default()
+        },
+    )
+    .expect("valid thresholds");
+
+    assert_eq!(violations.len(), 3);
+    assert_eq!(violations[0].metric, QualityMetric::TimeToFirstCorrectMs);
+    assert_eq!(
+        violations[1].metric,
+        QualityMetric::MeanReacquisitionLatencyMs
+    );
+    assert_eq!(violations[1].observed, None);
+    assert_eq!(violations[2].metric, QualityMetric::StableDetectionCoverage);
+}
+
+#[test]
+fn rejects_invalid_release_thresholds() {
+    let metrics = evaluate_pitch_quality(
+        &[observation(0.0, Some(100.0))],
+        &[segment(0.0, 1.0, 100.0, 0.2)],
+        QualityEvaluationConfig::default(),
+    )
+    .expect("valid quality trace");
+
+    assert_eq!(
+        evaluate_quality_thresholds(
+            &metrics,
+            PitchQualityThresholds {
+                max_false_lock_ratio: Some(1.1),
+                ..PitchQualityThresholds::default()
+            }
+        ),
+        Err(QualityThresholdError::InvalidThresholds)
     );
 }

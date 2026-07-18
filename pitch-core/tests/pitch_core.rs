@@ -138,6 +138,21 @@ fn engine_emits_detection_frame_and_optional_spectrum() {
 }
 
 #[test]
+fn configurable_engine_does_not_invent_an_instrument_tuning() {
+    let buffer = sine_buffer(110.0, 44_100.0, 4096);
+    let mut engine = TunerEngine::with_config(EngineConfig {
+        spectrum_bins: 0,
+        ..EngineConfig::default()
+    });
+    assert!(engine.process(&buffer, 44_100.0).freq.is_none());
+    let frame = engine.process(&buffer, 44_100.0);
+
+    assert_eq!(frame.note, "A2");
+    assert!(frame.target.is_none());
+    assert!(frame.cents.abs() < 5.0);
+}
+
+#[test]
 fn engine_does_not_blend_a_new_note_with_pitch_before_silence() {
     let sample_rate = 44_100.0;
     let mut engine = TunerEngine::with_config(EngineConfig {

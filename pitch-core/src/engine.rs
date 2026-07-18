@@ -60,6 +60,7 @@ impl TunerEngine {
     pub fn new(a4: f32) -> Self {
         Self::with_config(EngineConfig {
             a4,
+            tuning: get_tunings().into_iter().next(),
             ..EngineConfig::default()
         })
     }
@@ -74,18 +75,15 @@ impl TunerEngine {
             spectrum_fft_size,
             spectrum_bins,
         } = config;
-        let tunings = get_tunings();
         let configured_spectrum_bins = if spectrum_bins == 0 {
             DEFAULT_SPECTRUM_BINS
         } else {
             spectrum_bins
         };
-        let tuning = tuning
-            .or_else(|| tunings.into_iter().next())
-            .unwrap_or_else(|| Tuning {
-                name: "Chromatic",
-                strings: Vec::new(),
-            });
+        let tuning = tuning.unwrap_or_else(|| Tuning {
+            name: "Chromatic",
+            strings: Vec::new(),
+        });
         let pipeline = pipeline.normalized();
         let mut pitch_detector = HybridPitchDetector::new(detector);
         pitch_detector.set_pipeline_config(pipeline);

@@ -56,6 +56,83 @@ pub struct PitchQualityMetrics {
     pub segments: Vec<PitchSegmentMetrics>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PitchQualityThresholds {
+    pub max_time_to_first_correct_ms: Option<f32>,
+    pub max_mean_reacquisition_latency_ms: Option<f32>,
+    pub max_reacquisition_latency_ms: Option<f32>,
+    pub max_missed_acquisitions: Option<usize>,
+    pub max_false_lock_ratio: Option<f32>,
+    pub max_note_switches_per_second: Option<f32>,
+    pub max_stable_sustain_cents_mae: Option<f32>,
+    pub min_stable_detection_coverage: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QualityMetric {
+    TimeToFirstCorrectMs,
+    MeanReacquisitionLatencyMs,
+    MaxReacquisitionLatencyMs,
+    MissedAcquisitions,
+    FalseLockRatio,
+    NoteSwitchesPerSecond,
+    StableSustainCentsMae,
+    StableDetectionCoverage,
+}
+
+impl QualityMetric {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TimeToFirstCorrectMs => "timeToFirstCorrectMs",
+            Self::MeanReacquisitionLatencyMs => "meanReacquisitionLatencyMs",
+            Self::MaxReacquisitionLatencyMs => "maxReacquisitionLatencyMs",
+            Self::MissedAcquisitions => "missedAcquisitions",
+            Self::FalseLockRatio => "falseLockRatio",
+            Self::NoteSwitchesPerSecond => "noteSwitchesPerSecond",
+            Self::StableSustainCentsMae => "stableSustainCentsMae",
+            Self::StableDetectionCoverage => "stableDetectionCoverage",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QualityThresholdRequirement {
+    AtMost,
+    AtLeast,
+}
+
+impl QualityThresholdRequirement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AtMost => "atMost",
+            Self::AtLeast => "atLeast",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct QualityThresholdViolation {
+    pub metric: QualityMetric,
+    pub observed: Option<f32>,
+    pub limit: f32,
+    pub requirement: QualityThresholdRequirement,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QualityThresholdError {
+    InvalidThresholds,
+}
+
+impl fmt::Display for QualityThresholdError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidThresholds => write!(formatter, "quality thresholds are invalid"),
+        }
+    }
+}
+
+impl std::error::Error for QualityThresholdError {}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum QualityEvaluationError {
     InvalidConfig,
