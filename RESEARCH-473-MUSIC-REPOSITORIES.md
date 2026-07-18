@@ -9,7 +9,7 @@ This document extends [RESEARCH-100-PITCH-REPOSITORIES.md](RESEARCH-100-PITCH-RE
 
 The current project is already unusually strong in three areas: one Rust pitch core shared by native/WASM targets, local/offline operation, and a transparent live pipeline workspace. The largest competitive gaps are elsewhere:
 
-1. **Accuracy is still not governed by a real-instrument benchmark.** Strong detector projects preserve multiple candidates, harmonic evidence, voicing/periodicity and temporal state. Tuner has useful telemetry, but still lacks a licensed real-WAV corpus and release metrics for false lock, reacquisition and note switching.
+1. **Accuracy now has a first real-instrument gate, but not yet a stress benchmark.** A licensed, checksummed 19-WAV corpus blocks CI on acquisition, false-lock, switching, sustain error and coverage. Reacquisition metrics exist but need multi-segment transition captures. Strong detector projects still go further with multiple candidates, calibrated uncertainty, phase state, controlled SNR/reverb sweeps and statistical release comparisons.
 2. **Professional tuning interoperability is shallow.** Tuner can create custom 12-note temperaments, but cannot read Scala `.scl`, `.kbm` or AnaMark `.tun`, cannot represent arbitrary/non-octave scales, and has no generic note/octave filter.
 3. **Practice is a demo, not yet a learning system.** The current ear trainer asks the user to reveal and self-mark one random note. Strong projects separate exercise generation, playback, answer evaluation and scheduling, then adapt to mistakes.
 4. **The metronome is functionally correct only at a basic UI level.** It schedules ticks with `window.setInterval`, while serious metronomes use an audio clock, compensate latency and support count-in, tempo ramps, accents, muted subdivisions and saved programs.
@@ -74,9 +74,9 @@ Obvious topic collisions such as PID, CUDA-kernel, engine and cache "tuners", no
 |---|---|---|
 | Shared deterministic DSP core | **Strong** | Rust native/WASM parity and current telemetry are a real differentiator. Preserve this. |
 | Live algorithm explainability | **Strong** | The block graph, live result, timeline, freeze/replay and A/B workspace go beyond most consumer tuners. |
-| Real-instrument accuracy evidence | **Missing** | Synthetic E2 E2E coverage is useful, but cannot establish robustness across instruments, rooms and attacks. |
+| Real-instrument accuracy evidence | **Partial** | A 19-capture guitar/bass/ukulele/violin/voice corpus blocks CI with temporal thresholds; controlled rooms, SNR/reverb transforms and statistical sample sizes remain. |
 | Automatic vs selected-string tuning | **Partial** | Both exist, but the UI does not clearly communicate the accuracy advantage and fallback behavior of constrained mode. |
-| Harmonic/octave handling | **Partial** | YIN/MPM arbitration and octave telemetry exist; top-K candidate lattice, calibrated uncertainty and corpus gates do not. |
+| Harmonic/octave handling | **Partial** | YIN/MPM arbitration, octave telemetry and corpus gates exist; top-K candidate lattice, calibrated uncertainty and broader stress evidence do not. |
 | Stage/fullscreen/compact layouts | **Partial-to-strong** | These modes exist, but active sessions cannot hold a screen wake lock and true strobe behavior remains incomplete. |
 | Instrument/tuning presets | **Strong** | Broad preset coverage, profiles, capo, transpose and per-string offsets are already present. |
 | Custom temperament editor | **Partial** | Limited to 12 integer cent offsets in `[-50, 50]`; no ratios, arbitrary degree count, period or standard files. |
@@ -96,8 +96,8 @@ Obvious topic collisions such as PID, CUDA-kernel, engine and cache "tuners", no
 
 | G# | Pri | Proposal | Evidence and relation |
 |---|---|---|---|
-| G1 | P0 | Build a licensed real-WAV fixture corpus with every standard string plus bass, ukulele, violin and voice; annotate attack, stable sustain and release. | Promotes `X13-X15` and makes `M42/M78/M94` measurable. Synthetic tones remain unit fixtures, not product evidence. |
-| G2 | P0 | Make release metrics tuner-specific: time-to-first-correct, false-lock duration, reacquisition latency, note switches/second and stable-sustain cents MAE by scenario. | **Foundation delivered 2026-07-18:** pure `pitch-core::quality`, five metric tests, versioned scenario manifest and JSON CLI. Licensed G1 captures and release thresholds remain before this becomes a blocking gate. |
+| G1 | P0 | Build a licensed real-WAV fixture corpus with every standard string plus bass, ukulele, violin and voice; annotate attack, stable sustain and release. | **Baseline delivered 2026-07-18:** 19 redistributable captures, exact source/output hashes, transforms, licenses and phase annotations cover all requested groups. More performers, devices, dynamics and environments remain. |
+| G2 | P0 | Make release metrics tuner-specific: time-to-first-correct, false-lock duration, reacquisition latency, note switches/second and stable-sustain cents MAE by scenario. | **Blocking single-note gate delivered 2026-07-18:** pure `pitch-core::quality`, seven metric/threshold tests, versioned manifests, effective thresholds in JSON and CI artifact run across G1. Reacquisition transition captures, statistical non-regression and SNR buckets remain under G9/G10/G50. |
 | G3 | P0 | Introduce a top-K candidate lattice carrying Hz, score, source, lag/bin and harmonic relation through arbitration and tracking. | `X8`; follows pYIN/YAAPT-style separation and prevents each detector from discarding alternatives too early. |
 | G4 | P0 | Model `attack -> sustain -> release` explicitly and use phase-dependent windows, gates and hold rules. | `X6-X7`, related to `M12/M27`; plucked attack and low-string sustain should not share one policy. |
 | G5 | P0 | Replace scalar confidence semantics with a quality vector: periodicity, voicing, harmonic fit, detector agreement, level and explicit unresolved reason. | `X3-X5/X9`; UI derives a calm state, while diagnostics preserve the evidence. |
@@ -106,7 +106,7 @@ Obvious topic collisions such as PID, CUDA-kernel, engine and cache "tuners", no
 | G8 | P1 | Move web capture cadence to AudioWorklet + sample-indexed ring buffer; make Worker/WASM consume complete windows independently of paint. | Promotes `M19/M69` and `X18-X20`; add overrun, gap and queue-depth telemetry. |
 | G9 | P1 | Add a noise/reverb stress generator and a preprocessor pitch-bias gate before enabling high-pass, notch, downsample or denoise defaults. | `M10/M15`, `X15-X16`; every filter must prove it does not create cents or octave bias. |
 | G10 | P1 | Create a differential lab against deterministic baselines and offline neural oracles, with metamorphic and statistical non-regression gates. | `X10-X12/X21-X22`; runtime stays Rust/WASM until an alternative wins the accuracy/latency/CPU Pareto comparison. |
-| G11 | P1 | Record reproducible capture envelopes: PCM/WAV, sample index, device/sample rate, config revision, frame decisions and timing; replay them through every backend. | `X17-X19`, extends `M127`; a field failure must be replayable without the original microphone. |
+| G11 | P1 | Record reproducible capture envelopes: PCM/WAV, sample index, device/sample rate, config revision, frame decisions and timing; replay them through every backend. | **Baseline delivered 2026-07-18:** Rust trace accepts WAV/f32 and exports sample-indexed config/candidate/decision JSON; hidden web debug capture exports WebM plus settings/frame sidecar. Exact browser PCM, shared timebase, queue telemetry and every-backend parity remain. |
 | G12 | P2 | Benchmark phase-difference spectral refinement and inharmonic harmonic regression as independent evidence sources, not unconditional replacements. | Promotes `M104/M114`; thetwom/Tuner demonstrates both, but acceptance still depends on G1-G2. |
 
 ### B. Professional tuner workflows

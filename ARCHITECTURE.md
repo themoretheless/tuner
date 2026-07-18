@@ -1,6 +1,6 @@
 # Guitar Tuner - Architecture & Deep Refactoring Plan
 
-**Date:** 2026-07-12
+**Date:** 2026-07-18
 **Perspective:** Designing from scratch with heavy focus on **modularity**, **code decomposition**, and **loose coupling**.
 
 ## Current State Assessment (Honest Critique)
@@ -26,7 +26,7 @@ Remaining weaknesses:
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - A file/WAV input adapter is still missing; Tauri now resolves A4/tuning/selected-target context natively through a typed revisioned configuration.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
-- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency; mic self-test, exported diagnostic bundles, typed errors, benchmarks, real-audio fixtures, soak tests and release hardening remain incomplete.
+- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency. A licensed 19-WAV corpus, blocking temporal quality gate, sample-indexed Rust replay and browser WebM+JSON sidecar now exist; exact browser PCM/timebase, mic self-test, typed errors, benchmarks, noise/SNR matrices, soak tests and release hardening remain incomplete.
 - egui persistence and the egui WASM singleton are still separate platform-specific designs.
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
@@ -98,7 +98,7 @@ This shape deliberately sends resolved targets instead of teaching Tauri about e
 
 The 473-repository pass changes the architecture roadmap in five concrete ways:
 
-1. **Accuracy work starts with evidence.** `pitch-core::quality` now owns pure temporal failure metrics and the offline quality CLI emits versioned JSON; the licensed real-WAV corpus, thresholds and replay envelopes remain next. Top-K candidates and phase-aware policy are core contracts, not Vue experiments.
+1. **Accuracy work starts with evidence.** `pitch-core::quality` owns pure temporal failure metrics; the licensed 19-WAV corpus has verified provenance/checksums, blocking per-scenario thresholds and a CI JSON artifact. Rust replay envelopes are sample-indexed; browser capture is a useful WebM+JSON baseline but still needs exact PCM/timebase parity. Top-K candidates and phase-aware policy remain core contracts, not Vue experiments.
 2. **Musical formats are adapters.** Scala `.scl`, `.kbm`, AnaMark `.tun`, MIDI and MusicXML parsers belong behind explicit format ports. They validate into versioned domain values and commit only after preview.
 3. **Practice gets its own application layer.** Exercise generation, playback, evaluation, scheduling and persistence must not expand `useTuner.ts`; Practice consumes narrow ports like every other feature.
 4. **Output audio has one owner.** Reference tones, ear training and metronome need a shared resumed `AudioContext`, mixer and cancellable playback scopes. The metronome clock is audio/sample time, never the paint or `setInterval` clock.
@@ -294,7 +294,7 @@ egui/src/
 - AudioWorklet spike for web.
 - Better WASM packaging.
 
-**Status 2026-07-18: baseline done.** `82` Vitest tests, `62` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, five Playwright flows, workspace strict clippy, both WASM target checks, production web, manual `1280x720`/`390x844` visual QA and full Tauri bundle pass. Temporal acquisition/false-lock/reacquisition/sustain metrics and a JSON quality CLI are implemented. Remaining: licensed real-WAV scenarios and thresholds, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
+**Status 2026-07-18: baseline done.** `84` Vitest tests, `65` pitch-core all-feature tests, native/browser context tests, generated-source/property gates, five Playwright flows, workspace strict clippy, both WASM target checks, production web, manual `1280x720`/`390x844` visual QA and full Tauri bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust sample-indexed replay and browser WebM+JSON capture baselines are implemented. Remaining: exact browser PCM/timebase and cross-backend replay, SNR/noise/reverb scenarios, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
@@ -304,8 +304,8 @@ egui/src/
 
 ## Immediate Next Actions (Concrete)
 
-1. Add a file/WAV `AudioInputPort` over the existing port/session boundary.
-2. Extend parity with licensed WAV/SNR fixtures, permission/device-loss E2E, criterion benchmarks and a restart soak test.
+1. Add an interactive file/WAV `AudioInputPort` over the existing port/session boundary; the offline corpus loader is intentionally not a session adapter.
+2. Extend the licensed corpus with fixed SNR/noise/reverb scenarios, then add permission/device-loss E2E, criterion benchmarks and a restart soak test.
 3. Split `useTuningState.ts` into selection/target and temperament workflow controllers.
 4. Inject settings storage ownership and shrink `useTuner` feature ports.
 5. Add typed diagnostics/errors, then enforce CSP/signing/checksum/dependency release gates.
@@ -612,7 +612,7 @@ The following categorized list (200 items) was created to be implementation-conc
 199. User satisfaction micro-survey (anonymous, 1-click "useful?") after 10 successful tunings.
 200. Maintain a living "What we deliberately chose not to do" section (anti-roadmap) in ARCHITECTURE.md.
 
-**Next step after the 2026-07-12 implementation pass:** do not start another horizontal feature batch. Audio ports, native/browser frame semantics, confidence/smoothing parity, generated music data and generated note math are complete; add file/WAV input next. Then re-score the remaining product ideas against measured accuracy, latency and support needs.
+**Next step after the 2026-07-18 quality pass:** do not start another horizontal feature batch. Audio ports, native/browser frame semantics, confidence/smoothing parity, generated music data/note math and the first real-audio quality gate are complete; add the interactive file/WAV input and exact browser PCM replay next. Then re-score the remaining product ideas against measured SNR accuracy, latency and support needs.
 
 ### Статус интеграции бэклогов
 - [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`) plus historical grounded audit (`C#`).
@@ -648,7 +648,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | --- | --- | --- | --- |
 | Single Responsibility | One module owns one workflow | `useTuner`, `useTuningState` and global `useSettings` remain broad | Keep the root thin; split tuning/settings workflow owners |
 | Open/Closed | New backend or tuning adds an adapter/data row | Input registry is extensible; tuning registry remains duplicated | Add `ToneGeneratorPort`, file input and registry/codegen |
-| Liskov | Fake, web, native and file inputs obey one contract | Web/native/synthetic are structurally contract-tested; file input is absent | Add file/WAV adapter to the same port |
+| Liskov | Fake, web, native and file inputs obey one contract | Web/native/synthetic are structurally contract-tested; the offline WAV evaluator is separate and interactive file input is absent | Add file/WAV adapter to the same session port |
 | Interface Segregation | Components receive only what they render | Feature ports help, but Live/Library ports still expose many refs | Split command/query subports where a feature keeps growing |
 | Dependency Inversion | UI depends on capabilities, not APIs | Composition root still constructs all concrete adapters/stores | Inject adapters into session/settings factories |
 
@@ -667,10 +667,10 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | Status | Slice | Current Owner | Next Small Boundary |
 | --- | --- | --- | --- |
 | Done | Live lifecycle | `web/src/session/sessionLifecycle.ts` | Keep adapter calls behind the driver contract |
-| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, three adapters | Add file/WAV implementation when fixture ingestion lands |
+| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, three adapters | Add interactive file/WAV implementation; fixture ingestion now exists offline |
 | Partial | Tone port | `useReferenceTone.ts`, egui `AudioManager` | Define commands/capabilities without sharing platform code |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
-| Done primary | Pitch domain | Generated note math, detector/confidence fixtures, smoothing traces and native/browser full-frame context are shared | Keep fallback power degradation explicit; add real WAV evidence |
+| Done primary | Pitch domain | Generated note math, detector/confidence fixtures, smoothing traces, native/browser full-frame context and 19 real-WAV quality scenarios are shared | Keep fallback power degradation explicit; add SNR and cross-backend replay evidence |
 | Partial | Practice workflow | `domain/practice.ts`, `useEarTraining.ts` | Move mark/challenge flow out of `useTuner` |
 | Done | Profile persistence | `settings/profileCodec.ts`, `normalizeSettings.ts` | Add migration only when V2 exists |
 | Open | Diagnostics | Scattered platform errors | Add typed categories and mic health view model |
@@ -914,7 +914,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M39 | P2 | review | fix CentsHistory deep watcher | [DONE 2026-07-11] |
 | M40 | P2 | review | bound MPM NSDF tau range | [DONE 2026-07-11] |
 | M41 | P2 | review | chromatic auto-detect mode | [DONE 2026-07-11] |
-| M42 | P2 | dx-quality | insta snapshot tests for full DetectionResult on fixture WAVs | Locks down pipeline output on real signals. |
+| M42 | P2 | dx-quality | insta snapshot tests for full DetectionResult on fixture WAVs | [PARTIAL 2026-07-18] 19 real WAV temporal gates exist; per-frame golden snapshots remain. |
 | M43 | P2 | i18n-breadth | Browser-language auto-detect via navigator.languages with persisted override | Foundation for all localization; cheap and immediately broadens reach. |
 | M44 | P2 | perf-bundle | Preallocate YIN buffers as module singletons across calls | pitch.ts reallocates per size change; pin to max guitar size. [DONE 2026-07-11] |
 | M45 | P2 | docs-dx | Playwright E2E for mic-permission-denied flow | Drive fake getUserMedia, assert permission UI path renders. |
@@ -933,7 +933,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M58 | P3 | review | collapsible settings sidebar on mobile |  |
 | M59 | P3 | review | build script copies WASM to unserved dir | [DONE 2026-07-11] |
 | M60 | P3 | a11y-deep | Colorblind palette presets (deuteran/protan/tritan) replacing red/green coding | Red/green in-tune coding fails ~8% of male users. |
-| M61 | P3 | dx-quality | Golden-trace differential runner: flag any fixture moving >1 cent | Regression tripwire for DSP changes. |
+| M61 | P3 | dx-quality | Golden-trace differential runner: flag any fixture moving >1 cent | [PARTIAL 2026-07-18] Replay envelopes exist; differential baselines and the 1-cent rule remain. |
 | M62 | P3 | a11y-deep | Adjustable in-tune tolerance + detection smoothing as accessibility controls | Lets tremor/motor users widen the target. |
 | M63 | P3 | i18n-breadth | Locale-correct A4 decimal parsing accepting comma and period keypads | Prevents broken A4 entry for half the world; trivial fix. |
 | M64 | P3 | settings-personalization | Configurable in-tune tolerance band in cents | Slider 1-10 cents controls green-zone width directly. [DONE 2026-07-11] |
@@ -966,7 +966,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M91 | P3 | review | per-instrument detection frequency range |  |
 | M92 | P3 | review | split useTuner god-composable |  |
 | M93 | P3 | algorithms | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | Predictive smoothing tracks vibrato/glide better than EMA. |
-| M94 | P3 | dx-quality | Detection-accuracy report artifact: cents-error histogram per SNR bucket | Objective accuracy tracking across noise levels. |
+| M94 | P3 | dx-quality | Detection-accuracy report artifact: cents-error histogram per SNR bucket | [PARTIAL 2026-07-18] CI uploads per-capture JSON metrics; SNR buckets and histograms remain. |
 | M95 | P3 | observability-reliability | Version/build-info panel (git SHA, build date, WASM hash, platform) | Makes bug reports actionable with exact build identity. |
 | M96 | P3 | perf-bundle | Brotli + gzip precompress dist with vite-plugin-compression | Static GitHub Pages host can serve .br/.gz for JS/WASM/CSS. |
 | M97 | P3 | perf-bundle | Throttle visualizer redraw to 30fps decoupled from detection | Waveform/Spectrum at 30fps saves canvas work, detection stays fast. |
@@ -999,7 +999,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M124 | P3 | review | label A4 input |  |
 | M125 | P3 | review | label tuning select |  |
 | M126 | P3 | review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | Replay field bugs without the original audio. |
+| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-18] Rust sample-indexed JSON and browser WebM+sidecar exist; exact shared browser PCM/timebase remains. |
 | M128 | P3 | algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |

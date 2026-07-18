@@ -51,7 +51,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 39 | fix CentsHistory deep watcher | P2 | 56 | r1:review | [DONE 2026-07-11] |
 | 40 | bound MPM NSDF tau range | P2 | 56 | r1:review | [DONE 2026-07-11] |
 | 41 | chromatic auto-detect mode | P2 | 56 | r1:review | [DONE 2026-07-11] |
-| 42 | insta snapshot tests for full DetectionResult on fixture WAVs | P2 | 56 | r2:dx-quality | Locks down pipeline output on real signals. |
+| 42 | insta snapshot tests for full DetectionResult on fixture WAVs | P2 | 56 | r2:dx-quality | [PARTIAL 2026-07-18] 19 real WAV temporal gates exist; per-frame golden snapshots remain. |
 | 43 | Browser-language auto-detect via navigator.languages with persisted override | P2 | 56 | r3:i18n-breadth | Foundation for all localization; cheap and immediately broadens reach. |
 | 44 | Preallocate YIN buffers as module singletons across calls | P2 | 56 | r4:perf-bundle | pitch.ts reallocates per size change; pin to max guitar size. [DONE 2026-07-11] |
 | 45 | Playwright E2E for mic-permission-denied flow | P2 | 56 | r4:docs-dx | Drive fake getUserMedia, assert permission UI path renders. |
@@ -70,7 +70,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 58 | collapsible settings sidebar on mobile | P3 | 52 | r1:review |  |
 | 59 | build script copies WASM to unserved dir | P3 | 52 | r1:review | [DONE 2026-07-11] |
 | 60 | Colorblind palette presets (deuteran/protan/tritan) replacing red/green coding | P3 | 52 | r2:a11y-deep | Red/green in-tune coding fails ~8% of male users. |
-| 61 | Golden-trace differential runner: flag any fixture moving >1 cent | P3 | 52 | r2:dx-quality | Regression tripwire for DSP changes. |
+| 61 | Golden-trace differential runner: flag any fixture moving >1 cent | P3 | 52 | r2:dx-quality | [PARTIAL 2026-07-18] Replay envelopes exist; differential baselines and the 1-cent rule remain. |
 | 62 | Adjustable in-tune tolerance + detection smoothing as accessibility controls | P3 | 52 | r2:a11y-deep | Lets tremor/motor users widen the target. |
 | 63 | Locale-correct A4 decimal parsing accepting comma and period keypads | P3 | 52 | r3:i18n-breadth | Prevents broken A4 entry for half the world; trivial fix. |
 | 64 | Configurable in-tune tolerance band in cents | P3 | 52 | r4:settings-personalization | Slider 1-10 cents controls green-zone width directly. [DONE 2026-07-11] |
@@ -103,7 +103,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 91 | per-instrument detection frequency range | P3 | 48 | r1:review |  |
 | 92 | split useTuner god-composable | P3 | 48 | r1:review |  |
 | 93 | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | P3 | 48 | r2:algorithms | Predictive smoothing tracks vibrato/glide better than EMA. |
-| 94 | Detection-accuracy report artifact: cents-error histogram per SNR bucket | P3 | 48 | r2:dx-quality | Objective accuracy tracking across noise levels. |
+| 94 | Detection-accuracy report artifact: cents-error histogram per SNR bucket | P3 | 48 | r2:dx-quality | [PARTIAL 2026-07-18] CI uploads per-capture JSON metrics; SNR buckets and histograms remain. |
 | 95 | Version/build-info panel (git SHA, build date, WASM hash, platform) | P3 | 48 | r3:observability-reliability | Makes bug reports actionable with exact build identity. |
 | 96 | Brotli + gzip precompress dist with vite-plugin-compression | P3 | 48 | r4:perf-bundle | Static GitHub Pages host can serve .br/.gz for JS/WASM/CSS. |
 | 97 | Throttle visualizer redraw to 30fps decoupled from detection | P3 | 48 | r4:perf-bundle | Waveform/Spectrum at 30fps saves canvas work, detection stays fast. |
@@ -136,7 +136,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 124 | label A4 input | P3 | 42 | r1:review |  |
 | 125 | label tuning select | P3 | 42 | r1:review |  |
 | 126 | FFT-accelerate YIN/MPM | P3 | 42 | r1:review |  |
-| 127 | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | P3 | 42 | r2:dx-quality | Replay field bugs without the original audio. |
+| 127 | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | P3 | 42 | r2:dx-quality | [PARTIAL 2026-07-18] Rust sample-indexed JSON and browser WebM+sidecar exist; exact shared browser PCM/timebase remains. |
 | 128 | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | P3 | 42 | r2:algorithms | Extra fusion vote robust to missing fundamental. |
 | 129 | Window-state persistence across launches | P3 | 42 | r2:native-os | Restores size/position; expected desktop polish. |
 | 130 | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | P3 | 42 | r2:a11y-deep | Brings native app to accessibility parity. |

@@ -84,6 +84,37 @@ flowchart LR
 - UI не должен знать, как получены samples. Он получает один frame contract и reactive view-model.
 - Web и native сейчас анализируют окна разной длины: 8192 и 4096 samples соответственно. Поэтому их низкочастотная устойчивость и latency не полностью эквивалентны.
 
+### Offline quality и replay pipeline
+
+Этот путь не подменяет realtime `AudioInputPort`. Он воспроизводимо проверяет один и тот же core на сохранённых сигналах и сохраняет достаточно evidence для расследования регрессии.
+
+```mermaid
+flowchart LR
+  Source["Лицензированный исходник<br/>точный URL и source SHA-256"] --> Rebuild["Deterministic rebuild<br/>ffmpeg transform"]
+  Rebuild --> Wav["Mono PCM WAV<br/>48 kHz + output SHA-256"]
+  Manifest["Corpus manifest<br/>license, target, phases, thresholds"] --> Verify["Provenance validator"]
+  Wav --> Verify
+  Verify --> Loader["WAV/f32 loader<br/>AudioCapture"]
+  Loader --> Windows["Window + hop iterator<br/>sample-indexed"]
+  Windows --> Engine["Stateful TunerEngine<br/>тот же live core"]
+  Engine --> Frames["DetectionFrame sequence"]
+  Frames --> Metrics["Acquisition, false lock,<br/>reacquisition, switches, MAE, coverage"]
+  Manifest --> Metrics
+  Metrics --> Gate{"Per-scenario thresholds"}
+  Gate --> Report["Versioned JSON report<br/>CI artifact"]
+
+  Wav --> Trace["trace CLI"]
+  Trace --> Envelope["Sample-indexed replay JSON<br/>config, candidates, gates, decisions"]
+  Browser["Hidden browser debug capture"] --> Sidecar["WebM + JSON sidecar<br/>settings and live frame snapshots"]
+  Sidecar -. "пока нет exact PCM/timebase" .-> Envelope
+```
+
+- `rebuild.sh` отвечает только за получение, преобразование и проверку байтов; он не знает DSP.
+- Corpus manifest связывает audio provenance, ожидаемый музыкальный target, размеченные фазы и quality policy.
+- Quality runner оценивает последовательность публичных кадров и не импортирует detector internals или UI.
+- Trace runner сохраняет решения core по `windowEndSample`; его можно сравнивать без зависимости от wall clock.
+- Browser sidecar полезен для полевого отчёта, но сжатый параллельный WebM нельзя считать точным источником тех же samples. Следующая граница должна писать PCM и единый sample timebase.
+
 ## 2. Процесс определения внутри `TunerEngine`
 
 ```mermaid
@@ -279,7 +310,7 @@ flowchart LR
 - Web ошибается, native нет: сначала сравниваются sample rate, window size, браузерные audio settings и WASM/fallback semantics.
 - Оба backend-а ошибаются одинаково: нужен replay одного и того же WAV через `TunerEngine` с trace каждого блока.
 
-Текущий bounded `PipelineTelemetry` уже показывает YIN/MPM, выбранный результат, gate decision, tracker/hold, noise threshold, компактное harmonic/octave evidence и причину публикации. Для полного объяснения сложного сбоя всё ещё не хватает внутренних YIN/NSDF массивов, точной tracker phase и sample timestamp. Эти тяжёлые данные следует отдавать отдельным opt-in diagnostics frame, а не добавлять в постоянный UI contract.
+Текущий bounded live `PipelineTelemetry` уже показывает YIN/MPM, выбранный результат, gate decision, tracker/hold, noise threshold, компактное harmonic/octave evidence и причину публикации. Rust replay дополнительно фиксирует `windowEndSample`, однако постоянному live contract всё ещё не хватает точной tracker phase и общей capture/process/publish sample timebase; внутренние YIN/NSDF массивы тоже не сохраняются. Эти тяжёлые данные следует отдавать отдельным opt-in diagnostics frame, а не добавлять в постоянный UI contract.
 
 ## 6. Целевой модульный pipeline
 
@@ -348,11 +379,11 @@ DiagnosticsFrame = optional evidence and decision trace
 
 1. Добавить `AudioChunk.start_sample` и измерение end-to-end latency без изменения detector logic.
 2. Вынести единый `WindowPlanner` и сделать web/native window/cadence явно конфигурируемыми.
-3. Ввести `DiagnosticsFrame` и записывать YIN, MPM, harmonic и octave evidence на fixture/replay запусках.
+3. Расширить уже существующий replay envelope до opt-in `DiagnosticsFrame` с YIN/NSDF internals и общей capture/process/publish timebase.
 4. Представить результаты детекторов как список `PitchCandidate`, сохранив текущую arbitration policy.
 5. Перевести tracker, gate, hold и octave confirmation с количества frames на elapsed sample time.
 6. Добавить явный `SignalPhaseClassifier` и разные policies для attack/sustain/release.
-7. Ввести multi-candidate temporal tracking, затем проверить его на real guitar WAV corpus.
+7. Ввести multi-candidate temporal tracking, затем проверить его на существующем real-WAV corpus и фиксированной SNR/reverb матрице.
 8. После benchmark заменить target-guided harmonic heuristics на доказанно более точный evidence model.
 9. Унифицировать 4096/8192 или осознанно оставить multi-resolution windows с одинаковыми latency budgets.
 10. Зафиксировать parity tests: один WAV должен давать сопоставимые candidates, frequency и transition timing во всех backend-ах.
@@ -376,3 +407,8 @@ DiagnosticsFrame = optional evidence and decision trace
 - Temporal tracker: [`pitch-core/src/tracking.rs`](pitch-core/src/tracking.rs)
 - Note/cents resolution: [`pitch-core/src/resolution.rs`](pitch-core/src/resolution.rs)
 - Public frame: [`pitch-core/src/frames.rs`](pitch-core/src/frames.rs)
+- Temporal quality metrics: [`pitch-core/src/quality/`](pitch-core/src/quality/)
+- Corpus runner and manifest boundary: [`pitch-core/examples/quality/`](pitch-core/examples/quality/)
+- Sample-indexed trace envelope: [`pitch-core/examples/trace.rs`](pitch-core/examples/trace.rs), [`pitch-core/examples/support/trace_report.rs`](pitch-core/examples/support/trace_report.rs)
+- Licensed corpus and deterministic rebuild: [`fixtures/corpus/`](fixtures/corpus/)
+- Browser capture sidecar: [`web/src/utils/debugCaptureEnvelope.ts`](web/src/utils/debugCaptureEnvelope.ts)

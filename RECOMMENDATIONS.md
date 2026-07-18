@@ -4,7 +4,7 @@
 
 Problem sources: [recommendation.md](recommendation.md) is the current extract (109 open/partial and 71 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-12:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW and baseline tests/builds are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-18:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW, licensed 19-WAV quality gate and replay baselines are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -12,9 +12,9 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Добавить file/WAV adapter поверх готового `AudioInputPort` и real-audio suites.
+1. Добавить интерактивный file/WAV adapter поверх готового `AudioInputPort`; offline corpus loader уже реализован отдельно.
 2. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
-3. Расширить shared pitch manifest реальными лицензированными WAV/SNR fixtures.
+3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms и session-adapter parity.
 4. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
 5. Ввести typed diagnostics/errors и завершить accessibility/release gates.
 6. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
@@ -25,7 +25,7 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 | Status | Priority | Recommendation | Remaining Impact |
 | --- | --- | --- | --- |
-| Done baseline | P0 | Freeze behavior with tests | Extend to real audio/failure/soak, not another harness rewrite |
+| Done baseline | P0 | Freeze behavior with tests | Real-audio core gate exists; extend to SNR/session failure/soak, not another harness rewrite |
 | Done | P0 | Complete shared frame contract | Keep `FrameContext` wire tests and revisioned native configuration green |
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |

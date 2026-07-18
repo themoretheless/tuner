@@ -21,7 +21,7 @@
 4. Реальный корпус записей с известной струной, шумом, реверберацией и точным временем.
 5. Метрики пользовательского провала: ложная фиксация, время до верного E2, повторный захват и визуальные скачки, а не только средняя ошибка в центах.
 
-Практический вывод для текущего Tuner: сначала нужен воспроизводимый real-WAV benchmark и исправление уже известных confidence/octave ошибок, затем phase-aware tracking и только после этого более тяжёлые модели. Нейросетевой F0 полезнее сначала как офлайн-оракул CI, а не как новый runtime dependency.
+Практический вывод для текущего Tuner: первый воспроизводимый real-WAV gate уже создан; теперь его нужно расширить SNR/noise/reverb сценариями, differential baselines и phase-aware tracking до рассмотрения более тяжёлых моделей. Нейросетевой F0 полезнее сначала как офлайн-оракул CI, а не как новый runtime dependency.
 
 ## 100 репозиториев
 
@@ -200,7 +200,7 @@
 | X14 | P1 | Attack/sustain/release annotations | Каждый fixture имеет onset, stable interval и audible release; metrics считаются раздельно. | Новое, требуется для `X6-X7`. |
 | X15 | P1 | Noise/reverb stress generator | Clean guitar смешивается с pink/brown/fan/mains/impulse noise по SNR и room IR по RT60; seed фиксирован. | Расширяет `M78`, `M94`. |
 | X16 | P1 | Preprocessor pitch-bias gate | Любой high-pass/notch/gate/denoiser обязан доказать отсутствие systematic cents/octave bias по corpus. | Новая защита; speech denoisers не включаются по умолчанию. |
-| X17 | P1 | Reproducible capture/replay envelope | Raw PCM/WAV хранится вместе с config revision, device/sample-rate, chunk timing и expected intervals. | Развивает file/WAV adapter и `M98`, но сохраняет timing failures. |
+| X17 | P1 | Reproducible capture/replay envelope | Raw PCM/WAV хранится вместе с config revision, device/sample-rate, chunk timing и expected intervals. | **[PARTIAL 2026-07-18]** Rust WAV/f32 replay уже sample-indexed; web выгружает WebM+JSON sidecar. Точный browser PCM, единый timebase и queue timing ещё нужны. |
 | X18 | P1 | End-to-end sample timebase | Frames несут `sampleIndex`, `capturedAt`, `processedAt`, `publishedAt`; latency измеряется, а не оценивается по wall clock UI. | Новое; закрывает архитектурный пробел `FrameBase`. |
 | X19 | P1 | Audio queue telemetry | Sequence gaps, overrun/underrun, high-water mark, dropped chunks и deadline misses доступны тестам/diagnostics. | Расширяет `M81` и текущий bounded queue. |
 | X20 | P1 | Variable render-quantum tests | AudioWorklet path проходит 64/128/256-frame blocks без изменения pitch/timebase. | Новое требование из Web Audio contract. |

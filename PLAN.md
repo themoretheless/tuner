@@ -30,18 +30,18 @@ If not, it doesn't belong in this plan.
 Each milestone is independently shippable and verified with `cargo test -p pitch-core`,
 `vue-tsc --noEmit`, and `cargo check` on egui. Behavior-preserving milestones are marked **[BP]**.
 
-## Status Overlay (2026-07-12)
+## Status Overlay (2026-07-18)
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 52 Vitest, 17 all-feature core tests, generated note-math properties, shared pitch/confidence/smoothing parity and four E2E flows; real WAV/soak still belong to M7 |
+| M0 safety net | Done baseline | 84 Vitest, 65 all-feature core tests, generated note-math properties, shared pitch/confidence/smoothing parity, five E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
 | M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice/custom-library done; broad root and selection/temperament controller remain |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
-| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges and silence reset done; HPS/filter/adaptive gate/fixtures remain |
+| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset and real-WAV temporal gate are done; phase-aware tracking, stress scenarios and differential/benchmark/soak gates remain |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
 
 ---
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-12:** M0 is complete for the current refactor gate: toolchain pins, `52` Vitest tests, `17` pitch-core all-feature tests, CI fmt/clippy/tests/wasm/codegen gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, and four Playwright flows including full-frame WASM, synthetic detection and responsive Library navigation.
+**Status 2026-07-18:** M0 is complete for the current refactor gate: toolchain pins, `84` Vitest tests, `65` pitch-core all-feature tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and five Playwright flows including full-frame WASM, synthetic detection and responsive Algorithm/Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -123,6 +123,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - HPS octave guard from the existing 2048 FFT; runtime DC-block + ~30-40Hz high-pass; adaptive noise-floor gate; per-string tau bounds when a string is selected; confidence-weighted fusion (YIN+MPM+HPS).
 **Verify / DoD:** fixture corpus + equivalence harness pass; no regression vs M0 baselines.
 
+**Status 2026-07-18:** partial. A licensed guitar/bass/ukulele/violin/voice corpus, deterministic rebuild/checksums, temporal metrics, per-scenario thresholds and blocking CI artifact are complete. The next evidence slices are fixed SNR/noise/reverb transforms, differential baselines, cross-backend replay, criterion hot-path benchmarks and restart soak tests.
+
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
 **Targets:** `R36-R44`, `R175-R183`; grounded audit `C19-C20`, `C39-C42`, `C95`, `C168-C172`, `C178-C180`; master `M5`, `M8`, `M14`, `M16`, `M23`, `M31`, `M33`, `M37`, `M45`.
@@ -136,9 +138,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** full-frame primary WASM/native ownership, audio ports, confidence/smoothing parity, generated music data and note math are complete; add the file/WAV adapter.
-- **Next:** split the remaining selection/temperament/settings controllers.
-- **Later:** M7 real-audio/benchmark/soak accuracy work and the remaining M8 diagnostics/a11y/release gates.
+- **Now:** add the interactive file/WAV `AudioInputPort` and exact browser PCM/sample-timebase replay; offline WAV quality/replay already exists.
+- **Next:** add SNR/noise/reverb corpus transforms and differential/benchmark/soak gates, then split the remaining selection/temperament/settings controllers.
+- **Later:** complete M7 phase-aware accuracy work and the remaining M8 diagnostics/a11y/release gates.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.
