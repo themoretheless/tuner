@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import type { DetectionFrame } from '../types/frames'
+import {
+  createDebugCaptureEnvelope,
+  createDebugFrameSnapshot,
+  debugCaptureAudioExtension,
+  type DebugFrameSnapshot,
+} from '../utils/debugCaptureEnvelope'
 
 const props = defineProps<{
   frame: DetectionFrame
@@ -17,14 +23,18 @@ const lastFileName = ref<string | null>(null)
 
 let recorder: MediaRecorder | null = null
 let recorderStream: MediaStream | null = null
+let frameSnapshots: DebugFrameSnapshot[] = []
+let recordStartedAt = ''
+let recordStartedMs = 0
+let sessionAtStart = { backend: '', isListening: false, selectedInputDeviceId: '' }
 
 function fmt(value: number | null | undefined, digits = 1) {
   return value == null || !Number.isFinite(value) ? '—' : value.toFixed(digits)
 }
 
-// Records its own capture of the same input device so the debug tool works
-// regardless of the tuner session's internal audio plumbing. The processing
-// constraints mirror the tuner's, so the recording is what the detector hears.
+// This parallel stream is intentionally marked as such in the sidecar. The
+// frame trace makes field reports useful now; exact PCM time alignment belongs
+// to the future shared AudioWorklet capture path.
 async function record() {
   if (recording.value) return
   recordError.value = null
@@ -39,21 +49,44 @@ async function record() {
         channelCount: 1,
       },
     })
+    const trackSettings = recorderStream.getAudioTracks()[0]?.getSettings() ?? {}
     const chunks: BlobPart[] = []
     recorder = new MediaRecorder(recorderStream)
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data)
     }
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: recorder?.mimeType || 'audio/webm' })
-      const name = `tuner-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = name
-      link.click()
-      URL.revokeObjectURL(link.href)
-      lastFileName.value = name
+      const completedAt = new Date().toISOString()
+      const mimeType = recorder?.mimeType
+        || (chunks[0] instanceof Blob ? chunks[0].type : '')
+        || 'audio/webm'
+      const base = `tuner-debug-${recordStartedAt.replace(/[:.]/g, '-')}`
+      const audioName = `${base}${debugCaptureAudioExtension(mimeType)}`
+      const metadataName = `${base}.json`
+      const audioBlob = new Blob(chunks, { type: mimeType })
+      const envelope = createDebugCaptureEnvelope({
+        audioFile: audioName,
+        backend: sessionAtStart.backend,
+        capturedAt: recordStartedAt,
+        completedAt,
+        frames: frameSnapshots,
+        isTunerListening: sessionAtStart.isListening,
+        mimeType,
+        selectedInputDeviceId: sessionAtStart.selectedInputDeviceId,
+        trackSettings,
+      })
+      download(audioBlob, audioName)
+      download(new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' }), metadataName)
+      lastFileName.value = `${audioName} + ${metadataName}`
       cleanup()
+    }
+    frameSnapshots = []
+    recordStartedAt = new Date().toISOString()
+    recordStartedMs = performance.now()
+    sessionAtStart = {
+      backend: props.backend,
+      isListening: props.isListening,
+      selectedInputDeviceId: props.selectedInputDeviceId ?? '',
     }
     recorder.start()
     recording.value = true
@@ -64,14 +97,37 @@ async function record() {
   }
 }
 
+function download(blob: Blob, name: string) {
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 0)
+}
+
 function cleanup() {
   recording.value = false
+  if (recorder?.state === 'recording') {
+    recorder.onstop = null
+    recorder.stop()
+  }
   recorder = null
   recorderStream?.getTracks().forEach((track) => track.stop())
   recorderStream = null
 }
 
 onUnmounted(cleanup)
+
+watch(() => props.frame, (frame) => {
+  if (!recording.value) return
+  frameSnapshots.push(createDebugFrameSnapshot(
+    frameSnapshots.length,
+    performance.now() - recordStartedMs,
+    frame,
+  ))
+})
 </script>
 
 <template>
