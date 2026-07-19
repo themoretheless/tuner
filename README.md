@@ -57,7 +57,7 @@
 2. **Input provenance:** кадр несёт отпечаток pipeline-конфигурации и предупреждение о соседней струне; web-порт отдельно сообщает фактические AGC/noise/echo/sample-rate настройки.
 3. **Presentation review:** канонические кадры остаются на аудиочасах, а отдельный visual frame обновляется через `requestAnimationFrame` на частоте дисплея по правилу latest-frame-wins; смысловые переходы проходят сразу, Analysis получил мастер мензуры, а экранный диктор больше не зачитывает меняющийся процент.
 
-После трёх проходов отдельное review поймало пропущенный prop в production build, смешанную локализацию, фиксированный таймер публикации и mobile-переполнение живых canvas. Текущий gate 2026-07-20: `142` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, шесть browser-проверок, ручная desktop/mobile проверка и полный Tauri `.app`/`.dmg` bundle.
+После трёх проходов отдельное review поймало пропущенный prop в production build, смешанную локализацию, фиксированный таймер публикации и mobile-переполнение живых canvas. Текущий gate 2026-07-20: `144` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, шесть browser-проверок, ручная desktop/mobile проверка и полный Tauri `.app`/`.dmg` bundle.
 
 ## Возможности
 
@@ -119,7 +119,7 @@ Tuner/
 6. `pitch-core/src/quality/`, `pitch-core/examples/quality/`, `fixtures/corpus/` - независимая оценка готовых traces, corpus runner и provenance; live DSP от них не зависит.
 7. `audio-input/src/lib.rs` и `desktop/src-tauri/src/native_audio/` - realtime input и тонкий Tauri adapter.
 8. `egui/src/{app,audio,state,visualization}.rs` - native UI, разделённый по ответственности.
-9. `web/src/platform/`, `ports/`, `session/`, `composables/useTunerSession.ts` - platform capabilities, wire contract, state machine и выбор adapter.
+9. `web/src/session/sessionLifecycleContract.ts`, `sessionLifecycle.ts`, `platform/nativeAudioApi.ts`, `ports/`, `composables/useTunerSession.ts` - typed lifecycle contract, state machine, injected platform API и пока ещё composition четырёх input adapters.
 10. `web/src/domain/tuningTracking.ts`, `tuningDetectionMachine.ts`, `composables/useTuningModel.ts`, `useTuningDetection.ts`, `application/controllers/tuning*Commands.ts` - model/commands/detection без stateful computed и смешения причин изменения.
 11. `web/src/settings/settingsState.ts`, `composables/useSettings.ts` - реактивное значение отдельно от persistence coordinator и внедряемого storage port.
 12. `web/src/application/controllers/`, `application/ports/` - framework-independent use cases и минимальные value contracts; Vue импортировать запрещено architecture test-ом.
@@ -300,7 +300,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `142` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и browser exact-PCM flow.
+M0 safety net закрыт для текущего refactor gate: `144` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и browser exact-PCM flow. Lifecycle теперь публикует typed start/stop/runtime failures, а native teardown не может молча превратить ошибку IPC в состояние idle.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;

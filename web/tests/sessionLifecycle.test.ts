@@ -26,7 +26,11 @@ describe('SessionLifecycle', () => {
     await lifecycle.start('native');
 
     expect(calls).toEqual(['start:web', 'stop:web', 'start:native']);
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: 'native', status: 'listening' });
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: 'native',
+      failure: null,
+      status: 'listening',
+    });
     expect(states.map((state) => state.status)).toEqual([
       'starting',
       'listening',
@@ -59,7 +63,7 @@ describe('SessionLifecycle', () => {
     await Promise.all([starting, stopping]);
 
     expect(calls).toEqual(['start:web', 'stop:web']);
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, status: 'idle' });
+    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, failure: null, status: 'idle' });
   });
 
   it('reports an adapter start failure as an error state', async () => {
@@ -73,23 +77,41 @@ describe('SessionLifecycle', () => {
 
     await lifecycle.start(failedBackend);
 
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, status: 'error' });
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: null,
+      failure: { backend: failedBackend, operation: 'start' },
+      status: 'error',
+    });
   });
 
-  it('returns to idle even when an adapter teardown rejects', async () => {
+  it('keeps a failed teardown visible and lets a later stop retry it', async () => {
+    let stopAttempts = 0;
     const lifecycle = new SessionLifecycle({
       async start() {
         return true;
       },
       async stop() {
-        throw new Error('device already gone');
+        stopAttempts += 1;
+        if (stopAttempts === 1) throw new Error('device still active');
       },
     });
 
     await lifecycle.start('web');
     await lifecycle.stop();
 
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, status: 'idle' });
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: 'web',
+      failure: {
+        backend: 'web',
+        message: 'device still active',
+        operation: 'stop',
+      },
+      status: 'error',
+    });
+
+    await lifecycle.stop();
+    expect(stopAttempts).toBe(2);
+    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, failure: null, status: 'idle' });
   });
 
   it('tears down after a runtime failure and can start again', async () => {
@@ -106,10 +128,46 @@ describe('SessionLifecycle', () => {
 
     await lifecycle.start('web');
     await lifecycle.fail();
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: null, status: 'error' });
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: null,
+      failure: { backend: 'web', operation: 'runtime' },
+      status: 'error',
+    });
 
     await lifecycle.start('web');
     expect(calls).toEqual(['start:web', 'stop:web', 'start:web']);
-    expect(lifecycle.snapshot()).toEqual({ activeBackend: 'web', status: 'listening' });
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: 'web',
+      failure: null,
+      status: 'listening',
+    });
+  });
+
+  it('publishes a restart intent before a queued stop finishes', async () => {
+    let releaseStop: (() => void) | null = null;
+    const stopGate = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    const lifecycle = new SessionLifecycle({
+      async start() {
+        return true;
+      },
+      async stop() {
+        await stopGate;
+      },
+    });
+
+    await lifecycle.start('web');
+    const stopping = lifecycle.stop();
+    const restarting = lifecycle.start('web');
+
+    expect(lifecycle.snapshot().status).toBe('starting');
+    releaseStop?.();
+    await Promise.all([stopping, restarting]);
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: 'web',
+      failure: null,
+      status: 'listening',
+    });
   });
 });

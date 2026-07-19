@@ -25,6 +25,11 @@ describe('web architecture boundaries', () => {
         expect(lineCount(file), file).toBeLessThanOrEqual(150);
       }
     }
+    for (const directory of ['platform/', 'session/']) {
+      for (const file of filesUnder(directory)) {
+        expect(lineCount(file), file).toBeLessThanOrEqual(200);
+      }
+    }
   });
 
   it('keeps domain and application independent from Vue and presentation adapters', () => {

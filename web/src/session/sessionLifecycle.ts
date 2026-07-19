@@ -1,27 +1,19 @@
-import type { AudioInputId } from '../ports/audioInput';
+import type {
+  SessionBackend,
+  SessionLifecycleDriver,
+  SessionLifecycleFailure,
+  SessionLifecycleOptions,
+  SessionLifecycleSnapshot,
+  SessionStatus,
+} from './sessionLifecycleContract';
 
-export type SessionBackend = AudioInputId;
-
-export type SessionStatus = 'idle' | 'starting' | 'listening' | 'stopping' | 'error';
-
-export interface SessionLifecycleSnapshot {
-  activeBackend: SessionBackend | null;
-  status: SessionStatus;
-}
-
-export interface SessionLifecycleDriver {
-  start(backend: SessionBackend): Promise<boolean>;
-  stop(backend: SessionBackend): Promise<void>;
-}
-
-export interface SessionLifecycleOptions {
-  onChange?: (snapshot: SessionLifecycleSnapshot) => void;
-}
+export type * from './sessionLifecycleContract';
 
 export class SessionLifecycle {
   private activeBackend: SessionBackend | null = null;
   private desiredListening = false;
   private readonly driver: SessionLifecycleDriver;
+  private failure: SessionLifecycleFailure | null = null;
   private readonly options: SessionLifecycleOptions;
   private revision = 0;
   private status: SessionStatus = 'idle';
@@ -38,44 +30,64 @@ export class SessionLifecycle {
   snapshot(): SessionLifecycleSnapshot {
     return {
       activeBackend: this.activeBackend,
+      failure: this.failure,
       status: this.status,
     };
   }
 
   start(backend: SessionBackend): Promise<void> {
+    if (this.activeBackend === backend && this.status === 'listening') {
+      return Promise.resolve();
+    }
     this.desiredListening = true;
     const revision = ++this.revision;
+    this.failure = null;
+    if (this.status !== 'listening' && this.status !== 'starting') {
+      this.setStatus('starting');
+    }
 
     return this.enqueue(async () => {
       if (!this.isCurrent(revision)) return;
-      if (this.activeBackend === backend && this.status === 'listening') return;
 
       if (this.activeBackend) {
         this.setStatus('stopping');
-        await this.stopActiveBackend();
+        const stopped = await this.stopActiveBackend();
+        if (!stopped.ok) {
+          if (this.isCurrent(revision)) this.setFailure(stopped.failure);
+          return;
+        }
         if (!this.isCurrent(revision)) return;
       }
 
-      this.setStatus('starting');
+      if (this.status !== 'starting') this.setStatus('starting');
       let started = false;
+      let startMessage: string | undefined;
       try {
         started = await this.driver.start(backend);
-      } catch {
+      } catch (cause) {
+        startMessage = errorMessage(cause);
         started = false;
       }
 
       if (!this.isCurrent(revision)) {
-        if (started) await this.stopBackend(backend);
+        if (started) {
+          const stopped = await this.stopBackend(backend);
+          if (!stopped.ok) {
+            this.activeBackend = backend;
+            this.setFailure(stopped.failure);
+          }
+        }
         return;
       }
 
       if (!started) {
         this.activeBackend = null;
-        this.setStatus('error');
+        this.setFailure({ backend, message: startMessage, operation: 'start' });
         return;
       }
 
       this.activeBackend = backend;
+      this.failure = null;
       this.setStatus('listening');
     });
   }
@@ -83,22 +95,31 @@ export class SessionLifecycle {
   stop(): Promise<void> {
     this.desiredListening = false;
     const revision = ++this.revision;
+    this.failure = null;
     if (this.status !== 'idle') this.setStatus('stopping');
 
     return this.enqueue(async () => {
-      await this.stopActiveBackend();
-      if (revision === this.revision) this.setStatus('idle');
+      const stopped = await this.stopActiveBackend();
+      if (revision !== this.revision) return;
+      if (stopped.ok) this.setStatus('idle');
+      else this.setFailure(stopped.failure);
     });
   }
 
   fail(): Promise<void> {
     this.desiredListening = false;
     const revision = ++this.revision;
+    this.failure = {
+      backend: this.activeBackend,
+      operation: 'runtime',
+    };
     this.setStatus('error');
 
     return this.enqueue(async () => {
-      await this.stopActiveBackend();
-      if (revision === this.revision) this.setStatus('error');
+      const stopped = await this.stopActiveBackend();
+      if (revision !== this.revision) return;
+      if (!stopped.ok) this.failure = stopped.failure;
+      this.setStatus('error');
     });
   }
 
@@ -112,24 +133,45 @@ export class SessionLifecycle {
     return revision === this.revision && this.desiredListening;
   }
 
-  private async stopActiveBackend() {
+  private async stopActiveBackend(): Promise<StopResult> {
     const backend = this.activeBackend;
-    this.activeBackend = null;
-    if (!backend) return;
-    await this.stopBackend(backend);
+    if (!backend) return { ok: true };
+    const result = await this.stopBackend(backend);
+    if (result.ok && this.activeBackend === backend) this.activeBackend = null;
+    return result;
   }
 
-  private async stopBackend(backend: SessionBackend) {
+  private async stopBackend(backend: SessionBackend): Promise<StopResult> {
     try {
       await this.driver.stop(backend);
-    } catch {
-      // A failed adapter teardown must not leave the lifecycle permanently
-      // stuck in `stopping`; the next start still gets a clean serialized turn.
+      return { ok: true };
+    } catch (cause) {
+      return {
+        failure: {
+          backend,
+          message: errorMessage(cause),
+          operation: 'stop',
+        },
+        ok: false,
+      };
     }
+  }
+
+  private setFailure(failure: SessionLifecycleFailure) {
+    this.failure = failure;
+    this.setStatus('error');
   }
 
   private setStatus(status: SessionStatus) {
     this.status = status;
     this.options.onChange?.(this.snapshot());
   }
+}
+
+type StopResult = { ok: true } | { failure: SessionLifecycleFailure; ok: false };
+
+function errorMessage(cause: unknown) {
+  if (cause instanceof Error) return cause.message;
+  if (typeof cause === 'string' && cause) return cause;
+  return undefined;
 }

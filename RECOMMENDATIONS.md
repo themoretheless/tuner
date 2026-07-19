@@ -2,7 +2,7 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (300 open/partial and 94 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (296 open/partial and 98 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
 **Status 2026-07-19:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, composite decision evidence, configuration/input provenance, measured fallback confidence, monitor-synchronized visual presentation, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, intonation setup, responsive live canvases, offline SW, licensed 19-WAV quality gate, interactive file/WAV input and exact shared browser PCM capture are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
@@ -13,10 +13,10 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 Актуальный порядок оставшейся работы:
 
 1. Добавить автоматическое cross-backend сравнение sample-indexed Rust replay и browser PCM/WAV+JSON v2 envelope.
-2. Протянуть typed stop/start failures через native adapter и session lifecycle без проглатывания ошибок.
+2. Вынести создание четырёх input adapters из `useTunerSession` и внедрять capability registry в controller.
 3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms и session-adapter parity.
 4. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
-5. Ввести typed diagnostics/errors и завершить accessibility/release gates.
+5. Ввести typed user-facing diagnostics/errors и завершить accessibility/release gates.
 6. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
 7. Унифицировать power/harmonic flags для explicit TS fallback либо документировать capability contract.
 8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
@@ -253,6 +253,8 @@ type TunerSessionStatus = 'idle' | 'starting' | 'listening' | 'stopping' | 'erro
 - Backend switching tested without component.
 - `useTuner.start`, `useTuner.stop`, `setAudioBackend` are delegated to session.
 - Session protects against duplicate starts.
+- Restart intent is visible before queued teardown completes.
+- Native teardown rejection becomes a typed lifecycle failure and keeps the backend retryable.
 
 ### 7. Introduce Versioned UserProfile
 
@@ -468,7 +470,7 @@ Extend the current manifests with real WAV/SNR cases and failure traces. Keep th
 ## Recommended Next 8 Commits
 
 1. `Compare sample-indexed replay across backends`
-2. `Propagate native stop failures through session lifecycle`
+2. `Inject the audio-input registry into tuner session`
 3. `Add device-loss recovery evidence`
 4. `Add typed pipeline diagnostics`
 5. `Add SNR fixtures and restart soak gates`

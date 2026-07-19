@@ -22,7 +22,7 @@ Strengths:
 - Offline web build, responsive themes/canvases and full native Tauri bundles are verified.
 
 Remaining weaknesses:
-- Web workflow ownership is split across focused controllers, tuning model/commands/detection and feature-specific ports. Output playback now has one injected port, lazy resumed context, mixer and cancellable scopes; the next coupling hotspot is lifecycle/error propagation across native and web adapters.
+- Web workflow ownership is split across focused controllers, tuning model/commands/detection and feature-specific ports. Output playback has one injected port; lifecycle now preserves typed start/stop/runtime failures and retryable failed teardowns. The next coupling hotspot is concrete construction of all four input adapters inside `useTunerSession` plus translation of typed failures into user-facing diagnostics.
 - Primary browser/native frames share Rust detector, smoothing and resolver ownership; TS fallback confidence and smoothing are fixture/trace-gated. Power flags still degrade explicitly in the fallback.
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - Interactive PCM/float WAV input is implemented without browser resampling and feeds sample-indexed overlapping windows through the same session pipeline; device-loss recovery E2E remains incomplete.
@@ -38,7 +38,7 @@ The broader competitor pass in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473
 
 The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/native/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
 
-The current list contains 300 open/partial `R#` findings and a 94-item closure registry: 103/77 in the original range and 197/17 in the independent post-refactor pass. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
+The current list contains 296 open/partial `R#` findings and a 98-item closure registry: 103/77 in the original range and 193/21 in the independent post-refactor pass. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
 
 ## Implemented Dependency Shape
 
@@ -201,7 +201,7 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 
 | Critic | 2026-07-11 response | Remaining challenge |
 | --- | --- | --- |
-| Systems | Session, focused controllers, injected settings/output and segregated feature ports now have owners | Propagate typed lifecycle failures across adapters |
+| Systems | Session, focused controllers, injected settings/output and segregated feature ports now have owners; lifecycle failures cross the native adapter boundary | Inject the input registry and translate typed failures into user-facing diagnostics |
 | DSP/audio | Detector modules/trait, full-frame web WASM, optional spectrum and reusable buffers shipped | Real-audio fixtures and benchmarks |
 | Vue | Five feature views, tuning model/commands/detection and plain visual frames shipped | Keep command/query ports narrow as features grow |
 | Rust library | `lib.rs` is a small re-export layer over focused modules | Consider crate split only if module boundaries prove insufficient |
@@ -305,7 +305,7 @@ egui/src/
 - AudioWorklet sample timeline and exact capture for web. [done]
 - Better WASM packaging.
 
-**Status 2026-07-20: baseline extended.** `142` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundaries, native/browser context tests, generated-source/property gates, six Playwright flows including live-analysis overflow at `390x844`, workspace strict clippy, production web/WASM build, manual desktop/mobile visual QA and full Tauri `.app`/`.dmg` bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust replay, interactive file/WAV input and exact shared browser PCM/WAV+JSON v2 capture are sample-indexed. Remaining: automated cross-backend replay comparison, SNR/noise/reverb scenarios, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
+**Status 2026-07-20: baseline extended.** `144` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundaries, lifecycle failure/retry and native teardown propagation tests, native/browser context tests, generated-source/property gates, six Playwright flows including live-analysis overflow at `390x844`, workspace strict clippy, production web/WASM build, manual desktop/mobile visual QA and full Tauri `.app`/`.dmg` bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust replay, interactive file/WAV input and exact shared browser PCM/WAV+JSON v2 capture are sample-indexed. Remaining: automated cross-backend replay comparison, SNR/noise/reverb scenarios, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
@@ -317,8 +317,8 @@ egui/src/
 
 1. Add automated cross-backend replay comparison over the sample-indexed Rust and browser capture envelopes.
 2. Extend the licensed corpus with fixed SNR/noise/reverb scenarios, then add permission/device-loss E2E, criterion benchmarks and a restart soak test.
-3. Close session lifecycle status visibility and native stop-error propagation gaps (`R182`, `R183`, `R193`).
-4. Add typed diagnostics/errors and device-loss recovery evidence.
+3. Extract input-registry construction from `useTunerSession` and inject adapter capabilities into the controller.
+4. Add typed user-facing diagnostics and device-loss recovery evidence.
 5. Enforce CSP/signing/checksum/dependency release gates.
 
 This plan prioritizes **loose coupling** and **modularity** so future features (MIDI, file playback, new platforms, better viz) become additive instead of invasive.
@@ -657,11 +657,11 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 
 | Rule | Local Meaning | Current Violation | Small Fix |
 | --- | --- | --- | --- |
-| Single Responsibility | One module owns one workflow | Application/tuning/settings/output owners are split; lifecycle error ownership is still fragmented | Introduce typed stop/start results shared by adapters and session |
+| Single Responsibility | One module owns one workflow | Application/tuning/settings/output owners are split; lifecycle owns typed failure/retry state | Extract adapter construction and file/source switching from `useTunerSession` |
 | Open/Closed | New backend or tuning adds an adapter/data row | Input/output ports and generated music registry are extensible; engine detector selection is still concrete | Inject `PitchDetector` into `TunerEngine` when alternate detectors are required |
 | Liskov | Fake, web, native and file inputs obey one contract | Web/native/synthetic/file share lifecycle semantics and file sessions are contract/integration tested | Add device-loss and backend-switch E2E evidence |
 | Interface Segregation | Components receive only what they render | Five feature ports and a shell port are separate; Live is intentionally the richest surface | Split command/query subports only when a feature demonstrably grows |
-| Dependency Inversion | UI depends on capabilities, not APIs | Settings storage, fullscreen and output audio are injected; native stop results still disappear inside an adapter | Return typed lifecycle results and surface them through session commands |
+| Dependency Inversion | UI depends on capabilities, not APIs | Settings storage, fullscreen, output audio and the Tauri API loader are injected; native stop failures reach lifecycle | Inject the complete input registry into the session controller |
 
 ### DRY Rules For This Project
 
@@ -677,7 +677,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 
 | Status | Slice | Current Owner | Next Small Boundary |
 | --- | --- | --- | --- |
-| Done | Live lifecycle | `web/src/session/sessionLifecycle.ts` | Keep adapter calls behind the driver contract |
+| Done | Live lifecycle | `session/sessionLifecycleContract.ts`, `sessionLifecycle.ts`, injected `platform/nativeAudioApi.ts` | Inject the four input adapters into `useTunerSession`; keep platform/session modules under the enforced 200-line budget |
 | Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, four adapters, sample timeline and WAV codec | Add cross-backend replay comparison and device-loss evidence |
 | Done web / partial cross-platform | Tone port | `ports/audioOutput.ts`, `platform/webAudioOutput.ts`, `application/services/metronomeScheduler.ts`; egui `AudioManager` | Keep adapters separate; share only capability semantics when egui playback is revisited |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
@@ -1393,11 +1393,11 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 The synchronized problem map is split by purpose:
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) plus historical detailed `C#` evidence; revalidate old audit claims against the current status overlay.
-- [recommendation.md](recommendation.md) - current grounded extract: 300 open/partial and 94 closed stable `R#` references.
+- [recommendation.md](recommendation.md) - current grounded extract: 296 open/partial and 98 closed stable `R#` references.
 
 Key highlights that directly block the target architecture:
 - Add automated cross-backend replay over exact PCM envelopes.
-- Close lifecycle status/stop-error propagation gaps and add typed diagnostics (`R182`, `R183`, `R193`).
+- Inject the four input adapters into `useTunerSession`, then add typed user-facing diagnostics and device-loss recovery evidence.
 - Complete shared power semantics and remove remaining platform policy drift (`R18`, `R106-R110`).
 - Remove enabled-spectrum frame allocation and decouple web detection from paint cadence (`R26-R28`, `R76`, `R87`).
 - Add real-audio parity/failure/performance/stability suites (`R31-R38`, `R148-R165`).

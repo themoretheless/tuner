@@ -57,6 +57,7 @@ export function useTunerSession(options: TunerSessionOptions) {
   const loadError = ref<string | null>(null);
   const lifecycleSnapshot = ref<SessionLifecycleSnapshot>({
     activeBackend: null,
+    failure: null,
     status: 'idle',
   });
   let exactCapturePort: ExactPcmCaptureInputPort | null = null;

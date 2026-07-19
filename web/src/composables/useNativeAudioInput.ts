@@ -1,5 +1,11 @@
 import { onUnmounted, ref, type Ref } from 'vue';
 import type { DetectionFrameInputPort } from '../ports/audioInput';
+import {
+  loadNativeAudioApi,
+  type NativeAudioApiLoader,
+  type NativeInvoke,
+  type NativeListen,
+} from '../platform/nativeAudioApi';
 import type { PitchDetectionRange } from '../utils/pitch';
 import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
@@ -14,9 +20,6 @@ import {
   type NativeAudioFramePayload,
 } from '../platform/nativeAudioContract';
 
-type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
-type ListenFn = <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
-
 export interface NativeAudioInputAdapter extends DetectionFrameInputPort {
   available: Ref<boolean>;
   error: Ref<string | null>;
@@ -25,14 +28,17 @@ export interface NativeAudioInputAdapter extends DetectionFrameInputPort {
   refreshAvailability(): Promise<boolean>;
 }
 
-export function useNativeAudioInput(): NativeAudioInputAdapter {
+export function useNativeAudioInput(
+  apiLoader: NativeAudioApiLoader = loadNativeAudioApi,
+): NativeAudioInputAdapter {
   const available = ref(false);
   const error = ref<string | null>(null);
   const frame = ref<DetectionFrame | null>(null);
   const isListening = ref(false);
 
-  let invokeFn: InvokeFn | null = null;
-  let listenFn: ListenFn | null = null;
+  let invokeFn: NativeInvoke | null = null;
+  let listenFn: NativeListen | null = null;
+  let availabilitySync: Promise<boolean> | null = null;
   let unlisten: (() => void) | null = null;
   let configuration: NativeAudioConfiguration = createNativeAudioConfiguration();
   let configurationSync: Promise<void> | null = null;
@@ -43,33 +49,40 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     if (invokeFn && listenFn) return true;
 
     try {
-      const core = await import('@tauri-apps/api/core');
-      const event = await import('@tauri-apps/api/event');
-      invokeFn = core.invoke as InvokeFn;
-      listenFn = event.listen as ListenFn;
+      const api = await apiLoader();
+      if (!api) return false;
+      invokeFn = api.invoke;
+      listenFn = api.listen;
       return true;
     } catch {
       return false;
     }
   }
 
-  async function refreshAvailability() {
-    if (!await loadApi() || !invokeFn) {
-      available.value = false;
-      return false;
-    }
+  function refreshAvailability() {
+    if (availabilitySync) return availabilitySync;
+    availabilitySync = (async () => {
+      if (!await loadApi() || !invokeFn) {
+        available.value = false;
+        return false;
+      }
 
-    try {
-      available.value = Boolean(await invokeFn('native_audio_available'));
-    } catch {
-      available.value = false;
-    }
-    return available.value;
+      try {
+        available.value = Boolean(await invokeFn('native_audio_available'));
+      } catch {
+        available.value = false;
+      }
+      return available.value;
+    })().finally(() => {
+      availabilitySync = null;
+    });
+    return availabilitySync;
   }
 
   async function start() {
     error.value = null;
-    if (!await refreshAvailability() || !invokeFn || !listenFn) {
+    const isAvailable = available.value || await refreshAvailability();
+    if (!isAvailable || !invokeFn || !listenFn) {
       error.value = 'Native audio backend unavailable';
       return false;
     }
@@ -98,16 +111,20 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
   }
 
   async function stop() {
-    cleanupListener();
-    isListening.value = false;
-    frame.value = null;
     await configurationSync;
-    if (invokeFn) {
-      try {
+    error.value = null;
+    try {
+      if (invokeFn) {
         await invokeFn('stop_native_audio');
-      } catch {
-        // The stream may already be gone during app shutdown.
       }
+    } catch (cause) {
+      const nativeError = cause instanceof Error ? cause : new Error(String(cause));
+      error.value = nativeError.message;
+      throw nativeError;
+    } finally {
+      cleanupListener();
+      isListening.value = false;
+      frame.value = null;
     }
   }
 
@@ -180,7 +197,7 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
 
   void refreshAvailability();
   onUnmounted(() => {
-    void stop();
+    void stop().catch(() => {});
   });
 
   return {

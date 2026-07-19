@@ -1,14 +1,14 @@
 # Recommendations & Current Problems Backlog
 
-**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-19 after the file/PCM implementation pass and review)**
+**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-20 after the lifecycle/error-boundary pass and review)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-In the first audit range, **77 findings are verified closed or obsolete and 103 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 197 open and 17 closed findings, so the combined current total is 300 open and 94 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+In the first audit range, **77 findings are verified closed or obsolete and 103 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 193 open and 21 closed findings, so the combined current total is 296 open and 98 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `142` Vitest tests; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production typecheck/build; six browser flows covering shared confidence parity, full-frame WASM, synthetic/file detection, Algorithm evidence, intonation setup, exact PCM debug capture and responsive Library navigation; manual desktop/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `144` Vitest tests; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production typecheck/build; six browser flows covering shared confidence parity, full-frame WASM, synthetic/file detection, Algorithm evidence, intonation setup, exact PCM debug capture and responsive Library navigation; manual desktop/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -34,13 +34,14 @@ Notation used across docs:
 
 Post-iteration review caught a missing diagnostics prop, mixed-language labels and mobile overflow from live canvas intrinsic widths, then verified desktop/mobile layout, six Playwright flows and all 19 real captures.
 
-## Closed R Registry (94)
+## Closed R Registry (98)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
 | R2, R48, R142, R176 | Explicit serialized session lifecycle, cancellation/runtime-failure tests, visible pending states |
 | R3, R73 | Discriminated `AudioInputPort` contract, capability narrowing, adapter registry and lifecycle/session tests for web/native/synthetic/file inputs; deterministic WAV sessions use sample-indexed windows |
 | R186, R187, R188, R189, R335 | Lifecycle `start()` no longer carries a raw-port-only ignored range; detection range and device selection are segregated capabilities, pending device changes serialize stop/restart, the duplicate direct device restart is removed, and range propagation is asserted |
+| R182, R183, R193, R194 | Restart intent publishes `starting` synchronously; lifecycle snapshots carry typed start/stop/runtime failures; failed teardown preserves its backend for retry; native stop IPC errors propagate through an injected, adapter-tested Tauri API boundary; successful native availability is cached and concurrent probes are deduplicated |
 | R9, R150, R164 | Typed A4/tuning/selected-target `FrameContext`, native-owned frame resolution, A4=442 coverage, shared smoothing traces and exact canonical wire-shape tests without the top-level `frequency` alias |
 | R14, R16 | One generated music registry plus a shared native/WASM/TS pitch fixture manifest remove hand-maintained tuning drift and specify fallback cents tolerance |
 | R15, R105, R116, R117 | One code generator owns note names, MIDI/frequency/cents/closest-target formulas and note/frequency formatting; Rust, web and egui consume generated primitives or thin domain facades |
@@ -303,10 +304,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **Q2 — sessionLifecycle state machine** _(web/src/session/sessionLifecycle.ts)_:
 
-**R182.** _(bug)_ SessionLifecycle sets status synchronously in stop()/fail() but only from inside the queued async body in start(), so a stop immediately followed by a start can leave the UI showing a stale status until the queued start operation actually runs. `web/src/session/sessionLifecycle.ts:45-103 (stop() sets status at line 86 before enqueuing, fail() at line 97 before enqueuing, start() only sets 'starting' at line 59 once its queued body executes)` — Contradicts the 'visible pending states' guarantee recorded for R2/R48/R142/R176 in the Closed R Registry - a fast restart can make the tuner appear frozen right when the user expects immediate 'starting' feedback, because lifecycleSnapshot.status keeps reporting the prior stop's state while the new start waits behind it in the serialized queue.
-
-**R183.** _(split)_ SessionLifecycleDriver.stop() is typed Promise<void> with no result channel, and the swallow happens twice over: useNativeAudioInput.stop() already discards the native stop_native_audio timeout error before SessionLifecycle.stopBackend()'s own catch ever sees it. `web/src/session/sessionLifecycle.ts:12-15 (interface), 122-129 (stopBackend); web/src/composables/useNativeAudioInput.ts:84-95 (stop() try/catch); desktop/src-tauri/src/native_audio.rs:92-107 (stop_native_audio's 2s recv_timeout can return Err)` — A native teardown that misses its 2-second timeout is lost at both the adapter and the lifecycle layer, so there is currently no way to detect or test a failed stop; widening SessionLifecycleDriver.stop() to Promise<boolean>/a discriminated result only helps if useNativeAudioInput.ts also stops swallowing the underlying invoke error first.
-
 **Q3 — useTunerSession** _(web/src/composables/useTunerSession.ts)_:
 
 **R184.** _(bug)_ Switching to native backend before the async availability probe resolves silently falls back to Web with no error. `web/src/composables/useTunerSession.ts:52-55 (requestedBackend, depends on usingNativeAudio at :46-50 and nativeAudio.available, which resolves asynchronously via useNativeAudioInput.ts:115)` — The user thinks they switched to native (settings.audioBackend stays 'native') but audio keeps running through Web Audio with no error surfaced, making the backend mismatch invisible and hard to diagnose.
@@ -324,10 +321,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 **R191.** _(design)_ Audio-input error strings across native/synthetic/web adapters are terse technical dead-ends with no actionable next step when they reach the user. `web/src/composables/useNativeAudioInput.ts:65` — 'Native audio backend unavailable' (useNativeAudioInput.ts:65), 'Microphone access denied or unavailable' (useAudioInput.ts:103) and 'No synthetic audio fixture selected' (useSyntheticAudioInput.ts:29) give no guidance such as checking site permissions or switching input backends.
 
 **R192.** _(bug)_ A `?fixture=` URL query param permanently forces synthetic audio for the whole session with no UI indicator that real audio is being ignored. `web/src/utils/syntheticAudio.ts:54-56` — syntheticAudioFixtureFromLocation() is read once at startup and requestedBackend() (useTunerSession.ts:52-55) always returns 'synthetic' whenever a fixture is set, overriding the Web/Native settings choice, yet featurePorts.ts never exposes usingSyntheticAudio to any .vue view (only usingNativeAudio is surfaced), so a shared link carrying ?fixture=... silently strands a user on fabricated audio.
-
-**R193.** _(bug)_ useNativeAudioInput's stop() marks the session idle before the stop IPC call resolves and silently discards any failure it returns. `web/src/composables/useNativeAudioInput.ts:84-95` — isListening.value is set false and frame cleared before `await invokeFn('stop_native_audio')` even runs, and the empty catch block swallows a genuine failure (Rust returns "Native audio backend did not stop in time" after a 2-second timeout, desktop/src-tauri/src/native_audio.rs:93-107), so the UI can show idle while native capture is still running, with no error surfaced or retry.
-
-**R194.** _(idea)_ useNativeAudioInput's start() unconditionally re-runs the native_audio_available IPC round trip even though refreshAvailability() already resolved it at composable init. `web/src/composables/useNativeAudioInput.ts:62-64` — Every restart into the native backend (switching audioBackend to native via useTunerSession.ts's setAudioBackend, or the profile-import restart in useTuner.ts) re-pays this IPC latency; tuning-range changes and device switches do not trigger it, since setDetectionRange only forwards to each port (useTunerSession.ts:145-150) and setInputDevice's restart is gated to the web backend only (useTunerSession.ts:160-165).
 
 **Q10 — settings/profile persistence** _(web/src/composables/useSettings.ts, web/src/settings/normalizeSettings.ts, web/src/settings/profileCodec.ts)_:
 
@@ -1320,13 +1313,14 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Added a provenance-checked corpus of 19 licensed guitar/bass/ukulele/violin/voice WAVs, deterministic rebuild, temporal threshold evaluation and a blocking JSON CI artifact.
 - Added a sample-indexed Rust WAV/f32 replay envelope, deterministic interactive WAV sessions and hidden exact shared browser PCM/WAV+JSON v2 capture; automated cross-backend comparison remains open.
 - Split the Vue application boundary into framework-independent value-based use cases, explicit UI-facing contracts in `app/ports/`, reactive implementations in `adapters/vue/` and a 116-line composition adapter; removed the concrete service bag and factory-derived `ReturnType` coupling.
+- Made session failures explicit and retryable: restart intent is synchronous, failed adapter teardown retains its backend, native stop IPC rejects instead of disappearing, and the Tauri API loader is injected for adapter tests.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
 - This file contains 103 current open/partial `R#` findings (`R1`-`R180` range); 77 findings in that range are closed.
-- The independent post-refactor pass now has **197 open and 17 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **300 open and 94 closed items total.**
+- The independent post-refactor pass now has **193 open and 21 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **296 open and 98 closed items total.**
 - The historical 187-item `C#` audit is preserved inside [TOP-500-backlog.md](TOP-500-backlog.md); it is not the current-open count.
 - Each of the three requested documents mirrors exactly 500 `M#` rows; 30 verified master items carry dated `[DONE]` markers.
-- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, diagnostics and release hardening; the `sessionLifecycle` status-visibility gap (R182) and swallowed native `stop()` failures (R183, R193) also remain.
+- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, typed diagnostics, device-loss recovery and release hardening.
 
 Update this file when fixing. Link from issues.

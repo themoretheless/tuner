@@ -34,7 +34,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 142 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, six E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
+| M0 safety net | Done baseline | 144 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, six E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
 | M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Done | One-line compatibility facade, 116-line Vue composition adapter, framework-independent use cases, explicit capabilities and five segregated feature-port contracts are architecture-tested |
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-20:** M0 is complete for the current refactor gate: toolchain pins, `142` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and six browser flows including full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation.
+**Status 2026-07-20:** M0 is complete for the current refactor gate: toolchain pins, `144` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and six browser flows including full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -133,6 +133,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Observability: "Test my mic" wizard + pipeline health strip + silent/clipping/DC/hum watchdog.
 - Release: Tauri CSP; macOS notarize / Windows sign; CI "zero network in release build" proof + cargo-deny/npm-audit.
 **Verify / DoD:** per-item; Lighthouse PWA offline passes; CI zero-fetch test green.
+
+**Status 2026-07-20:** lifecycle visibility and native teardown propagation are complete: restart intent is immediate, failed stop retains its backend for retry, snapshots expose typed operations, and the Tauri API boundary is injectable in adapter tests. Device-loss evidence, typed user-facing diagnostics, CSP/signing and accessibility gates remain.
 
 ---
 
