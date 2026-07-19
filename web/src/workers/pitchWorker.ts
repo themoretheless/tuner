@@ -8,6 +8,7 @@ import {
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import type { FrameContext } from '../types/frames';
 import type { PipelineConfig } from '../domain/pipelineConfig';
+import type { AudioFrameTimebase } from '../ports/audioInput';
 import {
   PitchCoreAdapter,
   type PitchCoreWasmModule,
@@ -23,6 +24,7 @@ interface PitchRequest {
   range: PitchDetectionRange;
   sampleRate: number;
   stats?: SignalStats;
+  timebase: AudioFrameTimebase | null;
   wasmModuleUrl: string;
 }
 
@@ -33,6 +35,7 @@ interface ResetRequest {
 interface PitchResponse extends WorkerPitchFrame {
   buffer: ArrayBuffer;
   id: number;
+  timebase: AudioFrameTimebase | null;
 }
 
 let adapter: PitchCoreAdapter | null = null;
@@ -51,6 +54,7 @@ self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
     range,
     sampleRate,
     stats,
+    timebase,
     wasmModuleUrl,
   } = event.data;
   const frame = new Float32Array(buffer);
@@ -75,7 +79,10 @@ self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
       semantics: 'unresolved',
     };
   }
-  self.postMessage({ id, buffer, ...detection } satisfies PitchResponse, { transfer: [buffer] });
+  self.postMessage(
+    { id, buffer, timebase, ...detection } satisfies PitchResponse,
+    { transfer: [buffer] },
+  );
 };
 
 function getAdapter(moduleUrl: string) {

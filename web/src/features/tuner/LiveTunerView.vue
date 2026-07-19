@@ -2,6 +2,7 @@
 import { useLiveTunerPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
 import CentsGauge from '../../components/CentsGauge.vue';
+import AudioFileInput from '../../components/AudioFileInput.vue';
 import DebugOverlay from '../../components/DebugOverlay.vue';
 import DisplayModeSelector from '../../components/DisplayModeSelector.vue';
 import FreqReadout from '../../components/FreqReadout.vue';
@@ -37,6 +38,10 @@ function toggleMic() {
       :backend="tuner.detectorBackend"
       :is-listening="tuner.isListening"
       :selected-input-device-id="tuner.selectedInputDeviceId"
+      :frame-timebase="tuner.detectionFrameTimebase"
+      :can-capture-pcm="tuner.exactPcmCaptureAvailable"
+      :begin-capture="tuner.beginExactPcmCapture"
+      :finish-capture="tuner.finishExactPcmCapture"
     />
     <div class="live-panel card">
       <div class="sr-only" id="live-tuner-heading">{{ t('nav.tuner') }}</div>
@@ -121,11 +126,20 @@ function toggleMic() {
       </div>
 
       <InputDeviceSelector
-        v-if="!tuner.usingNativeAudio"
+        v-if="!tuner.usingNativeAudio && !tuner.usingFileAudio"
         :devices="tuner.inputDevices"
         :selected-device-id="tuner.selectedInputDeviceId"
         @refresh="tuner.refreshInputDevices"
         @select="tuner.setInputDevice"
+      />
+
+      <AudioFileInput
+        :active="tuner.usingFileAudio"
+        :duration="tuner.fileAudioDuration"
+        :file-name="tuner.fileAudioName"
+        :progress="tuner.fileAudioProgress"
+        @select="tuner.loadAudioFile"
+        @microphone="tuner.useMicrophoneInput"
       />
 
       <FreqReadout
@@ -140,7 +154,9 @@ function toggleMic() {
           <span>{{ t('play.reference') }}</span>
         </button>
         <button type="button" class="btn btn-primary" @click="toggleMic">
-          {{ tuner.isListening ? t('stop.mic') : t('start.mic') }}
+          {{ tuner.usingFileAudio
+            ? (tuner.isListening ? t('audio.file.stop') : t('audio.file.replay'))
+            : (tuner.isListening ? t('stop.mic') : t('start.mic')) }}
         </button>
       </div>
     </aside>

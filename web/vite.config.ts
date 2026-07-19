@@ -60,6 +60,7 @@ function offlineServiceWorker(version: string): Plugin {
         'manifest.webmanifest',
         'favicon.svg',
         'icons.svg',
+        'worklets/pcmCaptureProcessor.js',
         'wasm/pitch_core.js',
         'wasm/pitch_core_bg.wasm',
       ]

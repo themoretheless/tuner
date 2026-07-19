@@ -5,6 +5,7 @@ import { useTunerSession } from '../src/composables/useTunerSession';
 import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
+import { encodeMonoPcm16Wav } from '../src/audio/wav';
 import type { AudioBackend } from '../src/utils/settingsStorage';
 
 describe('useTunerSession', () => {
@@ -101,4 +102,130 @@ describe('useTunerSession', () => {
 
     await session.stop();
   });
+
+  it('runs an imported WAV through the same realtime session pipeline', async () => {
+    const session = useTunerSession({
+      audioBackend: ref<AudioBackend>('web'),
+      selectedInputDeviceId: ref(''),
+      syntheticFixture: null,
+    });
+    const sampleRate = 44_100;
+    const samples = Float32Array.from({ length: sampleRate }, (_, index) => (
+      Math.sin(2 * Math.PI * 82.4069 * index / sampleRate) * 0.4
+    ));
+    const wav = encodeMonoPcm16Wav(samples, sampleRate);
+    let resolveStaleFile: ((buffer: ArrayBuffer) => void) | null = null;
+    const staleBuffer = new Promise<ArrayBuffer>((resolve) => {
+      resolveStaleFile = resolve;
+    });
+    const staleLoad = session.loadAudioFile({
+      name: 'stale.wav',
+      arrayBuffer: async () => staleBuffer,
+    } as File);
+    const file = {
+      name: 'e2.wav',
+      arrayBuffer: async () => wav,
+    } as File;
+
+    expect(await session.loadAudioFile(file)).toBe(true);
+    resolveStaleFile?.(wav);
+    expect(await staleLoad).toBe(false);
+    expect(session.usingFileAudio.value).toBe(true);
+    expect(session.fileAudioName.value).toBe('e2.wav');
+    for (let index = 0; index < 4; index += 1) {
+      await vi.runOnlyPendingTimersAsync();
+      await nextTick();
+    }
+
+    expect(session.detectionFrameTimebase.value?.source).toBe('file');
+    expect(session.detectedFrequency.value).not.toBeNull();
+    expect(Math.abs(session.detectedFrequency.value! - 82.4069)).toBeLessThan(1.5);
+
+    await session.stop();
+    await session.useMicrophoneInput();
+    expect(session.usingFileAudio.value).toBe(false);
+  });
+
+  it('restarts a pending web session when the input device changes', async () => {
+    let resolveFirstStream: ((stream: MediaStream) => void) | null = null;
+    const firstStream = new Promise<MediaStream>((resolve) => {
+      resolveFirstStream = resolve;
+    });
+    const getUserMedia = vi.fn()
+      .mockReturnValueOnce(firstStream)
+      .mockResolvedValueOnce(createMediaStream());
+    installWebAudioFakes(getUserMedia);
+
+    const session = useTunerSession({
+      audioBackend: ref<AudioBackend>('web'),
+      selectedInputDeviceId: ref('old-device'),
+      syntheticFixture: null,
+    });
+
+    const initialStart = session.start();
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1));
+    expect(session.status.value).toBe('starting');
+
+    const switching = session.setInputDevice('new-device');
+    resolveFirstStream?.(createMediaStream());
+    await Promise.all([initialStart, switching]);
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(getUserMedia.mock.calls[0][0].audio.deviceId).toEqual({ exact: 'old-device' });
+    expect(getUserMedia.mock.calls[1][0].audio.deviceId).toEqual({ exact: 'new-device' });
+    expect(session.selectedInputDeviceId.value).toBe('new-device');
+    expect(session.status.value).toBe('listening');
+    await session.stop();
+  });
 });
+
+function installWebAudioFakes(getUserMedia: ReturnType<typeof vi.fn>) {
+  const mediaDevices = {
+    addEventListener: vi.fn(),
+    enumerateDevices: vi.fn().mockResolvedValue([]),
+    getUserMedia,
+    removeEventListener: vi.fn(),
+  };
+  vi.stubGlobal('navigator', { mediaDevices });
+  vi.stubGlobal('window', {
+    AudioContext: FakeAudioContext,
+    setTimeout,
+  });
+}
+
+function createMediaStream() {
+  const track = {
+    addEventListener: vi.fn(),
+    stop: vi.fn(),
+  };
+  return {
+    getAudioTracks: () => [track],
+    getTracks: () => [track],
+  } as unknown as MediaStream;
+}
+
+class FakeAudioContext {
+  onstatechange: (() => void) | null = null;
+  readonly sampleRate = 44_100;
+  readonly state = 'running';
+
+  close() {
+    return Promise.resolve();
+  }
+
+  createAnalyser() {
+    return {
+      disconnect: vi.fn(),
+      fftSize: 2048,
+      getFloatTimeDomainData: vi.fn(),
+      smoothingTimeConstant: 0,
+    };
+  }
+
+  createMediaStreamSource() {
+    return {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+    };
+  }
+}

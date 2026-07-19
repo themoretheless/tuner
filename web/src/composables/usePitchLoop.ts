@@ -6,7 +6,7 @@ import {
   normalizePipelineConfig,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
-import type { AudioFrame } from '../ports/audioInput';
+import type { AudioFrame, AudioFrameTimebase } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
@@ -44,6 +44,7 @@ export function usePitchLoop(
   const detectionFrame = ref<DetectionFrame>(createUnresolvedDetectionFrame());
   const detectorBackend = ref<PitchDetectorBackend>('typescript');
   const frameSemantics = ref<DetectionFrameSemantics>('unresolved');
+  const frameTimebase = ref<AudioFrameTimebase | null>(null);
   const volume = ref(0);
   const confidence = computed(() => detectionFrame.value.confidence);
   const currentFrequency = computed(() => detectionFrame.value.freq);
@@ -83,6 +84,7 @@ export function usePitchLoop(
       frame: DetectionFrame;
       id: number;
       semantics: DetectionFrameSemantics;
+      timebase: AudioFrameTimebase | null;
     }>) => {
       workerTransferBuffer = event.data.buffer;
       if (event.data.id !== pendingPitchRequestId) return;
@@ -94,6 +96,7 @@ export function usePitchLoop(
       if (event.data.id !== pitchRequestId) return;
       detectorBackend.value = event.data.backend;
       frameSemantics.value = event.data.semantics;
+      frameTimebase.value = event.data.timebase;
       fallbackTracker.reset();
       detectionFrame.value = {
         ...event.data.frame,
@@ -135,6 +138,7 @@ export function usePitchLoop(
   function reset() {
     detectionFrame.value = createUnresolvedDetectionFrame();
     frameSemantics.value = 'unresolved';
+    frameTimebase.value = null;
     volume.value = 0;
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
@@ -194,12 +198,13 @@ export function usePitchLoop(
     });
     nextFrame.pipeline.processingMs = Math.max(0, performance.now() - startedAt);
     detectionFrame.value = nextFrame;
+    frameTimebase.value = audioFrame?.timebase ?? null;
   }
 
   function tick() {
     const frame = readFrame();
     if (!frame) {
-      stop();
+      rafId = requestAnimationFrame(tick);
       return;
     }
 
@@ -286,6 +291,7 @@ export function usePitchLoop(
           rms: stats.rms,
           maxAbs: stats.maxAbs,
         },
+        timebase: frame.timebase,
         wasmModuleUrl,
       }, [buffer]);
       if (shouldSendContext) sentContextRevision = contextRevision;
@@ -362,6 +368,7 @@ export function usePitchLoop(
     detectionFrame,
     detectorBackend,
     frameSemantics,
+    frameTimebase,
     smoothedFrequency,
     start,
     stop,

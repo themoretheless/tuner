@@ -1,50 +1,39 @@
 import { createPipelineTelemetry } from '../domain/pipelineTelemetry';
+import type {
+  AudioFrameTimebase,
+  ExactPcmCapture,
+} from '../ports/audioInput';
 import type { DetectionFrame } from '../types/frames';
 
-export const DEBUG_CAPTURE_SCHEMA_VERSION = 1;
-export const DEBUG_CAPTURE_CONFIG_REVISION = 'web-debug-media-recorder-v1';
-
-export function debugCaptureAudioExtension(mimeType: string): string {
-  switch (mimeType.toLowerCase().split(';', 1)[0]) {
-    case 'audio/mp4':
-    case 'audio/aac':
-      return '.m4a';
-    case 'audio/ogg':
-      return '.ogg';
-    case 'audio/wav':
-    case 'audio/wave':
-      return '.wav';
-    default:
-      return '.webm';
-  }
-}
+export const DEBUG_CAPTURE_SCHEMA_VERSION = 2;
+export const DEBUG_CAPTURE_CONFIG_REVISION = 'web-shared-pcm-v2';
 
 export interface DebugFrameSnapshot {
-  sequence: number;
-  elapsedMs: number;
   frame: DetectionFrame;
+  sequence: number;
+  timebase: AudioFrameTimebase | null;
 }
 
 interface DebugCaptureEnvelopeInput {
   audioFile: string;
+  audioSha256: string | null;
   backend: string;
+  capture: ExactPcmCapture;
   capturedAt: string;
   completedAt: string;
   frames: DebugFrameSnapshot[];
   isTunerListening: boolean;
-  mimeType: string;
   selectedInputDeviceId?: string;
-  trackSettings: MediaTrackSettings;
 }
 
 export function createDebugFrameSnapshot(
   sequence: number,
-  elapsedMs: number,
   frame: DetectionFrame,
+  timebase: AudioFrameTimebase | null,
 ): DebugFrameSnapshot {
   return {
     sequence,
-    elapsedMs: Math.max(0, elapsedMs),
+    timebase: timebase ? { ...timebase } : null,
     frame: {
       ...frame,
       pipeline: createPipelineTelemetry(frame.pipeline),
@@ -54,27 +43,53 @@ export function createDebugFrameSnapshot(
 }
 
 export function createDebugCaptureEnvelope(input: DebugCaptureEnvelopeInput) {
+  const captureDurationMs = input.capture.samples.length / input.capture.sampleRate * 1000;
+  const frames = input.frames
+    .filter((snapshot) => snapshot.timebase
+      && snapshot.timebase.startSample >= input.capture.startSample
+      && snapshot.timebase.endSample <= input.capture.endSample)
+    .map((snapshot) => ({
+      ...createDebugFrameSnapshot(snapshot.sequence, snapshot.frame, snapshot.timebase),
+      elapsedMs: snapshot.timebase
+        ? (snapshot.timebase.endSample - input.capture.startSample)
+          / input.capture.sampleRate * 1000
+        : null,
+    }));
+
   return {
     schemaVersion: DEBUG_CAPTURE_SCHEMA_VERSION,
     configRevision: DEBUG_CAPTURE_CONFIG_REVISION,
     capturedAt: input.capturedAt,
     completedAt: input.completedAt,
-    captureMode: 'parallel-media-recorder',
-    replayLimit: 'Compressed WebM and frame clock are not sample-index aligned.',
+    captureMode: 'shared-pcm-sample-timebase',
+    replayLimit: input.capture.droppedSamples > 0
+      ? `${input.capture.droppedSamples} missing source samples were replaced with silence.`
+      : null,
     audio: {
+      channels: 1,
+      durationMs: captureDurationMs,
+      droppedSamples: input.capture.droppedSamples,
+      encoding: 'pcm-s16le',
+      endSample: input.capture.endSample,
       file: input.audioFile,
-      mimeType: input.mimeType,
-      trackSettings: { ...input.trackSettings },
+      mimeType: 'audio/wav',
+      sampleCount: input.capture.samples.length,
+      sampleRate: input.capture.sampleRate,
+      sha256: input.audioSha256,
+      startSample: input.capture.startSample,
     },
     session: {
       backend: input.backend,
       isTunerListening: input.isTunerListening,
       selectedInputDeviceId: input.selectedInputDeviceId ?? '',
     },
-    frameTimebase: 'performance-now-ms-from-record-start',
-    frames: input.frames.map((frame) => ({
-      ...frame,
-      frame: createDebugFrameSnapshot(frame.sequence, frame.elapsedMs, frame.frame).frame,
-    })),
+    frameTimebase: 'source-sample-index',
+    frames,
   };
+}
+
+export async function sha256Hex(buffer: ArrayBuffer): Promise<string | null> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
 }

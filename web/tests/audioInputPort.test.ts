@@ -4,16 +4,12 @@ import { ref } from 'vue';
 import { useSyntheticAudioInput } from '../src/composables/useSyntheticAudioInput';
 import {
   isAudioFrameInputPort,
+  isDeviceSelectableAudioInputPort,
   isDetectionFrameInputPort,
   type AudioInputPort,
-  type AudioInputStartOptions,
   type DetectionFrameInputPort,
 } from '../src/ports/audioInput';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
-
-const START_OPTIONS: AudioInputStartOptions = {
-  range: { minFrequency: 60, maxFrequency: 120 },
-};
 
 describe('AudioInputPort contract', () => {
   it('runs the common lifecycle for raw and detection-frame ports', async () => {
@@ -34,11 +30,22 @@ describe('AudioInputPort contract', () => {
     expect(isAudioFrameInputPort(native)).toBe(false);
   });
 
+  it('keeps device selection as an optional input capability', () => {
+    const synthetic: AudioInputPort = useSyntheticAudioInput(resolveSyntheticAudioFixture('E2'));
+    expect(isDeviceSelectableAudioInputPort(synthetic)).toBe(false);
+  });
+
+  it('applies detection range through the resolved-frame capability', async () => {
+    const native = createDetectionPort();
+    await native.setDetectionRange({ minFrequency: 70, maxFrequency: 140 });
+    expect(native.lastRange.value).toEqual({ minFrequency: 70, maxFrequency: 140 });
+  });
+
   it('reports an unavailable adapter through the shared contract', async () => {
     const synthetic: AudioInputPort = useSyntheticAudioInput(null);
 
     expect(synthetic.available.value).toBe(false);
-    expect(await synthetic.start(START_OPTIONS)).toBe(false);
+    expect(await synthetic.start()).toBe(false);
     expect(synthetic.isListening.value).toBe(false);
     expect(synthetic.error.value).toBe('No synthetic audio fixture selected');
 
@@ -51,16 +58,22 @@ async function expectPortLifecycle(port: AudioInputPort) {
   expect(port.available.value).toBe(true);
   expect(port.isListening.value).toBe(false);
 
-  expect(await port.start(START_OPTIONS)).toBe(true);
+  expect(await port.start()).toBe(true);
   expect(port.isListening.value).toBe(true);
-  if (isAudioFrameInputPort(port)) expect(port.readFrame()).not.toBeNull();
+  if (isAudioFrameInputPort(port)) {
+    const frame = port.readFrame();
+    expect(frame).not.toBeNull();
+    expect(frame?.timebase?.endSample).toBeGreaterThan(frame?.timebase?.startSample ?? -1);
+  }
   if (isDetectionFrameInputPort(port)) expect(port.frame.value).not.toBeNull();
 
   await port.stop();
   expect(port.isListening.value).toBe(false);
 }
 
-function createDetectionPort(): DetectionFrameInputPort {
+function createDetectionPort(): DetectionFrameInputPort & {
+  lastRange: ReturnType<typeof ref<{ minFrequency: number; maxFrequency: number }>>;
+} {
   const error = ref<string | null>(null);
   const frame = ref({
     freq: 82.4069,
@@ -74,6 +87,7 @@ function createDetectionPort(): DetectionFrameInputPort {
     isPower: false,
   });
   const isListening = ref(false);
+  const lastRange = ref({ minFrequency: 24, maxFrequency: 1200 });
 
   return {
     available: ref(true),
@@ -84,8 +98,11 @@ function createDetectionPort(): DetectionFrameInputPort {
     frame,
     id: 'native',
     isListening,
+    lastRange,
     output: 'detection-frame',
-    async setDetectionRange() {},
+    async setDetectionRange(range) {
+      lastRange.value = range;
+    },
     async setFrameContext() {},
     async start() {
       isListening.value = true;

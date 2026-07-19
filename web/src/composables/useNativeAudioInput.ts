@@ -1,8 +1,5 @@
 import { onUnmounted, ref, type Ref } from 'vue';
-import type {
-  AudioInputStartOptions,
-  DetectionFrameInputPort,
-} from '../ports/audioInput';
+import type { DetectionFrameInputPort } from '../ports/audioInput';
 import type { PitchDetectionRange } from '../utils/pitch';
 import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
@@ -70,8 +67,7 @@ export function useNativeAudioInput(): NativeAudioInputAdapter {
     return available.value;
   }
 
-  async function start(options: AudioInputStartOptions) {
-    updateRange(options.range);
+  async function start() {
     error.value = null;
     if (!await refreshAvailability() || !invokeFn || !listenFn) {
       error.value = 'Native audio backend unavailable';

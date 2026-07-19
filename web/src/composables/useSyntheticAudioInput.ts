@@ -48,11 +48,17 @@ export function useSyntheticAudioInput(
     if (buffer.length !== fftSize) {
       buffer = new Float32Array(fftSize) as Float32Array<ArrayBuffer>;
     }
+    const startSample = sampleCursor;
     sampleCursor = fillSyntheticAudioBuffer(buffer, fixture, sampleCursor);
 
     return {
       buffer,
       sampleRate: fixture.sampleRate,
+      timebase: {
+        endSample: sampleCursor,
+        source: 'synthetic',
+        startSample,
+      },
     };
   }
 

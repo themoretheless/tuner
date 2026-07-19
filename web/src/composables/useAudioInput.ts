@@ -1,18 +1,24 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
-import type { AudioFrame, AudioFrameInputPort } from '../ports/audioInput';
+import { SampleTimeline } from '../audio/sampleTimeline';
+import type {
+  AudioFrame,
+  DeviceSelectableAudioInputPort,
+  ExactPcmCapture,
+  ExactPcmCaptureInputPort,
+} from '../ports/audioInput';
 import { createAudioContext, errorMessage } from '../utils/audio';
 
 const DEFAULT_SAMPLE_RATE = 44100;
 
 export type { AudioFrame } from '../ports/audioInput';
 
-export interface WebAudioInputAdapter extends AudioFrameInputPort {
+export interface WebAudioInputAdapter
+  extends ExactPcmCaptureInputPort, DeviceSelectableAudioInputPort {
   analyser: Ref<AnalyserNode | null>;
   inputDevices: Ref<MediaDeviceInfo[]>;
   refreshInputDevices(): Promise<void>;
   sampleRate: Ref<number>;
   selectedInputDeviceId: Ref<string>;
-  setInputDevice(deviceId: string): Promise<void>;
 }
 
 // 8192 samples ≈ 186ms at 44.1kHz: ~15 periods of low E instead of ~7 with
@@ -31,6 +37,7 @@ export function useAudioInput(
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
   const sampleRate = ref(DEFAULT_SAMPLE_RATE);
+  const exactPcmCaptureAvailable = ref(false);
   const available = computed(() => (
     typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia)
   ));
@@ -38,6 +45,10 @@ export function useAudioInput(
   let audioContext: AudioContext | null = null;
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
+  let completedPcmCapture: ExactPcmCapture | null = null;
+  let pcmCaptureNode: AudioWorkletNode | null = null;
+  let pcmTimeline: SampleTimeline | null = null;
+  let silentGain: GainNode | null = null;
   let timeDomainBuffer: Float32Array<ArrayBuffer> | null = null;
 
   async function refreshInputDevices() {
@@ -102,6 +113,7 @@ export function useAudioInput(
 
       source = audioContext.createMediaStreamSource(stream);
       source.connect(nextAnalyser);
+      await setupExactPcmPath(audioContext, source);
       analyser.value = nextAnalyser;
       isListening.value = true;
       void refreshInputDevices();
@@ -118,7 +130,71 @@ export function useAudioInput(
     void stop();
   }
 
+  async function setupExactPcmPath(
+    context: AudioContext,
+    activeSource: MediaStreamAudioSourceNode,
+  ) {
+    exactPcmCaptureAvailable.value = false;
+    if (!context.audioWorklet || typeof AudioWorkletNode === 'undefined') return;
+
+    let node: AudioWorkletNode | null = null;
+    let gain: GainNode | null = null;
+    try {
+      await context.audioWorklet.addModule(
+        new URL(
+          `${import.meta.env.BASE_URL}worklets/pcmCaptureProcessor.js`,
+          document.baseURI,
+        ).href,
+      );
+      const timeline = new SampleTimeline(fftSize, context.sampleRate);
+      node = new AudioWorkletNode(context, 'tuner-pcm-capture', {
+        channelCount: 1,
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+      node.port.onmessage = (event: MessageEvent<{
+        samples?: Float32Array<ArrayBuffer>;
+        startSample?: number;
+      }>) => {
+        const { samples, startSample } = event.data;
+        if (
+          !(samples instanceof Float32Array)
+          || typeof startSample !== 'number'
+          || !Number.isSafeInteger(startSample)
+        ) return;
+        timeline.append(startSample, samples);
+      };
+      gain = context.createGain();
+      gain.gain.value = 0;
+      activeSource.connect(node);
+      node.connect(gain);
+      gain.connect(context.destination);
+      pcmCaptureNode = node;
+      pcmTimeline = timeline;
+      silentGain = gain;
+      exactPcmCaptureAvailable.value = true;
+    } catch {
+      node?.disconnect();
+      if (node) node.port.onmessage = null;
+      gain?.disconnect();
+    }
+  }
+
   function cleanup() {
+    exactPcmCaptureAvailable.value = false;
+    completedPcmCapture = pcmTimeline?.finishCapture() ?? completedPcmCapture;
+    if (pcmCaptureNode) {
+      pcmCaptureNode.port.onmessage = null;
+      pcmCaptureNode.disconnect();
+      pcmCaptureNode = null;
+    }
+    if (silentGain) {
+      silentGain.disconnect();
+      silentGain = null;
+    }
+    pcmTimeline?.reset();
+    pcmTimeline = null;
     if (source) {
       source.disconnect();
       source = null;
@@ -146,16 +222,15 @@ export function useAudioInput(
     error.value = null;
   }
 
-  async function setInputDevice(deviceId: string) {
+  function selectInputDevice(deviceId: string) {
     selectedInputDeviceId.value = deviceId;
-    if (!isListening.value) return;
-    await stop();
-    await start();
   }
 
   function readFrame(): AudioFrame | null {
     const activeAnalyser = analyser.value;
     if (!activeAnalyser || !isListening.value) return null;
+
+    if (pcmTimeline) return pcmTimeline.latestFrame();
 
     if (!timeDomainBuffer || timeDomainBuffer.length !== activeAnalyser.fftSize) {
       timeDomainBuffer = new Float32Array(activeAnalyser.fftSize) as Float32Array<ArrayBuffer>;
@@ -165,7 +240,24 @@ export function useAudioInput(
     return {
       buffer: timeDomainBuffer,
       sampleRate: audioContext?.sampleRate ?? DEFAULT_SAMPLE_RATE,
+      timebase: null,
     };
+  }
+
+  function beginExactPcmCapture() {
+    const started = Boolean(
+      isListening.value
+      && exactPcmCaptureAvailable.value
+      && pcmTimeline?.beginCapture(),
+    );
+    if (started) completedPcmCapture = null;
+    return started;
+  }
+
+  function finishExactPcmCapture(): ExactPcmCapture | null {
+    const capture = pcmTimeline?.finishCapture() ?? completedPcmCapture;
+    completedPcmCapture = null;
+    return capture;
   }
 
   onMounted(() => {
@@ -181,8 +273,11 @@ export function useAudioInput(
   return {
     analyser,
     available,
+    beginExactPcmCapture,
     clearError,
     error,
+    exactPcmCaptureAvailable,
+    finishExactPcmCapture,
     id: 'web',
     inputDevices,
     isListening,
@@ -191,7 +286,7 @@ export function useAudioInput(
     refreshInputDevices,
     sampleRate,
     selectedInputDeviceId,
-    setInputDevice,
+    selectInputDevice,
     start,
     stop,
   };
