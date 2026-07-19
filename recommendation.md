@@ -6,9 +6,9 @@ This is the canonical **current open-problems extract** for the worktree. It kee
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-In the first audit range, **72 findings are verified closed or obsolete and 108 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 209 open and 5 closed findings, so the combined current total is 317 open and 77 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+In the first audit range, **77 findings are verified closed or obsolete and 103 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 197 open and 17 closed findings, so the combined current total is 300 open and 94 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `96` Vitest tests; `65` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; browser flows covering shared confidence parity, full-frame WASM, synthetic/file detection, Algorithm diagnostics, exact PCM debug capture and `360 px` Library navigation; manual `1280x720`/`390x844`/`320x720` visual QA; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `142` Vitest tests; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production typecheck/build; six browser flows covering shared confidence parity, full-frame WASM, synthetic/file detection, Algorithm evidence, intonation setup, exact PCM debug capture and responsive Library navigation; manual desktop/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -28,13 +28,13 @@ Notation used across docs:
 
 ## Latest Three Iterations Delivered
 
-1. **Confidence contract:** Rust and TypeScript define confidence as normalized periodicity quality, share the `0.5` usable threshold through the parity manifest, and assert minimum confidence for B0-E5 fixtures.
-2. **Full-frame browser owner:** WASM `TunerProcessor` owns detector, smoothing, level, power flag and target/cents/hysteresis resolution; the worker receives `FrameContext` only when its revision changes.
-3. **Fallback and lifecycle review:** TypeScript fallback reports measured confidence with its own trace-compatible smoother; review added an explicit worker reset so stopped sessions cannot leak stale smoothing state into restart.
+1. **Decision evidence:** Rust and the TypeScript fallback combine periodicity, YIN/MPM agreement, five-window stability and signal/noise evidence into one calibrated score plus measured cents uncertainty.
+2. **Input and frame provenance:** bounded telemetry carries a stable pipeline-configuration fingerprint and competing-string warning; the web microphone reports effective AGC/noise/echo processing and sample rates through an optional port capability.
+3. **Presentation review:** measured frames remain detector-clocked while a separate latest-frame-wins visual frame follows `requestAnimationFrame`; semantic transitions stay immediate, Algorithm shows evidence in real time, Analysis adds a pure-domain intonation setup, and the note live region no longer announces changing confidence.
 
-Post-iteration review verified the generated ABI in a real browser, removed double smoothing from the primary path, and fixed stale worker state across stop/restart.
+Post-iteration review caught a missing diagnostics prop, mixed-language labels and mobile overflow from live canvas intrinsic widths, then verified desktop/mobile layout, six Playwright flows and all 19 real captures.
 
-## Closed R Registry (77)
+## Closed R Registry (94)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
@@ -53,24 +53,15 @@ Post-iteration review verified the generated ABI in a real browser, removed doub
 | R68, R77, R90, R92, R96, R100, R103, R129, R130, R131, R132, R136, R169, R172 | False/obsolete findings removed; computed caching, async devices, bounded history helpers, no production lock unwraps, retry/focus flow verified |
 | R93, R102, R137, R139 | Visualization arrays and worker buffers are reused; tone creation is centralized; invalid native frequency and stopped-tone state are sanitized |
 | R124, R167 | Semantic canvas palette and shared renderer lifecycle replace duplicated scheduling/colors |
+| R209, R379, R386 | Composite confidence replaces raw accepted-YIN quality at the readout; a dedicated note-only live region stops frame-rate confidence announcements; confidence/power labels are localized |
+| R1, R6, R7, R10, R49, R181, R199, R231, R371, R375, R378 | Thin application composition root returning only feature/shell ports; tuning model/commands/detection split; injected settings/storage factory; normalized display commands; shallow top-level persistence watches; feature-scoped visualization lifecycle; visible Stage exit; matched Analysis start/stop/error controls |
+| R195, R196, R197 | One injected web output port owns a lazily resumed context, master mixer and cancellable scopes; reference/timed requests are revision-safe and the metronome schedules against the audio clock |
 
 Do not renumber the remaining entries; plans and old review notes still cite these stable IDs.
 
-## Open Problems (108 stable R-items)
+## Open Problems (103 stable R-items)
 
 ### Architecture & Coupling
-1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
-   **Recommendation:** Turn it into a thin composition root and move lifecycle/workflow logic into controllers.
-
-6. **P1: `useTuningState.ts` remains a broad controller.** Pure calculations and custom-library CRUD now have separate owners, reducing the composable to roughly 340 lines, but selection, chromatic/temperament workflow and display derivation still live together.
-   **Recommendation:** Extract selection/target resolution and temperament workflow into independently tested controllers/view models.
-
-7. **P1: `useSettings.ts` is still a global mutable settings singleton.** `UserProfileV1`, strict normalization and serialized saves now exist, but refs, watches and concrete storage selection remain module globals.
-   **Recommendation:** Inject a storage port and expose a loaded settings store/value instead of module-global mutable state.
-
-10. **P1: Engine internals leak into UI shape.** The UI still receives raw frequencies, selected strings, backend flags and many refs as one broad API.
-    **Recommendation:** Return small view-model slices and commands for each feature.
-
 11. **P1: Persistence, URL/app state and live session state are tangled.** Settings are watched and saved while live audio and tuning selection mutate.
     **Recommendation:** Separate persisted profile, transient session and derived presentation state.
 
@@ -138,12 +129,11 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports including file/WAV, exact browser PCM capture, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, feature shells and profile schema are in place. Remaining broad controllers and automated cross-backend replay remain.
-    **Recommendation:** Continue with replay evidence and controller boundaries before adding another broad feature surface.
+45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit input/output ports, file/WAV and exact browser PCM capture, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, focused application controllers, feature ports and profile schema are in place. Automated cross-backend replay, typed lifecycle failures and release evidence remain.
+    **Recommendation:** Continue with replay evidence and typed lifecycle failures before adding another broad feature surface.
 
 ### More Architecture & Coupling Issues
 
-49. useTuner returns a giant object with 30+ properties; consumers couple to too many details.
 53. Web and native have completely different strategies for feeding audio into the core (analyser vs cpal vs feed_audio_samples).
 54. `PitchDetector` exists, but `TunerEngine` still constructs `HybridPitchDetector` directly instead of accepting an injected detector.
 55. Settings (a4, tuning) are mutated directly on engine and also kept in Vue refs without single source.
@@ -245,14 +235,15 @@ commit and should reduce coupling between audio, DSP, state and presentation.
 | 2 | Done | Audio input port | Discriminated TS port + registry cover web/native/synthetic/file adapters, sample timeline and exact capture capability | Add cross-backend replay and device-loss evidence [DONE 2026-07-19] |
 | 3 | Done | Native frame context | Tauri consumes typed resolved context and Vue trusts its canonical frame | Keep wire/context/smoothing fixtures green [DONE 2026-07-11] |
 | 4 | Done | egui frame adoption | egui state consumes `DetectionFrame` | Replace remaining static WASM globals later |
-| 5 | Partial | Practice controller | Pure summary/date logic extracted and tested | Move ear-training workflow out of composition root [DONE 2026-07-11] |
+| 5 | Done | Practice controller | Ear training, history/export and metronome coordination have a focused controller | Keep output behind its injected port [DONE 2026-07-19] |
 | 6 | Done | Profile schema | Versioned full backup, strict normalization and serialized save | Add future `V1 -> V2` migration when schema changes [DONE 2026-07-11] |
 | 7 | Done | Music registry source | Workspace JSON generates Rust and feeds web domain data | Keep schema validation and generated parity green [DONE 2026-07-11] |
 | 8 | Done | Pitch module convergence | Stateful WASM is primary; native/WASM/TS share cents-budget fixtures and core CI has 19 licensed recordings | Extend parity to session adapters and SNR transforms [DONE 2026-07-11] |
 | 9 | Done | Native realtime queue | Callback only downmixes into bounded recycled chunks | Add callback-drop counters/benchmarks |
-| 10 | Done | Feature shells | `App.vue` is a 113-line shell with four lazy feature surfaces | Split the remaining 340-line tuning controller |
-| 11 | Partial | Tuning workflow | Custom-library CRUD is an injected controller; Library uses focused tabs | Extract selection/temperament state from the remaining 340 lines |
+| 10 | Done | Feature shells | `App.vue` is a shell over five feature surfaces and segregated ports | Keep views from importing broad composables [DONE 2026-07-19] |
+| 11 | Done | Tuning workflow | Model, commands, detection/tracking and custom-library CRUD have focused owners | Keep the 150-line architecture budgets green [DONE 2026-07-19] |
 | 12 | Done | Generated note math | One expression/registry source emits dependency-free Rust/TS primitives; web and egui use thin facades | Keep `codegen:check` and property sweeps green [DONE 2026-07-11] |
+| 13 | Done web | Output audio | One injected port owns the resumed context/mixer; cancellable scopes and an audio-clock metronome are adapter-tested | Keep egui adapter-specific until shared semantics are needed [DONE 2026-07-19] |
 
 ### Small-Commit Rules
 
@@ -260,7 +251,7 @@ commit and should reduce coupling between audio, DSP, state and presentation.
 - Keep compatibility facades during migration, then remove aliases in a later cleanup commit.
 - Add a fake adapter or fixture before moving real code behind a port.
 - Prefer pure functions for domain, practice, profile and formatting.
-- Do not add a new feature into `useTuner`, `useTuningState`, `useSettings`, `egui/main.rs` or `native_audio.rs` without first extracting the owner module.
+- Do not add behavior to compatibility roots or broad platform entry points; extend the focused controller, service, port or adapter that owns it.
 
 ## Design Recommendations
 
@@ -310,8 +301,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **Q1 — useTunerOrchestrator** _(web/src/composables/useTuner.ts)_:
 
-**R181.** _(bug)_ setDisplayMode skips the enum validation every sibling setter duplicates inline. `web/src/composables/useTuner.ts:74-76` — setDisplayMode (useTuner.ts:74-76) assigns settings.displayMode.value directly with no guard, whereas setThemeMode (78-81), setLayoutMode (83-86) and setAudioBackend (92-95) each re-check their value against a hand-written allow-list that duplicates normalizeDisplayMode/normalizeThemeMode/normalizeLayoutMode/normalizeAudioBackend in web/src/settings/normalizeSettings.ts:175-189, all of which lack an export keyword; exporting those four normalizers and routing all four setters through them closes the validation gap on setDisplayMode and removes the three duplicated literal lists.
-
 **Q2 — sessionLifecycle state machine** _(web/src/session/sessionLifecycle.ts)_:
 
 **R182.** _(bug)_ SessionLifecycle sets status synchronously in stop()/fail() but only from inside the queued async body in start(), so a stop immediately followed by a start can leave the UI showing a stale status until the queued start operation actually runs. `web/src/session/sessionLifecycle.ts:45-103 (stop() sets status at line 86 before enqueuing, fail() at line 97 before enqueuing, start() only sets 'starting' at line 59 once its queued body executes)` — Contradicts the 'visible pending states' guarantee recorded for R2/R48/R142/R176 in the Closed R Registry - a fast restart can make the tuner appear frozen right when the user expects immediate 'starting' feedback, because lifecycleSnapshot.status keeps reporting the prior stop's state while the new start waits behind it in the serialized queue.
@@ -340,19 +329,9 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **R194.** _(idea)_ useNativeAudioInput's start() unconditionally re-runs the native_audio_available IPC round trip even though refreshAvailability() already resolved it at composable init. `web/src/composables/useNativeAudioInput.ts:62-64` — Every restart into the native backend (switching audioBackend to native via useTunerSession.ts's setAudioBackend, or the profile-import restart in useTuner.ts) re-pays this IPC latency; tuning-range changes and device switches do not trigger it, since setDetectionRange only forwards to each port (useTunerSession.ts:145-150) and setInputDevice's restart is gated to the web backend only (useTunerSession.ts:160-165).
 
-**Q7 — useReferenceTone** _(web/src/composables/useReferenceTone.ts)_:
-
-**R195.** _(bug)_ Reference-tone and metronome AudioContexts are never resumed from 'suspended', unlike the mic-input context. `web/src/composables/useReferenceTone.ts:12-17` — getSharedAudio() (useReferenceTone.ts:12-17) and useMetronome.ts's getAudioContext() (21-26) both hand back whatever createAudioContext() (web/src/utils/audio.ts:5-11) returns with no state check or resume call, unlike useAudioInput.ts's start() which explicitly awaits audioContext.resume() when state is 'suspended' (79-90); on strict-autoplay browsers referencePlaying/isRunning flips true while the tone or click stays silent.
-
-**R196.** _(bug)_ Toggling the reference tone while an ear-training timed tone is playing starts a second, overlapping oscillator instead of stopping the first. `web/src/composables/useReferenceTone.ts:66-79` — playTimedTone (66-79) creates its oscillator as a local `osc` and never assigns it to the module-level `refOsc`, so stopReferenceTone() (38-44), called at the top of playReferenceTone (46-56), finds `refOsc` still null and stops nothing; toggling the manual tone during a timed tone's playback window (default 1500ms) leaves both oscillators sounding at once.
-
-**R197.** _(bug)_ playTimedTone leaks a permanently-playing oscillator if invoked again before its own timeout fires. `web/src/composables/useReferenceTone.ts:66-79` — Each call creates a fresh oscillator via createTone (73) but stores only the setTimeout id in `randomTimeoutId` (75-78), not the oscillator itself; a second call within `durationMs` clears the pending timeout (68-71) without ever calling `.stop()` on the first oscillator, so it plays forever - reachable by clicking an ear-training Play/Next control twice in quick succession.
-
 **Q10 — settings/profile persistence** _(web/src/composables/useSettings.ts, web/src/settings/normalizeSettings.ts, web/src/settings/profileCodec.ts)_:
 
 **R198.** _(bug)_ normalizeInteger treats a persisted null as the number 0, so any field with a declared minimum above 0 (a4, inTuneTolerance, metronomeBpm, metronomeBeats) silently clamps to its minimum instead of the documented default. `web/src/settings/normalizeSettings.ts` — Number(null) is 0, which is finite, so normalizeInteger(value, min, max, fallback) at normalizeSettings.ts:158-162 clamps to min whenever min > 0 rather than reaching the fallback branch; a profile carrying an explicit null for a4, inTuneTolerance, metronomeBpm, or metronomeBeats loads silently wrong (capo, metronomeSubdivision, and transpose escape only because their min/clamped-zero happens to equal their fallback).
-
-**R199.** _(bug)_ useSettings' single watch() over all 27 persisted refs (not 26) deep-traverses every persisted array on any single scalar edit, and the same shape recurs independently in useTuningState's 6-source deep watch. `web/src/composables/useSettings.ts` — ensureWatcher's watch([...27 refs...], scheduleSave, { deep: true }) at useSettings.ts:174-202 deep-diffs customTunings, practiceHistory, stringOffsets and every other array whenever a single scalar like a4 changes, and useTuningState.ts:347-369 repeats the same anti-pattern over 6 sources, distinct from the already-closed CentsHistory deep-watcher fix.
 
 **R200.** _(bug)_ scheduleSave's 150ms debounce has no beforeunload/pagehide/visibilitychange flush, so an edit made just before closing or reloading the tab is dropped. `web/src/composables/useSettings.ts` — scheduleSave() (useSettings.ts:161-168) only arms a fresh window.setTimeout with no unload-time flush anywhere in web/src, so the last change made within that 150ms window never reaches savePersistedSettings when the tab closes or reloads.
 
@@ -377,8 +356,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 **R208.** _(bug)_ noteToMidi returns a MIDI value shifted down one semitone for any unrecognized note name instead of validating it. `web/src/utils/notes.ts:464-467` — NOTE_NAMES.indexOf returns -1 for an unknown name and that -1 flows unchecked into (octave+1)*12+index; createCustomTuning (web/src/domain/customLibrary.ts:25-37) passes payload.strings straight into noteWithA4 -> noteToMidi with no name check, unlike its sibling normalizeImportedTunings (customLibrary.ts:77-110) which filters on NOTE_NAMES.includes first, and unlike Rust's equal_tempered_note (pitch-core/src/domain.rs:54-65) which falls back to 'C' via unwrap_or(0).
 
 **Q15 — pitch-core::dsp::yin** _(pitch-core/src/dsp/yin.rs)_:
-
-**R209.** _(idea)_ YIN's displayed confidence is mathematically bounded to roughly 65-100% and can never read lower, because sub-threshold detections return None instead of a graduated low score. `pitch-core/src/dsp/yin.rs:69-90` — With the default yin_threshold=0.12, the primary branch only accepts normalized values <0.12 (confidence >88%) and the map_or_else fallback only accepts values <=0.35 (confidence >=65%), so NoteDisplay.vue:25's 'conf XX%' readout can never display below ~65% - it is presenting a binary accept/reject gate as if it were a graduated diagnostic score.
 
 **R210.** _(bug)_ detect_centered's adaptive threshold loosens (becomes more permissive) exactly as the input signal gets quieter, backwards from robust detection practice. `pitch-core/src/dsp/yin.rs:66-68` — adaptive_threshold = yin_threshold * (1.0 - 0.35*(rms*15.0).min(1.0)) sits at its loosest (~0.12, using default yin_threshold=0.12) near the rms_gate floor (0.0025) and only tightens to ~0.078 once rms exceeds ~0.067, so quiet or noisy input gets the most permissive periodicity-match acceptance instead of the strictest, letting spurious dips through when the signal is least reliable.
 
@@ -433,8 +410,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 ### Visualization / Canvas (Web + egui) (37)
 
 **Q22 — visualization frame contracts** _(web/src/composables/useVisualizationFrames.ts, web/src/utils/canvasPalette.ts)_:
-
-**R231.** _(bug)_ useVisualizationFrames.ts keeps calling getFloatTimeDomainData/getByteFrequencyData on every rAF tick whenever a show* toggle is on, even on the Tuner/Library/Practice screens where AnalysisView (the only frame consumer) isn't mounted, because shouldCaptureVisualizationFrames (useTuner.ts:34-39) never checks App.vue's activeView (App.vue:109-112). `web/src/composables/useVisualizationFrames.ts` — Wastes analyser reads indefinitely on non-Analysis screens whenever a visualization toggle was left on from a prior visit.
 
 **R232.** _(idea)_ canvasPalette() (canvasPalette.ts:12) re-parses CSS custom properties via a fresh getComputedStyle(frame.canvas) call inside every drawFrame() across Waveform/Spectrum/Spectrogram/CentsHistory, instead of caching until useCanvasRenderer's MutationObserver (useCanvasRenderer.ts:50-55) signals an actual theme change. `web/src/utils/canvasPalette.ts` — Forces a style recalculation on every redraw for a value that only changes when the theme class toggles.
 
@@ -742,25 +717,17 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **Q34 — information architecture / 4-screen execution** _(web/src/App.vue, web/src/app/featurePorts.ts)_:
 
-**R371.** _(bug)_ App.vue:60-62's `watch(tuner.layoutMode, ...)` forces `activeView` to 'tuner' the instant layoutMode becomes 'stage', hiding the app-tabs nav via style.css:655-658 (`.layout-stage .app-tabs{display:none}`) — and because layoutMode is in useSettings.ts's watched/debounced-save list (lines 174-202), even a reload restores 'stage' and re-triggers the same trap, so there is no in-app escape at all, not even via reload. `web/src/App.vue:60-62` — A guitarist who taps the Stage toggle (only reachable from AnalysisView.vue's DisplayPreferences) loses Library/Practice/Analysis permanently within that browser profile, with no nav, no shortcut, and no working reload escape since the choice is already persisted to storage.
-
 **R372.** _(bug)_ Screen state is a bare `const activeView = ref<AppView>('tuner')` (App.vue:22) with no vue-router, history.pushState, or 'vue-router' dependency anywhere in the repo. `web/src/App.vue:22` — Library, Practice, and Analysis have no URL, can't be bookmarked or shared, and browser/OS back-gesture and reload always silently dump the user back on Tuner.
 
 **R373.** _(split)_ CentsHistory.vue, PerStringCents.vue, and TunerControls.vue have zero references anywhere outside their own file (confirmed by repo-wide grep) and ship dead in the bundle; CentsHistory.vue's canvas graph is superseded by CentsHistoryGraph.vue (wired at AnalysisView.vue:4,66), and TunerControls.vue's mic/reference buttons duplicate the command-row now inline in LiveTunerView.vue (~line 118). `web/src/components/CentsHistory.vue, web/src/components/PerStringCents.vue, web/src/components/TunerControls.vue` — Dead weight in the bundle plus a stale backlog: recommendation.md's items 57/78/97 and M110 describe CentsHistory redraw performance as if it were still live, so fixing those items would change nothing a user sees.
 
 **R374.** _(bug)_ The single window `keydown` listener `handleKey` (App.vue:43-58, registered at line 64) parses digit keys 1-9 into `tuner.toggleString(...)` with no check on `activeView`. `web/src/App.vue:43-58,64` — Standing on Practice or Analysis and pressing a number key silently reassigns the live tuner's selected string with zero visual feedback on the current screen.
 
-**R375.** _(bug)_ `createAnalysisPort` exposes `start: root.start` (featurePorts.ts:145) but no `stop`, unlike `createLiveTunerPort`'s matched `start`/`stop` pair at featurePorts.ts:41-42, and AnalysisView.vue:23-25's 'Start Microphone' button (gated on `!analysis.isListening`) simply disappears once listening with nothing replacing it. `web/src/app/featurePorts.ts:145` — Stopping a mic session started from Analysis requires switching to the Tuner tab or knowing the unlabeled Space/M shortcut, since the Analysis screen has no stop control at all.
-
 **R376.** _(design)_ `themeMode`, `layoutMode`, and `leftHanded` (featurePorts.ts:130,131,138) are wired only into `createAnalysisPort` and consumed solely by `DisplayPreferences` inside AnalysisView.vue:73-82. `web/src/app/featurePorts.ts:130,131,138` — Dark/Light/Colorblind theme, Stage/Compact layout, and left-handed string order are unreachable from Live Tuner or Library, forcing a guitarist through the screen least related to setup before they can adjust display or handedness.
 
 **R377.** _(design)_ The footer (App.vue:115-118) renders `t('quiet.room')` ('Works best in a quiet room. Pluck one string at a time. Use manual selection for best accuracy.') and the mic/string/reference keyboard hint unconditionally on all four screens, with no `v-if` on `activeView`. `web/src/App.vue:115-118` — On Library, Practice, or Analysis the persistent footer keeps coaching live-tuning technique that has nothing to do with what's currently on screen.
 
-**R378.** _(bug)_ `createAnalysisPort()` (featurePorts.ts:124-148) omits `error`, `clearError`, and `sessionStatus`, fields `createLiveTunerPort` does expose (featurePorts.ts:17,29,34). `web/src/app/featurePorts.ts:124-148` — A mic failure triggered from AnalysisView.vue:23 sets useTuner's `session.error` ref, but nothing on the Analysis screen can read it, so a failed start shows no error banner, no 'requesting...' state, and no indication anything went wrong.
-
 **Q35 — accessibility-as-design (cross-cutting)** _(web/src/features/*/*.vue, web/src/components/*.vue, web/src/style.css)_:
-
-**R379.** _(bug)_ NoteDisplay's aria-live wrapper re-announces the confidence percentage on every detection frame. `web/src/components/NoteDisplay.vue:20,25` — aria-live="polite" (line 20) wraps `conf {{ confidencePercent }}%` (line 25), which recomputes from props.confidence roughly every 33ms while listening, so a screen reader gets a continuous stream of percentage announcements instead of the stable note/cents content the live region should surface.
 
 **R380.** _(bug)_ The App.vue tab bar declares role="tablist"/role="tab" but implements none of the required roving-focus or tabpanel wiring. `web/src/App.vue:94-106` — No keydown handler for Left/Right/Home/End, no id/aria-controls pairing, and none of the four screens the tabs render (LiveTunerView.vue, LibraryView.vue, PracticeView.vue, AnalysisView.vue) carries role="tabpanel", leaving the WAI-ARIA tab contract the roles commit to unmet for keyboard and screen-reader users.
 
@@ -775,8 +742,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 **Q36 — content/copy & localization** _(web/src/stores/l10n.ts, egui/src/*.rs strings)_:
 
 **R385.** _(bug)_ useL10n()'s t() falls back to the Russian string (not the key, not an English default) when the current language is 'en' and that key is missing from the en dictionary. `web/src/stores/l10n.ts:276-278` — The ru/en dictionaries are symmetric today (130 keys each), so the bug is dormant, but it will silently leak Cyrillic text into English mode the next time a ru-only key is added.
-
-**R386.** _(bug)_ NoteDisplay.vue renders the confidence readout and power-chord tag as raw English template text ('conf {{ }}%' and '(power)') instead of through t(). `web/src/components/NoteDisplay.vue:25-26` — initialLang() defaults first-run visitors to Russian, so this is the one line that stays in English while every sibling label (СТРУНА/ЦЕЛЬ) is translated.
 
 **R387.** _(idea)_ footer, random.note, reset.to.auto, standard.tuning and tolerance are translated in both ru and en dictionaries but are never read by any component, including via the dynamic t(`nav.${view}`)/t(`display.${item}`) call sites. `web/src/stores/l10n.ts:64-139 (ru), 197-272 (en)` — Dead keys get maintained and re-translated indefinitely and mislead contributors into thinking removed UI (e.g. the old flat ear-training trigger) still exists.
 
@@ -897,7 +862,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 | M89 | P3 | 48 | r1:review | reference-tone playback feedback |  |
 | M90 | P3 | 48 | r1:review | devicechange listener refresh |  |
 | M91 | P3 | 48 | r1:review | per-instrument detection frequency range |  |
-| M92 | P3 | 48 | r1:review | split useTuner god-composable |  |
+| M92 | P3 | 48 | r1:review | split useTuner god-composable | [DONE 2026-07-19] |
 | M93 | P3 | 48 | r2:algorithms | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | Predictive smoothing tracks vibrato/glide better than EMA. |
 | M94 | P3 | 48 | r2:dx-quality | Detection-accuracy report artifact: cents-error histogram per SNR bucket | [PARTIAL 2026-07-18] CI uploads per-capture JSON metrics; SNR buckets and histograms remain. |
 | M95 | P3 | 48 | r3:observability-reliability | Version/build-info panel (git SHA, build date, WASM hash, platform) | Makes bug reports actionable with exact build identity. |
@@ -1313,7 +1278,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - For the full requested Top 500 and historical evidence, use [TOP-500-backlog.md](TOP-500-backlog.md); revalidate old `C#` claims before acting on them.
-- Next dependency order: automated cross-backend replay comparison, then SNR/benchmark/soak gates and R1/R6/R7 controller splits.
+- Next dependency order: automated cross-backend replay comparison, then SNR/benchmark/soak gates, lifecycle error propagation and device-loss evidence.
 - Every fix should reduce coupling.
 - Update this file, the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` ranking or status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
@@ -1354,13 +1319,14 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Completed the 473-repository music/instrument scan and recorded 50 deduplicated `G#` proposals in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md).
 - Added a provenance-checked corpus of 19 licensed guitar/bass/ukulele/violin/voice WAVs, deterministic rebuild, temporal threshold evaluation and a blocking JSON CI artifact.
 - Added a sample-indexed Rust WAV/f32 replay envelope, deterministic interactive WAV sessions and hidden exact shared browser PCM/WAV+JSON v2 capture; automated cross-backend comparison remains open.
+- Split the Vue application boundary into framework-independent value-based use cases, explicit UI-facing contracts in `app/ports/`, reactive implementations in `adapters/vue/` and a 116-line composition adapter; removed the concrete service bag and factory-derived `ReturnType` coupling.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
-- This file contains 108 current open/partial `R#` findings (`R1`-`R180` range); 72 findings in that range are closed.
-- The independent post-refactor pass now has **209 open and 5 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **317 open and 77 closed items total.**
+- This file contains 103 current open/partial `R#` findings (`R1`-`R180` range); 77 findings in that range are closed.
+- The independent post-refactor pass now has **197 open and 17 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **300 open and 94 closed items total.**
 - The historical 187-item `C#` audit is preserved inside [TOP-500-backlog.md](TOP-500-backlog.md); it is not the current-open count.
-- Each of the three requested documents mirrors exactly 500 `M#` rows; 29 verified master items carry dated `[DONE]` markers.
-- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, remaining controller splits, diagnostics and release hardening; the `sessionLifecycle` status-visibility gap (R182) and swallowed native `stop()` failures (R183, R193) also remain.
+- Each of the three requested documents mirrors exactly 500 `M#` rows; 30 verified master items carry dated `[DONE]` markers.
+- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, diagnostics and release hardening; the `sessionLifecycle` status-visibility gap (R182) and swallowed native `stop()` failures (R183, R193) also remain.
 
 Update this file when fixing. Link from issues.

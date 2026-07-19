@@ -2,9 +2,9 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (317 open/partial and 77 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (300 open/partial and 94 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-19:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW, licensed 19-WAV quality gate, interactive file/WAV input and exact shared browser PCM capture are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-19:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, composite decision evidence, configuration/input provenance, measured fallback confidence, monitor-synchronized visual presentation, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, intonation setup, responsive live canvases, offline SW, licensed 19-WAV quality gate, interactive file/WAV input and exact shared browser PCM capture are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -13,7 +13,7 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 Актуальный порядок оставшейся работы:
 
 1. Добавить автоматическое cross-backend сравнение sample-indexed Rust replay и browser PCM/WAV+JSON v2 envelope.
-2. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
+2. Протянуть typed stop/start failures через native adapter и session lifecycle без проглатывания ошибок.
 3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms и session-adapter parity.
 4. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
 5. Ввести typed diagnostics/errors и завершить accessibility/release gates.
@@ -30,11 +30,12 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Done | P0 | Move native audio work off callbacks | Add error/drop telemetry only |
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
 | Done primary | P0 | Unify pitch core | Full-frame WASM and fallback confidence are gated; power flags still degrade in fallback |
+| Done | P1 | Expose decision/input provenance | Keep confidence evidence, config fingerprint, competing-string and effective microphone-setting contracts in parity |
 | Done | P0 | Unify music/note domain | Registry data plus one formula AST generate Rust/TypeScript primitives and freshness/property gates |
 | Done | P0 | Introduce TS `AudioInputPort` | Web/native/synthetic/file registry, exact-capture capability and tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
 | Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
-| Partial | P1 | Split app controllers | Tuning/settings/root remain broad |
+| Done | P1 | Split app controllers | Boundary tests now protect focused controllers, tuning/settings owners and feature ports |
 | Done | P2 | Split feature screens | Keep ports narrow as features grow |
 | Done guard | P2 | Add preset parity tests | Replace guard with codegen by construction |
 | Done | P2 | Split Rust native audio service | Add recovery diagnostics |
@@ -293,9 +294,11 @@ web/src/adapters/storage/tauriProfileStore.ts
 
 ### 8. Split Application Controllers
 
+**Status 2026-07-20: done.** The compatibility `useTuner.ts` is one line, `adapters/vue/useTunerApplication.ts` is a 116-line composition adapter, application use cases run on plain value cells without Vue, and feature-specific adapters depend on explicit segregated capabilities while implementing factory-independent contracts from `app/ports/`.
+
 **Problem**
 
-`useTuner` is still the main coupling surface.
+Historically, `useTuner` was the main coupling surface. It now exposes only `featurePorts` and `shell`; this recipe remains as the boundary contract.
 
 **Recommendation**
 
@@ -304,17 +307,20 @@ Turn `useTuner` into a composition root. Move workflow logic into controllers.
 **Controllers**
 
 ```text
-createTunerSession
-createTuningController
+useTunerSession
+useDetectionController
+createListeningController
+createTuningCommands
 createPracticeController
-createMetronomeController
 createDisplayController
+usePipelineController
 createProfileController
+useVisualizationController
 ```
 
 **Definition Of Done**
 
-- `useTuner.ts` under 100 lines.
+- `useTuner.ts` stays a compatibility-only export and the Vue composition adapter stays under its 130-line architecture budget.
 - Each controller can be tested with fake ports/stores.
 - Components depend on view model slices and commands.
 
@@ -462,21 +468,21 @@ Extend the current manifests with real WAV/SNR cases and failure traces. Keep th
 ## Recommended Next 8 Commits
 
 1. `Compare sample-indexed replay across backends`
-2. `Split tuning selection and temperament controllers`
-3. `Inject the settings storage port`
+2. `Propagate native stop failures through session lifecycle`
+3. `Add device-loss recovery evidence`
 4. `Add typed pipeline diagnostics`
 5. `Add SNR fixtures and restart soak gates`
 6. `Separate recyclable spectrum transport from detection frames`
 7. `Unify fallback power capability semantics`
 8. `Add release security and accessibility gates`
 
-This sequence attacks the current P0/P1 open items first: session lifecycle, audio-port boundaries, remaining frame-contract drift, realtime safety and core modularity. Practice extraction is still useful, but it is no longer the first architectural blocker.
+This sequence attacks the current P0/P1 open items first: replay parity, lifecycle error visibility, realtime safety and core evidence. Application/practice/tuning/settings/output decomposition is complete and should now be preserved rather than repeated.
 
 ## What Not To Do Next
 
 - Do not move to `packages/` before tests and compatibility exports.
-- Do not rewrite the UI while `useTuner` is still a god-object.
-- Do not add more features into `notes.ts` or `useTuner.ts`.
+- Do not bypass feature ports by importing broad application services into views.
+- Do not add more features into compatibility facades such as `notes.ts` or `useTuner.ts`.
 - Do not add more native Tauri commands without a service boundary.
 - Do not add new presets separately in web and egui without parity protection.
 
@@ -485,7 +491,7 @@ This sequence attacks the current P0/P1 open items first: session lifecycle, aud
 - Visualizer components keep receiving only plain frame props.
 - Shared `DetectionFrame` / viz frame contracts exist and the web readout path consumes them.
 - egui and Tauri native callbacks do not lock engine state or allocate detector buffers.
-- `useTuner.ts` under 100 lines.
+- `useTuner.ts` remains a one-line compatibility export; `useTunerApplication.ts` remains within its 120-line architecture budget.
 - `notes.ts` becomes compatibility export only.
 - `pitch.ts` becomes compatibility export only.
 - Core tests run in Node without DOM/Vue/Tauri.

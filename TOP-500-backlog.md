@@ -101,7 +101,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 89 | reference-tone playback feedback | P3 | 48 | r1:review |  |
 | 90 | devicechange listener refresh | P3 | 48 | r1:review |  |
 | 91 | per-instrument detection frequency range | P3 | 48 | r1:review |  |
-| 92 | split useTuner god-composable | P3 | 48 | r1:review |  |
+| 92 | split useTuner god-composable | P3 | 48 | r1:review | [DONE 2026-07-19] |
 | 93 | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | P3 | 48 | r2:algorithms | Predictive smoothing tracks vibrato/glide better than EMA. |
 | 94 | Detection-accuracy report artifact: cents-error histogram per SNR bucket | P3 | 48 | r2:dx-quality | [PARTIAL 2026-07-18] CI uploads per-capture JSON metrics; SNR buckets and histograms remain. |
 | 95 | Version/build-info panel (git SHA, build date, WASM hash, platform) | P3 | 48 | r3:observability-reliability | Makes bug reports actionable with exact build identity. |
@@ -1070,9 +1070,9 @@ The 187 cards below preserve detailed pre-refactor evidence and stable `C#` refe
   - web/src/composables/useNativeAudioInput.ts:59-70
   - unlisten is set before invoke('start_native_audio'); the catch calls cleanupListener so it is handled, but if a second start() races (no in-flight guard) the prior unlisten ref is overwritten and the first listener leaks. Add a starting-in-flight guard.
 
-**C135. in-tune hysteresis state (inTuneStable) is a closure flag inside a shared computed** - `suggestion` L/L - _web-vue_
+**C135. RESOLVED 2026-07-20: in-tune hysteresis no longer mutates inside a computed** - `fixed` L/L - _web-vue_
   - web/src/composables/useTuningState.ts:92,170-180
-  - isInTune mutates the closure-scoped inTuneStable as a side effect during computed evaluation; computeds should be pure. Move hysteresis to a watch/effect so re-evaluation (e.g. devtools, double subscription) cannot corrupt the latch.
+  - `domain/tuningDetectionMachine.ts` now owns explicit `process/reset/resetInTune` transitions; `useTuningDetection.ts` only watches inputs and exposes pure computed projections of the latest immutable snapshot.
 
 **C136. detectionRange round-trips through useTuner ref instead of being consumed directly** - `suggestion` L/L - _web-vue_
   - web/src/composables/useTuner.ts:19,25,48-51
