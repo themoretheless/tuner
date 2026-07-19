@@ -2,9 +2,9 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (109 open/partial and 71 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (317 open/partial and 77 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-18:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW, licensed 19-WAV quality gate and replay baselines are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-19:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, measured fallback confidence, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, offline SW, licensed 19-WAV quality gate, interactive file/WAV input and exact shared browser PCM capture are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -12,7 +12,7 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Добавить интерактивный file/WAV adapter поверх готового `AudioInputPort`; offline corpus loader уже реализован отдельно.
+1. Добавить автоматическое cross-backend сравнение sample-indexed Rust replay и browser PCM/WAV+JSON v2 envelope.
 2. Разрезать selection/temperament части `useTuningState`, затем broad `useTuner`/global settings ownership.
 3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms и session-adapter parity.
 4. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
@@ -31,7 +31,7 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 | Done pure layer | P0 | Extract practice summary | Move remaining challenge commands later |
 | Done primary | P0 | Unify pitch core | Full-frame WASM and fallback confidence are gated; power flags still degrade in fallback |
 | Done | P0 | Unify music/note domain | Registry data plus one formula AST generate Rust/TypeScript primitives and freshness/property gates |
-| Done | P0 | Introduce TS `AudioInputPort` | Discriminated registry and contract tests remove concrete session branching |
+| Done | P0 | Introduce TS `AudioInputPort` | Web/native/synthetic/file registry, exact-capture capability and tests remove concrete session branching |
 | Done | P1 | Create session lifecycle controller | Maintain adapter contract tests |
 | Done | P1 | Add `UserProfileV1` | Add V2 migration only when needed |
 | Partial | P1 | Split app controllers | Tuning/settings/root remain broad |
@@ -182,7 +182,7 @@ web/src/utils/notes.ts
 
 **Problem**
 
-Исторически session orchestration знала разные lifecycle APIs web/native/synthetic adapters и ветвилась по backend name.
+Исторически session orchestration знала разные lifecycle APIs web/native/synthetic adapters и ветвилась по backend name. Теперь file adapter использует тот же lifecycle, а exact PCM capture сужается отдельной capability.
 
 **Recommendation**
 
@@ -194,16 +194,19 @@ web/src/utils/notes.ts
 web/src/ports/audioInput.ts
 web/src/ports/audioInput.ts
 web/src/composables/useAudioInput.ts
+web/src/composables/useFileAudioInput.ts
 web/src/composables/useNativeAudioInput.ts
 web/src/composables/useSyntheticAudioInput.ts
 web/src/composables/useTunerSession.ts
+web/src/audio/sampleTimeline.ts
+web/src/audio/wav.ts
 ```
 
 **Recommended Contract**
 
 ```ts
 interface AudioInputPortBase {
-  readonly id: 'web' | 'native' | 'synthetic';
+  readonly id: 'web' | 'native' | 'synthetic' | 'file';
   readonly output: 'audio-frame' | 'detection-frame';
   readonly available: ReadableValue<boolean>;
   readonly isListening: ReadableValue<boolean>;
@@ -214,9 +217,10 @@ interface AudioInputPortBase {
 
 **Definition Of Done**
 
-- Web/native/synthetic adapters проходят общий lifecycle contract suite.
+- Web/native/synthetic/file adapters проходят общий lifecycle/session suite.
 - Session сужает capabilities по `output`, а не вызывает backend-specific start/stop branches.
-- Добавление file/WAV backend требует новый adapter и registry row, а не переписывание tuning/practice UI.
+- Exact PCM capture доступен через отдельную capability и не расширяет native resolved-frame port.
+- Следующий input-quality шаг — device-loss/backend-switch E2E и cross-backend replay comparison.
 
 ### 6. Create TunerSessionController
 
@@ -457,11 +461,11 @@ Extend the current manifests with real WAV/SNR cases and failure traces. Keep th
 
 ## Recommended Next 8 Commits
 
-1. `Add file/WAV input adapter`
+1. `Compare sample-indexed replay across backends`
 2. `Split tuning selection and temperament controllers`
 3. `Inject the settings storage port`
 4. `Add typed pipeline diagnostics`
-5. `Add real-audio fixture and restart soak gates`
+5. `Add SNR fixtures and restart soak gates`
 6. `Separate recyclable spectrum transport from detection frames`
 7. `Unify fallback power capability semantics`
 8. `Add release security and accessibility gates`

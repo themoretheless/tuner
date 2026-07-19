@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (109 open/partial, 71 closed stable `R#` items).
+- [recommendation.md](recommendation.md) - current extract (317 open/partial, 77 closed stable `R#` items).
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) and historical detailed `C#` evidence; revalidate old findings against the status overlay.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
@@ -34,7 +34,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 84 Vitest, 65 all-feature core tests, generated note-math properties, shared pitch/confidence/smoothing parity, five E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
+| M0 safety net | Done baseline | 96 Vitest, 65 all-feature core tests, generated note-math properties, shared pitch/confidence/smoothing parity, five E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
 | M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Partial | Lifecycle/feature ports/screens/profile/practice/custom-library done; broad root and selection/temperament controller remain |
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-18:** M0 is complete for the current refactor gate: toolchain pins, `84` Vitest tests, `65` pitch-core all-feature tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and five Playwright flows including full-frame WASM, synthetic detection and responsive Algorithm/Library navigation.
+**Status 2026-07-19:** M0 is complete for the current refactor gate: toolchain pins, `96` Vitest tests, `65` pitch-core all-feature tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and browser flows including full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -138,7 +138,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** add the interactive file/WAV `AudioInputPort` and exact browser PCM/sample-timebase replay; offline WAV quality/replay already exists.
+- **Now:** compare sample-indexed Rust replay and exact browser PCM/WAV+JSON v2 across backends.
 - **Next:** add SNR/noise/reverb corpus transforms and differential/benchmark/soak gates, then split the remaining selection/temperament/settings controllers.
 - **Later:** complete M7 phase-aware accuracy work and the remaining M8 diagnostics/a11y/release gates.
 

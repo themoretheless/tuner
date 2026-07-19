@@ -1,14 +1,14 @@
 # Recommendations & Current Problems Backlog
 
-**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-18 after three implementation iterations and review)**
+**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-19 after the file/PCM implementation pass and review)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-In the first audit range, **71 findings are verified closed or obsolete and 109 `R#` findings remain open/partial**. The independent `R181`-`R394` pass adds 214 open findings, so the combined current total is 323. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+In the first audit range, **72 findings are verified closed or obsolete and 108 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 209 open and 5 closed findings, so the combined current total is 317 open and 77 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `84` Vitest tests; `65` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; five Playwright flows covering shared confidence parity, full-frame WASM, synthetic detection, Algorithm diagnostics and `360 px` Library navigation; manual `1280x720`/`390x844` visual QA; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `96` Vitest tests; `65` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/clippy; generated-source freshness; core and egui WASM target checks; Vue production typecheck/build; browser flows covering shared confidence parity, full-frame WASM, synthetic/file detection, Algorithm diagnostics, exact PCM debug capture and `360 px` Library navigation; manual `1280x720`/`390x844`/`320x720` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -34,12 +34,13 @@ Notation used across docs:
 
 Post-iteration review verified the generated ABI in a real browser, removed double smoothing from the primary path, and fixed stale worker state across stop/restart.
 
-## Closed R Registry (71)
+## Closed R Registry (77)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
 | R2, R48, R142, R176 | Explicit serialized session lifecycle, cancellation/runtime-failure tests, visible pending states |
-| R3 | Discriminated `AudioInputPort` contract, capability narrowing, adapter registry and lifecycle contract tests for web/native/synthetic inputs |
+| R3, R73 | Discriminated `AudioInputPort` contract, capability narrowing, adapter registry and lifecycle/session tests for web/native/synthetic/file inputs; deterministic WAV sessions use sample-indexed windows |
+| R186, R187, R188, R189, R335 | Lifecycle `start()` no longer carries a raw-port-only ignored range; detection range and device selection are segregated capabilities, pending device changes serialize stop/restart, the duplicate direct device restart is removed, and range propagation is asserted |
 | R9, R150, R164 | Typed A4/tuning/selected-target `FrameContext`, native-owned frame resolution, A4=442 coverage, shared smoothing traces and exact canonical wire-shape tests without the top-level `frequency` alias |
 | R14, R16 | One generated music registry plus a shared native/WASM/TS pitch fixture manifest remove hand-maintained tuning drift and specify fallback cents tolerance |
 | R15, R105, R116, R117 | One code generator owns note names, MIDI/frequency/cents/closest-target formulas and note/frequency formatting; Rust, web and egui consume generated primitives or thin domain facades |
@@ -55,7 +56,7 @@ Post-iteration review verified the generated ABI in a real browser, removed doub
 
 Do not renumber the remaining entries; plans and old review notes still cite these stable IDs.
 
-## Open Problems (109 stable R-items)
+## Open Problems (108 stable R-items)
 
 ### Architecture & Coupling
 1. **P0: `useTuner.ts` is still a composition god-object.** It is no longer 500 lines, but it still wires settings, web audio, native audio, pitch loop, tuning state, reference tone, ear training, metronome, practice history, display modes and a huge return object.
@@ -137,8 +138,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, feature shells and profile schema are in place. File input and remaining broad controllers remain.
-    **Recommendation:** Continue with file/WAV input and controller boundaries before adding another broad feature surface.
+45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, explicit audio ports including file/WAV, exact browser PCM capture, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, feature shells and profile schema are in place. Remaining broad controllers and automated cross-backend replay remain.
+    **Recommendation:** Continue with replay evidence and controller boundaries before adding another broad feature surface.
 
 ### More Architecture & Coupling Issues
 
@@ -155,8 +156,6 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 63. No clean way to inject a mock detector for testing or file-based input.
 65. Domain Note and Tuning use &'static str but web uses owned strings – friction when extending.
 69. pitch-core public API mixes f32 buffers with no lifetime or ownership docs.
-73. Mic/native/synthetic adapters implement one explicit shared interface, but there is still no file/WAV input adapter for deterministic real-audio sessions.
-
 ### Performance & Efficiency Issues
 75. Spectrum bars in egui are drawn with per-frame math and allocations inside the paint closure.
 76. `usePitchLoop` still couples RAF scheduling, signal stats and worker dispatch; primary smoothing moved into WASM and fallback smoothing is isolated, but cadence remains paint-driven.
@@ -243,7 +242,7 @@ commit and should reduce coupling between audio, DSP, state and presentation.
 | Order | Status | Slice | Boundary Result | Next Step |
 | --- | --- | --- | --- | --- |
 | 1 | Done | Session state machine | Serialized lifecycle with cancellation/failure tests | Keep adapters behind commands only [DONE 2026-07-11] |
-| 2 | Done | Audio input port | Discriminated TS port + registry cover web/native/synthetic adapters | Add interactive file/WAV adapter under R73; offline real-audio ingestion has landed [DONE 2026-07-11] |
+| 2 | Done | Audio input port | Discriminated TS port + registry cover web/native/synthetic/file adapters, sample timeline and exact capture capability | Add cross-backend replay and device-loss evidence [DONE 2026-07-19] |
 | 3 | Done | Native frame context | Tauri consumes typed resolved context and Vue trusts its canonical frame | Keep wire/context/smoothing fixtures green [DONE 2026-07-11] |
 | 4 | Done | egui frame adoption | egui state consumes `DetectionFrame` | Replace remaining static WASM globals later |
 | 5 | Partial | Practice controller | Pure summary/date logic extracted and tested | Move ear-training workflow out of composition root [DONE 2026-07-11] |
@@ -325,17 +324,9 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **R185.** _(design)_ usingNativeAudio reflects backend preference/availability, not whether a session has started, so its only consumer picks the wrong empty-state copy. `web/src/composables/useTunerSession.ts:46-50 (usingNativeAudio), consumed at web/src/features/analysis/AnalysisView.vue:60` — A user with audioBackend='native' who simply hasn't pressed Start sees 'Visualizers are available with Web Audio', implying they need to switch backends when they just never started listening.
 
-**R186.** _(bug)_ setAudioBackend and setInputDevice use different shouldRestart conditions, so a device change during an in-flight start silently fails to apply. `web/src/composables/useTunerSession.ts:152-158 (setAudioBackend) vs :160-165 (setInputDevice)` — setInputDevice's isListening.value check (false throughout SessionLifecycle's 'starting' state, per sessionLifecycle.ts:59,78) skips the restart while a getUserMedia prompt is pending; useAudioInput.ts:62-71 already read the old deviceId into the constraints synchronously before that prompt, so the session ends up listening on the stale device with no indication anything went wrong.
-
 **Q4 — audioInput port contract** _(web/src/ports/audioInput.ts)_:
 
-**R187.** _(bug)_ AudioInputStartOptions.range is silently ignored by two of three adapters implementing the same port. `web/src/ports/audioInput.ts` — useTunerSession.ts calls `port.start({ range: detectionRange.value })` uniformly for every backend (web/src/composables/useTunerSession.ts:125), but useAudioInput.ts's `start()` (web/src/composables/useAudioInput.ts:54) and useSyntheticAudioInput.ts's `start()` (web/src/composables/useSyntheticAudioInput.ts:26) both take zero parameters, not even an unused options arg; only useNativeAudioInput.ts's `start(options)` (web/src/composables/useNativeAudioInput.ts:62,74) actually reads `range`, and TypeScript's structural typing lets the mismatch through with no compile error, so range changes silently no-op on the two most-used backends.
-
-**R188.** _(split)_ The shared port contract has no field for device selection, only for range, so device selection bypasses the interface. `web/src/ports/audioInput.ts` — AudioInputStartOptions declares only `{ range: PitchDetectionRange }` (web/src/ports/audioInput.ts:15-17); device selection instead works by injecting `selectedInputDeviceId: Ref<string>` directly into useAudioInput.ts's constructor (web/src/composables/useAudioInput.ts:18-19), a mechanism specific to that one adapter with no native or synthetic equivalent, so the port abstraction is asymmetric: one cross-cutting start parameter lives in the typed contract, the other lives in an adapter-specific side channel.
-
 **Q5 — useAudioInput (web adapter)** _(web/src/composables/useAudioInput.ts)_:
-
-**R189.** _(split)_ WebAudioInputAdapter.setInputDevice is dead code that duplicates useTunerSession's device-switch path. `web/src/composables/useAudioInput.ts:142-147` — grep across web/src shows this method is only ever referenced inside useAudioInput.ts's own return object; every real caller (LiveTunerView.vue -> featurePorts.ts -> useTuner.ts) reaches useTunerSession.ts's setInputDevice (lines 160-165) instead, which restarts the session through SessionLifecycle.start/stop. The port-level version stops/starts the MediaStream directly, bypassing the lifecycle queue entirely, so leaving it in place risks a future caller wiring it up and reintroducing a second, non-serialized restart path that races with SessionLifecycle.
 
 **R190.** _(bug)_ A transient devicechange blip permanently clears the saved input-device preference with no restore. `web/src/composables/useAudioInput.ts:36-52` — refreshInputDevices() sets selectedInputDeviceId.value = '' the instant the currently selected id is briefly missing from enumerateDevices(), and the devicechange listener (useAudioInput.ts:166) calls it with no debounce or retry; because that same ref is in useSettings.ts's watch list (lines 174-202) behind a 150ms debounced scheduleSave, a momentary USB/Bluetooth mic dropout silently and permanently erases the user's persisted mic choice even after the device reconnects, since nothing re-selects it once cleared.
 
@@ -671,8 +662,6 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 **R334.** _(bug)_ The repo's one E2E test only ever turns the mic on, never off. `web/e2e/synthetic-fixture.spec.ts` — the entire 12-line spec clicks `mic-toggle` exactly once (line 6); the toggle-off path and the resulting teardown (status reverting to idle, detected-note clearing) have zero end-to-end coverage.
 
-**R335.** _(bug)_ The AudioInputPort contract test never calls or asserts setDetectionRange. `web/src/ports/audioInput.ts` — DetectionFrameInputPort.setDetectionRange (audioInput.ts:37) is part of the shared contract, and the fake native port even implements it (audioInputPort.test.ts:88), but expectPortLifecycle() (audioInputPort.test.ts:50-61) never invokes or asserts it.
-
 **R336.** _(idea)_ Every push to main runs the full 9-job release matrix even for docs-only commits, and the version-skip check fires too late to help. `.github/workflows/release.yml` — `on: push: branches: ["main"]` (lines 8-9) has no paths/paths-ignore filter, so a markdown-only commit still triggers build-web plus all 4 build-tauri and all 4 build-egui matrix legs; the "already released" skip check (lines 72-77) only runs inside the final release job, which needs the entire matrix (lines 50-51) to finish first.
 
 **Q31 — build/PWA/offline pipeline** _(web/src/platform/serviceWorker.ts, web/vite.config.ts, web/package.json, web/public/manifest.webmanifest)_:
@@ -943,7 +932,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 | M124 | P3 | 42 | r1:review | label A4 input |  |
 | M125 | P3 | 42 | r1:review | label tuning select |  |
 | M126 | P3 | 42 | r1:review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | 42 | r2:dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-18] Rust sample-indexed JSON and browser WebM+sidecar exist; exact shared browser PCM/timebase remains. |
+| M127 | P3 | 42 | r2:dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-19] Rust sample-indexed JSON and exact shared browser PCM/WAV+JSON v2 exist; automated cross-backend replay comparison remains. |
 | M128 | P3 | 42 | r2:algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | 42 | r2:native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | 42 | r2:a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |
@@ -1324,7 +1313,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - For the full requested Top 500 and historical evidence, use [TOP-500-backlog.md](TOP-500-backlog.md); revalidate old `C#` claims before acting on them.
-- Next dependency order: R73 interactive file/WAV adapter plus exact browser PCM replay, then SNR/benchmark/soak gates and R1/R6/R7 controller splits.
+- Next dependency order: automated cross-backend replay comparison, then SNR/benchmark/soak gates and R1/R6/R7 controller splits.
 - Every fix should reduce coupling.
 - Update this file, the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` ranking or status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
@@ -1342,7 +1331,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Added Rust/Web domain parity through `pitch-core/examples/domain_snapshot.rs` and Vitest, aligned built-in tuning registries, and added headless synthetic audio fixture support (`?fixture=E2`).
 - Added canonical frame types (`DetectionFrame`, `SpectrumFrame`, `WaveformFrame`), made `TunerEngine::process` return `DetectionFrame`, and moved egui level rendering to `frame.level`.
 - Added `useCanvasRenderer` with shared draw scheduling/ResizeObserver and moved canvas visualizers onto it.
-- Extracted `useTunerSession` from `useTuner` for web/native/synthetic audio orchestration.
+- Extracted `useTunerSession` from `useTuner` for web/native/synthetic/file audio orchestration.
 - Added a Vitest synthetic-session harness for `useTunerSession`.
 - Added Playwright synthetic UI E2E for `?fixture=E2` and fixed worker payload cloning by sending plain detection range/stats objects.
 - Made Tauri native audio emit a frame-shaped payload and made the web native adapter normalize it into `DetectionFrame`.
@@ -1350,7 +1339,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Finished the core split into detector/YIN/MPM/power/spectrum/WASM modules and added `PitchDetector`, reusable buffers, bounded MPM and optional spectrum.
 - Added shared `audio-input`, moved Tauri/egui DSP off realtime callbacks, split egui and Tauri native modules, and gated native FFT by visibility.
 - Added explicit session lifecycle/recovery tests, feature ports/screens, strict full-profile transfer, practice/tuning domains, worker buffer reuse and real offline SW.
-- Added a discriminated `AudioInputPort` registry with contract-tested web/native/synthetic adapters and capability-based session orchestration.
+- Added a discriminated `AudioInputPort` registry with contract-tested web/native/synthetic/file adapters and capability-based session orchestration.
 - Made stateful pitch-core/WASM the primary web-worker detector, retained a tested TS fallback, propagated confidence/backend diagnostics and verified WASM end to end in Playwright.
 - Added one B0-E5 pitch fixture manifest consumed by native Rust, browser WASM and TS fallback, with explicit cents budgets.
 - Replaced hand-maintained Rust/web tuning tables with `registry/music-registry.json` and build-time Rust generation.
@@ -1364,14 +1353,14 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Made detailed block help viewport-aware and internally scrollable, fixed the baseline action width selector, and added Playwright regression assertions for both layouts.
 - Completed the 473-repository music/instrument scan and recorded 50 deduplicated `G#` proposals in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md).
 - Added a provenance-checked corpus of 19 licensed guitar/bass/ukulele/violin/voice WAVs, deterministic rebuild, temporal threshold evaluation and a blocking JSON CI artifact.
-- Added a sample-indexed Rust WAV/f32 replay envelope plus hidden browser WebM+JSON capture sidecar; exact browser PCM/timebase and cross-backend replay remain open.
+- Added a sample-indexed Rust WAV/f32 replay envelope, deterministic interactive WAV sessions and hidden exact shared browser PCM/WAV+JSON v2 capture; automated cross-backend comparison remains open.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
-- This file contains 109 current open/partial `R#` findings (`R1`-`R180` range) and a 71-item stable closure registry.
-- A second, independent post-refactor pass added **214 more `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces — see "Post-Refactor Findings" above. **323 open items total.**
+- This file contains 108 current open/partial `R#` findings (`R1`-`R180` range); 72 findings in that range are closed.
+- The independent post-refactor pass now has **209 open and 5 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **317 open and 77 closed items total.**
 - The historical 187-item `C#` audit is preserved inside [TOP-500-backlog.md](TOP-500-backlog.md); it is not the current-open count.
 - Each of the three requested documents mirrors exactly 500 `M#` rows; 29 verified master items carry dated `[DONE]` markers.
-- Highest impact now is: interactive file/WAV input, exact browser PCM replay, SNR/differential/benchmark/soak gates, remaining controller splits, diagnostics and release hardening; the `sessionLifecycle` status-visibility gap (R182), asymmetric `AudioInputPort` contract (R187-R188), and swallowed native `stop()` failures (R183, R193) also remain.
+- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, remaining controller splits, diagnostics and release hardening; the `sessionLifecycle` status-visibility gap (R182) and swallowed native `stop()` failures (R183, R193) also remain.
 
 Update this file when fixing. Link from issues.
