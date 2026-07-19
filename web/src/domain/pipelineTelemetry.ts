@@ -39,13 +39,32 @@ export interface PipelineSpectralTelemetry {
   pendingOctave: -1 | 0 | 1;
 }
 
+export interface PipelineConfidenceTelemetry {
+  agreement: number;
+  calibrated: number;
+  periodicity: number;
+  signal: number;
+  stability: number;
+  uncertaintyCents: number;
+}
+
+export interface PipelineInterferenceTelemetry {
+  candidateFrequency: number;
+  competingTargetFrequency: number;
+  distanceCents: number;
+  selectedTargetFrequency: number;
+}
+
 export interface PipelineTelemetry {
   adaptiveGateOpen: boolean;
   arbitration: PipelineArbitration;
+  confidence: PipelineConfidenceTelemetry;
+  configFingerprint: number;
   decision: PipelineDecision;
   fixedGateOpen: boolean;
   gateThreshold: number;
   held: boolean;
+  interference: PipelineInterferenceTelemetry | null;
   noiseFloor: number;
   processingMs: number;
   roundTripMs: number;
@@ -66,12 +85,15 @@ export function createPipelineTelemetry(
     arbitration: includes(PIPELINE_ARBITRATIONS, input.arbitration)
       ? input.arbitration
       : 'none',
+    confidence: normalizeConfidenceEvidence(input.confidence),
+    configFingerprint: normalizeFingerprint(input.configFingerprint),
     decision: includes(PIPELINE_DECISIONS, input.decision)
       ? input.decision
       : 'no-candidate',
     fixedGateOpen: Boolean(input.fixedGateOpen),
     gateThreshold: nonNegativeFinite(input.gateThreshold),
     held: Boolean(input.held),
+    interference: normalizeInterference(input.interference),
     noiseFloor: nonNegativeFinite(input.noiseFloor),
     processingMs: nonNegativeFinite(input.processingMs),
     roundTripMs: nonNegativeFinite(input.roundTripMs),
@@ -83,6 +105,62 @@ export function createPipelineTelemetry(
     windowSamples: normalizeWindowSamples(input.windowSamples),
     yin: normalizeCandidate(input.yin),
   };
+}
+
+function normalizeInterference(value: unknown): PipelineInterferenceTelemetry | null {
+  if (!value || typeof value !== 'object') return null;
+  const interference = value as Partial<PipelineInterferenceTelemetry>;
+  const candidateFrequency = Number(interference.candidateFrequency);
+  const competingTargetFrequency = Number(interference.competingTargetFrequency);
+  const selectedTargetFrequency = Number(interference.selectedTargetFrequency);
+  if (
+    candidateFrequency <= 0
+    || competingTargetFrequency <= 0
+    || selectedTargetFrequency <= 0
+    || ![candidateFrequency, competingTargetFrequency, selectedTargetFrequency].every(Number.isFinite)
+  ) return null;
+  return {
+    candidateFrequency,
+    competingTargetFrequency,
+    distanceCents: Math.min(100, nonNegativeFinite(interference.distanceCents)),
+    selectedTargetFrequency,
+  };
+}
+
+function normalizeConfidenceEvidence(value: unknown): PipelineConfidenceTelemetry {
+  if (!value || typeof value !== 'object') {
+    return {
+      agreement: 0,
+      calibrated: 0,
+      periodicity: 0,
+      signal: 0,
+      stability: 0,
+      uncertaintyCents: 100,
+    };
+  }
+  const evidence = value as Partial<PipelineConfidenceTelemetry>;
+  return {
+    agreement: clamp01(evidence.agreement),
+    calibrated: clamp01(evidence.calibrated),
+    periodicity: clamp01(evidence.periodicity),
+    signal: clamp01(evidence.signal),
+    stability: clamp01(evidence.stability),
+    uncertaintyCents: normalizeUncertainty(evidence.uncertaintyCents),
+  };
+}
+
+function normalizeFingerprint(value: unknown) {
+  const fingerprint = Number(value);
+  return Number.isSafeInteger(fingerprint) && fingerprint >= 0
+    ? Math.min(0xffff_ffff, fingerprint)
+    : 0;
+}
+
+function normalizeUncertainty(value: unknown) {
+  const uncertainty = Number(value);
+  return Number.isFinite(uncertainty)
+    ? Math.min(100, Math.max(0, uncertainty))
+    : 100;
 }
 
 export function normalizePipelineTelemetry(value: unknown): PipelineTelemetry {

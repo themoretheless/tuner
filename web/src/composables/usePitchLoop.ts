@@ -1,13 +1,23 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
+import {
+  ConfidenceEvidenceEstimator,
+  detectCompetingTarget,
+  strongestCandidateFrequency,
+} from '../domain/confidenceEvidence';
 import { cloneFrameContext } from '../domain/frameContext';
 import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
+  pipelineConfigFingerprint,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
 import type { AudioFrame, AudioFrameTimebase } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import type {
+  DetectionFrameSemantics,
+  PitchDetectorBackend,
+} from '../types/detectorBackend';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
   analyzePitchFrame,
@@ -21,11 +31,6 @@ import {
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
 import { PipelineSpectralAnalyzer } from '../utils/pipelineSpectralAnalyzer';
-import type {
-  DetectionFrameSemantics,
-  PitchDetectorBackend,
-} from '../workers/pitchCoreAdapter';
-
 const PITCH_DETECT_INTERVAL_MS = 33;
 
 // How many consecutive too-quiet rAF ticks to ride out before clearing the
@@ -67,6 +72,7 @@ export function usePitchLoop(
   let quietTicks = 0;
   const fallbackTracker = new StreamingPitchTracker();
   const spectralAnalyzer = new PipelineSpectralAnalyzer();
+  const fallbackConfidence = new ConfidenceEvidenceEstimator();
   fallbackTracker.setPipelineConfig(pipelineConfig.value);
   fallbackTracker.setDetectionRange(detectionRange.value);
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
@@ -144,6 +150,7 @@ export function usePitchLoop(
     pitchRequestId += 1;
     quietTicks = 0;
     fallbackTracker.reset();
+    fallbackConfidence.reset();
     resetWorkerProcessor();
   }
 
@@ -166,18 +173,34 @@ export function usePitchLoop(
     const decision = !fixedGateOpen && !tracked
       ? 'fixed-gate-rejected'
       : trackerTelemetry.decision;
+    const confidenceEvidence = fallbackConfidence.observe({
+      decision,
+      noiseFloor: trackerTelemetry.noiseFloor,
+      outputConfidence: tracked?.confidence ?? 0,
+      rawFrequency: trackerTelemetry.selected?.frequency ?? null,
+      rms: stats.rms,
+      secondary: analysis?.secondary ?? null,
+      yin: analysis?.yin ?? null,
+    });
     const nextFrame = createUnresolvedDetectionFrame({
-      confidence: tracked?.confidence ?? 0,
+      confidence: tracked ? confidenceEvidence.calibrated : 0,
       freq: tracked?.frequency ?? null,
       rawFreq: trackerTelemetry.selected?.frequency ?? null,
       level: normalizeLevel(stats.rms),
       pipeline: {
         adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
         arbitration: analysis?.arbitration ?? 'none',
+        confidence: confidenceEvidence,
+        configFingerprint: pipelineConfigFingerprint(pipelineConfig.value),
         decision,
         fixedGateOpen,
         gateThreshold: trackerTelemetry.gateThreshold,
         held: decision === 'held',
+        interference: detectCompetingTarget(
+          strongestCandidateFrequency(analysis?.yin, analysis?.secondary),
+          fallbackPitchGuidance?.selectedFrequency,
+          fallbackPitchGuidance?.targetFrequencies ?? [],
+        ),
         noiseFloor: trackerTelemetry.noiseFloor,
         sampleRate: audioFrame?.sampleRate ?? 0,
         secondary: analysis?.secondary ?? null,
@@ -197,8 +220,8 @@ export function usePitchLoop(
       rms: stats.rms,
     });
     nextFrame.pipeline.processingMs = Math.max(0, performance.now() - startedAt);
-    detectionFrame.value = nextFrame;
     frameTimebase.value = audioFrame?.timebase ?? null;
+    detectionFrame.value = nextFrame;
   }
 
   function tick() {

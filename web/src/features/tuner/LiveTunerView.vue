@@ -34,7 +34,7 @@ function toggleMic() {
   <section class="live-workspace" aria-labelledby="live-tuner-heading">
     <DebugOverlay
       v-if="debugEnabled"
-      :frame="tuner.detectionFrame"
+      :frame="tuner.diagnosticFrame"
       :backend="tuner.detectorBackend"
       :is-listening="tuner.isListening"
       :selected-input-device-id="tuner.selectedInputDeviceId"

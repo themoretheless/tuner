@@ -1,9 +1,5 @@
 import { ref, watch, type Ref } from 'vue';
-
-export interface CentsHistoryPoint {
-  at: number;
-  cents: number;
-}
+import type { CentsHistoryPoint } from '../domain/centsHistory';
 
 const MAX_HISTORY_POINTS = 96;
 const HISTORY_INTERVAL_MS = 120;

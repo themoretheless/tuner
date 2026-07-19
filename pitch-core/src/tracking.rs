@@ -49,6 +49,25 @@ impl PitchPrior {
         self.selected_frequency
     }
 
+    pub(crate) fn competing_target(&self, frequency: f32) -> Option<(f32, f32, f32)> {
+        let selected = self
+            .selected_frequency
+            .filter(|value| valid_frequency(*value))?;
+        if !valid_frequency(frequency)
+            || octave_equivalent_distance_cents(frequency, selected) < 180.0
+        {
+            return None;
+        }
+        let (target, distance) = self
+            .target_frequencies
+            .iter()
+            .copied()
+            .filter(|target| octave_equivalent_distance_cents(*target, selected) > 10.0)
+            .map(|target| (target, octave_equivalent_distance_cents(frequency, target)))
+            .min_by(|left, right| left.1.total_cmp(&right.1))?;
+        (distance <= 55.0).then_some((selected, target, distance))
+    }
+
     pub(crate) fn target_frequencies(&self) -> &[f32] {
         &self.target_frequencies
     }
@@ -299,6 +318,11 @@ fn valid_frequency(frequency: f32) -> bool {
     frequency.is_finite() && frequency > 0.0
 }
 
+fn octave_equivalent_distance_cents(left: f32, right: f32) -> f32 {
+    let cents = get_cents(left, right);
+    (cents - (cents / 1_200.0).round() * 1_200.0).abs()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,5 +413,23 @@ mod tests {
         assert!((prior.correct_octave(164.9) - 82.45).abs() < 0.2);
         assert!((prior.correct_octave(160.0) - 80.0).abs() < 0.01);
         assert!((prior.correct_octave(111.0) - 111.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn selected_prior_identifies_a_competing_string() {
+        let e2 = note("E", 2, 82.4069);
+        let a2 = note("A", 2, 110.0);
+        let d3 = note("D", 3, 146.8324);
+        let prior = PitchPrior::new(Some(&e2), &[e2.clone(), a2, d3]);
+
+        let (selected, competing, distance) = prior
+            .competing_target(110.1)
+            .expect("A string should be identified while E is selected");
+        assert!((selected - 82.4069).abs() < 0.01);
+        assert!((competing - 110.0).abs() < 0.01);
+        assert!(distance < 2.0);
+        assert!(prior.competing_target(220.1).is_some());
+        assert!(prior.competing_target(82.5).is_none());
+        assert!(prior.competing_target(164.8).is_none());
     }
 }

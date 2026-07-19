@@ -202,6 +202,9 @@ export function analysisWindowMs(telemetry: PipelineTelemetry) {
 }
 
 export function estimateUncertainty(telemetry: PipelineTelemetry) {
+  if (telemetry.confidence.calibrated > 0 || telemetry.confidence.periodicity > 0) {
+    return telemetry.confidence.uncertaintyCents;
+  }
   const candidates = [telemetry.yin, telemetry.secondary]
     .filter((candidate): candidate is NonNullable<typeof candidate> => candidate != null);
   const spread = candidates.length === 2

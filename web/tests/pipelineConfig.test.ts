@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
+  pipelineConfigFingerprint,
   pipelinePresetConfig,
   resolvePipelinePreset,
   updatePipelineBlock,
@@ -33,6 +34,19 @@ describe('pipeline configuration', () => {
       false,
     );
     expect(resolvePipelinePreset(custom)).toBe('custom');
+  });
+
+  it('matches the stable cross-language configuration fingerprint', () => {
+    expect(pipelineConfigFingerprint(createDefaultPipelineConfig())).toBe(161_782_394);
+    expect(pipelineConfigFingerprint({
+      ...createDefaultPipelineConfig(),
+      yinEnabled: false,
+      secondaryDetectorEnabled: false,
+    })).toBe(pipelineConfigFingerprint({
+      ...createDefaultPipelineConfig(),
+      yinEnabled: true,
+      secondaryDetectorEnabled: false,
+    }));
   });
 
   it('runs either fallback candidate provider independently', () => {

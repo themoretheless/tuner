@@ -1,4 +1,3 @@
-import type { Ref } from 'vue';
 import {
   createCustomTemperament,
   createCustomTuning,
@@ -6,7 +5,7 @@ import {
   normalizeImportedTunings,
   type CustomTemperamentPayload,
   type CustomTuningPayload,
-} from '../domain/customLibrary';
+} from '../../domain/customLibrary';
 import type {
   InstrumentId,
   InstrumentPreset,
@@ -14,21 +13,22 @@ import type {
   Temperament,
   TemperamentId,
   Tuning,
-} from '../utils/notes';
+} from '../../utils/notes';
+import type { ReadableValue, WritableValue } from '../ports/value';
 
 interface CustomLibraryControllerOptions {
-  activeInstrument: Ref<InstrumentId>;
-  currentTuning: Readonly<Ref<Tuning>>;
-  customInstruments: Ref<InstrumentPreset[]>;
-  customTemperaments: Ref<Temperament[]>;
-  customTunings: Ref<Tuning[]>;
-  instrumentOptions: Readonly<Ref<InstrumentPreset[]>>;
+  activeInstrument: WritableValue<InstrumentId>;
+  currentTuning: ReadableValue<Tuning>;
+  customInstruments: WritableValue<InstrumentPreset[]>;
+  customTemperaments: WritableValue<Temperament[]>;
+  customTunings: WritableValue<Tuning[]>;
+  instrumentOptions: ReadableValue<InstrumentPreset[]>;
   now?: () => number;
   resetDetection(): void;
   resolveDefaultTuning(instrument: InstrumentId): Tuning;
   setTuning(tuning: Tuning): void;
-  strings: Readonly<Ref<Note[]>>;
-  temperament: Ref<TemperamentId>;
+  strings: ReadableValue<Note[]>;
+  temperament: WritableValue<TemperamentId>;
 }
 
 export function createCustomLibraryController(options: CustomLibraryControllerOptions) {

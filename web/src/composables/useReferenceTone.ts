@@ -1,96 +1,77 @@
-import { onUnmounted, ref } from 'vue';
+import { onScopeDispose, ref } from 'vue';
+import type { AudioOutputPort } from '../ports/audioOutput';
 import type { Note } from '../utils/notes';
-import { createAudioContext } from '../utils/audio';
 
-export function useReferenceTone(getTargetNote: () => Note) {
+export function useReferenceTone(getTargetNote: () => Note, output: AudioOutputPort) {
   const referencePlaying = ref(false);
-
-  let sharedAudio: AudioContext | null = null;
-  let refOsc: OscillatorNode | null = null;
-  let randomTimeoutId: number | null = null;
-
-  function getSharedAudio() {
-    if (!sharedAudio) {
-      sharedAudio = createAudioContext();
-    }
-    return sharedAudio;
-  }
-
-  function createTone(frequency: number, gainValue: number) {
-    const ctx = getSharedAudio();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const lp = ctx.createBiquadFilter();
-
-    osc.type = 'sine';
-    osc.frequency.value = frequency;
-    gain.gain.value = gainValue;
-    lp.type = 'lowpass';
-    lp.frequency.value = 1600;
-
-    osc.connect(lp);
-    lp.connect(gain);
-    gain.connect(ctx.destination);
-
-    return { osc, gain };
-  }
+  const playback = output.createScope();
+  let requestRevision = 0;
 
   function stopReferenceTone() {
-    if (refOsc) {
-      try { refOsc.stop(); } catch {}
-      refOsc = null;
-    }
+    requestRevision += 1;
+    playback.stopAll();
     referencePlaying.value = false;
   }
 
-  function playReferenceTone() {
+  async function playReferenceTone() {
     stopReferenceTone();
-
+    const revision = requestRevision;
     const freq = getTargetNote().frequency;
     if (!freq) return;
-
-    const tone = createTone(freq, 0.18);
-    refOsc = tone.osc;
-    refOsc.start();
-    referencePlaying.value = true;
+    try {
+      await playback.resume();
+    } catch {
+      return;
+    }
+    if (revision !== requestRevision) return;
+    try {
+      playback.playTone({ frequency: freq, gain: 0.18, lowpassHz: 1600 });
+      referencePlaying.value = true;
+    } catch {
+      referencePlaying.value = false;
+    }
   }
 
-  function toggleReferenceTone() {
+  async function toggleReferenceTone() {
     if (referencePlaying.value) {
       stopReferenceTone();
     } else {
-      playReferenceTone();
+      await playReferenceTone();
     }
   }
 
-  function playTimedTone(note: Note, durationMs = 1500) {
+  async function playTimedTone(note: Note, durationMs = 1500) {
     stopReferenceTone();
-    if (randomTimeoutId != null) {
-      window.clearTimeout(randomTimeoutId);
-      randomTimeoutId = null;
+    const revision = requestRevision;
+    try {
+      await playback.resume();
+    } catch {
+      return;
     }
-
-    const { osc } = createTone(note.frequency, 0.15);
-    osc.start();
-    randomTimeoutId = window.setTimeout(() => {
-      try { osc.stop(); } catch {}
-      randomTimeoutId = null;
-    }, durationMs);
+    if (revision !== requestRevision) return;
+    const durationSeconds = Number.isFinite(durationMs)
+      ? Math.max(0.05, durationMs / 1000)
+      : 1.5;
+    try {
+      playback.playTone({
+        attackSeconds: 0.005,
+        durationSeconds,
+        frequency: note.frequency,
+        gain: 0.15,
+        lowpassHz: 1600,
+        releaseSeconds: 0.025,
+      });
+    } catch {
+      playback.stopAll();
+    }
   }
 
   function cleanupReferenceAudio() {
     stopReferenceTone();
-    if (randomTimeoutId != null) {
-      window.clearTimeout(randomTimeoutId);
-      randomTimeoutId = null;
-    }
-    if (sharedAudio) {
-      sharedAudio.close().catch(() => {});
-      sharedAudio = null;
-    }
+    playback.dispose();
   }
 
-  onUnmounted(cleanupReferenceAudio);
+  onScopeDispose(cleanupReferenceAudio);
 
   return {
     referencePlaying,

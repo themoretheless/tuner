@@ -4,9 +4,9 @@ import type { SpectrumFrame, WaveformFrame } from '../types/frames';
 export type { SpectrumFrame, WaveformFrame } from '../types/frames';
 
 export function useVisualizationFrames(
-  analyser: Ref<AnalyserNode | null>,
-  sampleRate: Ref<number>,
-  active: Ref<boolean>,
+  analyser: Readonly<Ref<AnalyserNode | null>>,
+  sampleRate: Readonly<Ref<number>>,
+  active: Readonly<Ref<boolean>>,
 ) {
   const waveformFrame = ref<WaveformFrame | null>(null);
   const spectrumFrame = ref<SpectrumFrame | null>(null);

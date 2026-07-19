@@ -111,6 +111,28 @@ export function pipelineConfigsEqual(
     .every((key) => left[key] === right[key]);
 }
 
+/** FNV-1a provenance id; keep byte order aligned with Rust PipelineConfig. */
+export function pipelineConfigFingerprint(value: PipelineConfig) {
+  const config = normalizePipelineConfig(value);
+  const bytes = [
+    1,
+    config.adaptiveGateEnabled ? 1 : 0,
+    config.dcRemovalEnabled ? 1 : 0,
+    config.fixedGateEnabled ? 1 : 0,
+    config.harmonicEnabled ? 1 : 0,
+    config.holdEnabled ? 1 : 0,
+    config.octaveEnabled ? 1 : 0,
+    config.powerChordEnabled ? 1 : 0,
+    config.secondaryDetectorEnabled ? 1 : 0,
+    config.trackingEnabled ? 1 : 0,
+    config.yinEnabled ? 1 : 0,
+  ];
+  return bytes.reduce(
+    (hash, byte) => Math.imul((hash ^ byte) >>> 0, 16_777_619) >>> 0,
+    2_166_136_261,
+  );
+}
+
 function booleanOr(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback;
 }

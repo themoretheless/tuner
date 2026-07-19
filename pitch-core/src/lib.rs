@@ -1,5 +1,6 @@
 // Domain layer (Note, Tuning, the tunings table, and note/cents math) lives in
 // domain.rs and is re-exported here. See ARCHITECTURE.md for the layering plan.
+mod confidence;
 mod domain;
 mod dsp;
 mod engine;

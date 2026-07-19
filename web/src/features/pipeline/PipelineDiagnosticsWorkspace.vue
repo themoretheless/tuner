@@ -8,11 +8,13 @@ import type {
   ResolvedPipelinePresetId,
 } from '../../domain/pipelineConfig';
 import type { DetectionFrame } from '../../types/frames';
+import type { AudioInputDiagnostics } from '../../domain/audioInputDiagnostics';
 import PipelineDecisionTimeline from './PipelineDecisionTimeline.vue';
 import PipelineExperimentPanel from './PipelineExperimentPanel.vue';
 import PipelineFrameInspector from './PipelineFrameInspector.vue';
 import PipelineSpectralPanel from './PipelineSpectralPanel.vue';
 import PipelineTelemetryPanel from './PipelineTelemetryPanel.vue';
+import PipelineEvidencePanel from './PipelineEvidencePanel.vue';
 import { usePipelineDiagnostics } from './usePipelineDiagnostics';
 
 const props = defineProps<{
@@ -21,6 +23,7 @@ const props = defineProps<{
   formatFreq: (frequency: number) => string;
   frame: DetectionFrame;
   isListening: boolean;
+  inputDiagnostics: AudioInputDiagnostics | null;
   preset: ResolvedPipelinePresetId;
   targetFrequency: number;
 }>();
@@ -56,6 +59,12 @@ const hasDiagnosticFrame = computed(() => props.isListening || selected.value !=
 
 <template>
   <div class="pipeline-diagnostics-workspace">
+    <PipelineEvidencePanel
+      :frame="displayedFrame"
+      :input-diagnostics="inputDiagnostics"
+      :is-listening="hasDiagnosticFrame"
+    />
+
     <PipelineTelemetryPanel
       :baseline="baseline"
       :format-freq="formatFreq"

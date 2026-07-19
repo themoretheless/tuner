@@ -1,8 +1,12 @@
-use crate::{gate::AdaptiveSignalGate, tracking::PitchTracker};
+use crate::{
+    confidence::{ConfidenceEstimator, ConfidenceObservation},
+    gate::AdaptiveSignalGate,
+    tracking::PitchTracker,
+};
 use crate::{
     get_tunings, is_likely_power_chord_native, signal, DetectionFrame, DetectorConfig,
     FrameContext, FrameResolver, HybridPitchDetector, PipelineConfig, PipelineDecision,
-    SpectrumAnalyzer, Tuning,
+    PipelineInterferenceTelemetry, SpectrumAnalyzer, Tuning,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
@@ -44,6 +48,7 @@ impl Default for EngineConfig {
 
 pub struct TunerEngine {
     detector: HybridPitchDetector,
+    confidence: ConfidenceEstimator,
     gate: AdaptiveSignalGate,
     resolver: FrameResolver,
     spectrum: Option<SpectrumAnalyzer>,
@@ -89,6 +94,7 @@ impl TunerEngine {
         pitch_detector.set_pipeline_config(pipeline);
         Self {
             detector: pitch_detector,
+            confidence: ConfidenceEstimator::default(),
             gate: AdaptiveSignalGate::new(detector.rms_gate, detector.peak_gate),
             resolver: FrameResolver::new(a4, tuning, frame_context),
             spectrum: (spectrum_bins > 0)
@@ -105,6 +111,7 @@ impl TunerEngine {
 
     fn clear_tracking(&mut self) {
         self.tracker.reset();
+        self.confidence.reset();
         self.hold_streak = 0;
         self.held_reading = None;
         self.resolver.reset();
@@ -172,6 +179,21 @@ impl TunerEngine {
             prior.target_frequencies(),
         );
         let mut pipeline_telemetry = self.detector.telemetry();
+        let interference_candidate = [pipeline_telemetry.yin, pipeline_telemetry.secondary]
+            .into_iter()
+            .flatten()
+            .max_by(|left, right| left.confidence.total_cmp(&right.confidence));
+        pipeline_telemetry.interference =
+            interference_candidate.and_then(|candidate| {
+                prior.competing_target(candidate.frequency).map(
+                    |(selected, competing, distance)| PipelineInterferenceTelemetry {
+                        candidate_frequency: candidate.frequency,
+                        competing_target_frequency: competing,
+                        distance_cents: distance,
+                        selected_target_frequency: selected,
+                    },
+                )
+            });
         // Diagnostic: what the detector itself said this frame, before any
         // suppression, gating, or tracking touches it.
         let raw_freq = estimate.map(|estimate| estimate.frequency);
@@ -197,7 +219,7 @@ impl TunerEngine {
         // Track only coherent estimates. Brief detector dropouts ride on the
         // settled track while the signal remains open; sustained uncertainty
         // or a closed adaptive gate clears it before the next acquisition.
-        let (freq_opt, confidence) = if !gate_open {
+        let (freq_opt, detector_confidence) = if !gate_open {
             pipeline_telemetry.decision = PipelineDecision::AdaptiveGateRejected;
             self.clear_tracking();
             self.detector.reset_tracking_state();
@@ -251,6 +273,19 @@ impl TunerEngine {
         };
 
         let resolution = self.resolver.resolve(freq_opt);
+
+        pipeline_telemetry.confidence = self.confidence.observe(ConfidenceObservation {
+            decision: pipeline_telemetry.decision,
+            noise_floor: pipeline_telemetry.noise_floor,
+            output_confidence: detector_confidence,
+            raw_frequency: raw_freq,
+            rms: signal_stats.rms,
+            secondary: pipeline_telemetry.secondary,
+            yin: pipeline_telemetry.yin,
+        });
+        let confidence = freq_opt
+            .map(|_| pipeline_telemetry.confidence.calibrated)
+            .unwrap_or(0.0);
 
         let spectrum = self
             .spectrum

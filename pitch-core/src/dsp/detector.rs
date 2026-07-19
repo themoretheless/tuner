@@ -172,6 +172,7 @@ impl HybridPitchDetector {
         // Frame status is edge-triggered; never let an unread status leak
         // into a later detector call.
         self.telemetry = PipelineTelemetry::default();
+        self.telemetry.config_fingerprint = self.pipeline.fingerprint();
         self.telemetry.sample_rate = sample_rate;
         self.telemetry.window_samples = buffer.len().min(u32::MAX as usize) as u32;
         self.octave.take_correction_started();

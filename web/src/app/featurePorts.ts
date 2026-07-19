@@ -1,233 +1,54 @@
-import { inject, reactive, type InjectionKey, type UnwrapNestedRefs } from 'vue';
-import type { useTuner } from '../composables/useTuner';
+import { inject, provide, type InjectionKey } from 'vue';
+import type { AnalysisPort } from './ports/analysis';
+import type { LibraryPort } from './ports/library';
+import type { LiveTunerPort } from './ports/liveTuner';
+import type { PipelinePort } from './ports/pipeline';
+import type { PracticePort } from './ports/practice';
 
-type TunerRoot = ReturnType<typeof useTuner>;
+export type { AnalysisPort, LibraryPort, LiveTunerPort, PipelinePort, PracticePort };
 
-function createLiveTunerPort(root: TunerRoot) {
-  return reactive({
-    a4: root.a4,
-    allTunings: root.allTunings,
-    audioBackend: root.audioBackend,
-    cents: root.cents,
-    currentNoteDisplay: root.currentNoteDisplay,
-    currentTuning: root.currentTuning,
-    hasDetection: root.hasDetection,
-    detectionFrame: root.detectionFrame,
-    detectionFrameTimebase: root.detectionFrameTimebase,
-    detectorBackend: root.detectorBackend,
-    displayMode: root.displayMode,
-    error: root.error,
-    exactPcmCaptureAvailable: root.exactPcmCaptureAvailable,
-    fileAudioDuration: root.fileAudioDuration,
-    fileAudioName: root.fileAudioName,
-    fileAudioProgress: root.fileAudioProgress,
-    formatFreq: root.formatFreq,
-    getNoteDisplay: root.getNoteDisplay,
-    inputDevices: root.inputDevices,
-    isInTune: root.isInTune,
-    isListening: root.isListening,
-    leftHanded: root.leftHanded,
-    nativeAudioAvailable: root.nativeAudioAvailable,
-    referencePlaying: root.referencePlaying,
-    selectedInputDeviceId: root.selectedInputDeviceId,
-    selectedString: root.selectedString,
-    selectedStringIndex: root.selectedStringIndex,
-    sessionStatus: root.sessionStatus,
-    spectrumFrame: root.spectrumFrame,
-    strings: root.strings,
-    targetNote: root.targetNote,
-    usingNativeAudio: root.usingNativeAudio,
-    usingFileAudio: root.usingFileAudio,
-    volume: root.volume,
-    clearError: root.clearError,
-    beginExactPcmCapture: root.beginExactPcmCapture,
-    finishExactPcmCapture: root.finishExactPcmCapture,
-    loadAudioFile: root.loadAudioFile,
-    refreshInputDevices: root.refreshInputDevices,
-    setA4: root.setA4,
-    setAudioBackend: root.setAudioBackend,
-    setDisplayMode: root.setDisplayMode,
-    setInputDevice: root.setInputDevice,
-    setTuning: root.setTuning,
-    start: root.start,
-    stop: root.stop,
-    toggleReferenceTone: root.toggleReferenceTone,
-    toggleString: root.toggleString,
-    useMicrophoneInput: root.useMicrophoneInput,
-  });
+export interface FeaturePorts {
+  analysis: AnalysisPort;
+  library: LibraryPort;
+  live: LiveTunerPort;
+  pipeline: PipelinePort;
+  practice: PracticePort;
 }
 
-function createLibraryPort(root: TunerRoot) {
-  return reactive({
-    activeInstrument: root.activeInstrument,
-    activeStringOffsets: root.activeStringOffsets,
-    allTunings: root.allTunings,
-    capo: root.capo,
-    currentTuning: root.currentTuning,
-    customInstruments: root.customInstruments,
-    customTemperaments: root.customTemperaments,
-    customTunings: root.customTunings,
-    formatFreq: root.formatFreq,
-    getNoteDisplay: root.getNoteDisplay,
-    instrumentOptions: root.instrumentOptions,
-    leftHanded: root.leftHanded,
-    selectedString: root.selectedString,
-    selectedStringIndex: root.selectedStringIndex,
-    strings: root.strings,
-    sweeteningProfile: root.sweeteningProfile,
-    temperament: root.temperament,
-    temperamentOffsets: root.temperamentOffsets,
-    temperamentOptions: root.temperamentOptions,
-    temperamentRoot: root.temperamentRoot,
-    transpose: root.transpose,
-    exportUserProfile: root.exportUserProfile,
-    importUserProfile: root.importUserProfile,
-    deleteCustomTemperament: root.deleteCustomTemperament,
-    deleteCustomTuning: root.deleteCustomTuning,
-    deleteInstrumentProfile: root.deleteInstrumentProfile,
-    importCustomTunings: root.importCustomTunings,
-    saveCustomTemperament: root.saveCustomTemperament,
-    saveCustomTuning: root.saveCustomTuning,
-    saveInstrumentProfile: root.saveInstrumentProfile,
-    setCapo: root.setCapo,
-    setInstrument: root.setInstrument,
-    setStringOffset: root.setStringOffset,
-    setSweeteningProfile: root.setSweeteningProfile,
-    setTemperament: root.setTemperament,
-    setTemperamentRoot: root.setTemperamentRoot,
-    setTranspose: root.setTranspose,
-    setTuning: root.setTuning,
-    toggleString: root.toggleString,
-  });
-}
-
-function createPracticePort(root: TunerRoot) {
-  return reactive({
-    earTrainingAccuracy: root.earTrainingAccuracy,
-    earTrainingAttempts: root.earTrainingAttempts,
-    earTrainingCorrect: root.earTrainingCorrect,
-    earTrainingRevealed: root.earTrainingRevealed,
-    earTrainingStreak: root.earTrainingStreak,
-    earTrainingTarget: root.earTrainingTarget,
-    getNoteDisplay: root.getNoteDisplay,
-    metronomeBeat: root.metronomeBeat,
-    metronomeBeats: root.metronomeBeats,
-    metronomeBpm: root.metronomeBpm,
-    metronomeRunning: root.metronomeRunning,
-    metronomeSubdivision: root.metronomeSubdivision,
-    metronomeSubdivisionStep: root.metronomeSubdivisionStep,
-    practiceHistory: root.practiceHistory,
-    practiceSummary: root.practiceSummary,
-    clearPracticeHistory: root.clearPracticeHistory,
-    exportPracticeStats: root.exportPracticeStats,
-    markEarTraining: root.markEarTraining,
-    nextEarTraining: root.nextEarTraining,
-    playEarTraining: root.playEarTraining,
-    resetEarTraining: root.resetEarTraining,
-    revealEarTraining: root.revealEarTraining,
-    setMetronomeBeats: root.setMetronomeBeats,
-    setMetronomeBpm: root.setMetronomeBpm,
-    setMetronomeSubdivision: root.setMetronomeSubdivision,
-    tapMetronome: root.tapMetronome,
-    toggleMetronome: root.toggleMetronome,
-  });
-}
-
-function createAnalysisPort(root: TunerRoot) {
-  return reactive({
-    centsHistory: root.centsHistory,
-    displayMode: root.displayMode,
-    formatFreq: root.formatFreq,
-    isListening: root.isListening,
-    layoutMode: root.layoutMode,
-    leftHanded: root.leftHanded,
-    showSpectrogram: root.showSpectrogram,
-    showSpectrum: root.showSpectrum,
-    showWaveform: root.showWaveform,
-    smoothedFrequency: root.smoothedFrequency,
-    spectrumFrame: root.spectrumFrame,
-    targetNote: root.targetNote,
-    themeMode: root.themeMode,
-    usingNativeAudio: root.usingNativeAudio,
-    waveformFrame: root.waveformFrame,
-    setDisplayMode: root.setDisplayMode,
-    setLayoutMode: root.setLayoutMode,
-    setLeftHanded: root.setLeftHanded,
-    setThemeMode: root.setThemeMode,
-    start: root.start,
-    toggleFullscreen: root.toggleFullscreen,
-  });
-}
-
-function createPipelinePort(root: TunerRoot) {
-  return reactive({
-    config: root.pipelineConfig,
-    detectionFrame: root.detectionFrame,
-    detectorBackend: root.detectorBackend,
-    error: root.error,
-    formatFreq: root.formatFreq,
-    getNoteDisplay: root.getNoteDisplay,
-    hasDetection: root.hasDetection,
-    isListening: root.isListening,
-    preset: root.pipelinePreset,
-    sessionStatus: root.sessionStatus,
-    targetNote: root.targetNote,
-    applyPreset: root.applyPipelinePreset,
-    clearError: root.clearError,
-    setBlock: root.setPipelineBlock,
-    start: root.start,
-    stop: root.stop,
-  });
-}
-
-export type LiveTunerPort = UnwrapNestedRefs<ReturnType<typeof createLiveTunerPort>>;
-export type LibraryPort = UnwrapNestedRefs<ReturnType<typeof createLibraryPort>>;
-export type PracticePort = UnwrapNestedRefs<ReturnType<typeof createPracticePort>>;
-export type AnalysisPort = UnwrapNestedRefs<ReturnType<typeof createAnalysisPort>>;
-export type PipelinePort = UnwrapNestedRefs<ReturnType<typeof createPipelinePort>>;
-
-const liveTunerKey: InjectionKey<LiveTunerPort> = Symbol('live-tuner-port');
-const libraryKey: InjectionKey<LibraryPort> = Symbol('library-port');
-const practiceKey: InjectionKey<PracticePort> = Symbol('practice-port');
-const analysisKey: InjectionKey<AnalysisPort> = Symbol('analysis-port');
-const pipelineKey: InjectionKey<PipelinePort> = Symbol('pipeline-port');
-
-export function createFeaturePorts(root: TunerRoot) {
-  return {
-    live: createLiveTunerPort(root),
-    library: createLibraryPort(root),
-    practice: createPracticePort(root),
-    analysis: createAnalysisPort(root),
-    pipeline: createPipelinePort(root),
-  };
-}
-
-export const featurePortKeys = {
-  live: liveTunerKey,
-  library: libraryKey,
-  practice: practiceKey,
-  analysis: analysisKey,
-  pipeline: pipelineKey,
+const featurePortKeys = {
+  analysis: Symbol('analysis-port') as InjectionKey<AnalysisPort>,
+  library: Symbol('library-port') as InjectionKey<LibraryPort>,
+  live: Symbol('live-tuner-port') as InjectionKey<LiveTunerPort>,
+  pipeline: Symbol('pipeline-port') as InjectionKey<PipelinePort>,
+  practice: Symbol('practice-port') as InjectionKey<PracticePort>,
 };
 
-export function useLiveTunerPort() {
-  return injectRequired(liveTunerKey, 'live tuner');
-}
-
-export function useLibraryPort() {
-  return injectRequired(libraryKey, 'library');
-}
-
-export function usePracticePort() {
-  return injectRequired(practiceKey, 'practice');
+export function provideFeaturePorts(ports: FeaturePorts) {
+  provide(featurePortKeys.analysis, ports.analysis);
+  provide(featurePortKeys.library, ports.library);
+  provide(featurePortKeys.live, ports.live);
+  provide(featurePortKeys.pipeline, ports.pipeline);
+  provide(featurePortKeys.practice, ports.practice);
 }
 
 export function useAnalysisPort() {
-  return injectRequired(analysisKey, 'analysis');
+  return injectRequired(featurePortKeys.analysis, 'analysis');
+}
+
+export function useLibraryPort() {
+  return injectRequired(featurePortKeys.library, 'library');
+}
+
+export function useLiveTunerPort() {
+  return injectRequired(featurePortKeys.live, 'live tuner');
 }
 
 export function usePipelinePort() {
-  return injectRequired(pipelineKey, 'pipeline');
+  return injectRequired(featurePortKeys.pipeline, 'pipeline');
+}
+
+export function usePracticePort() {
+  return injectRequired(featurePortKeys.practice, 'practice');
 }
 
 function injectRequired<T>(key: InjectionKey<T>, name: string) {

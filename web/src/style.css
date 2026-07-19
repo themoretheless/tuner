@@ -356,6 +356,11 @@ body {
   padding: 18px;
 }
 
+.visualizer-panel > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .analysis-wide {
   grid-column: 1 / -1;
 }
@@ -414,6 +419,12 @@ body {
   color: var(--text-dim);
   font-size: 0.7rem;
   text-align: right;
+}
+
+.visual-canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
 }
 
 .visual-canvas,

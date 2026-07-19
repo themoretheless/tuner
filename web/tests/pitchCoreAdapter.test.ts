@@ -73,6 +73,15 @@ describe('PitchCoreAdapter', () => {
         pipeline: createPipelineTelemetry({
           adaptiveGateOpen: true,
           arbitration: 'fused',
+          confidence: {
+            agreement: 0.98,
+            calibrated: 0.91,
+            periodicity: 0.93,
+            signal: 1,
+            stability: 0.89,
+            uncertaintyCents: 4.5,
+          },
+          configFingerprint: 161_782_394,
           decision: 'published',
           fixedGateOpen: true,
           secondary: { confidence: 0.88, frequency: 440.2 },
@@ -139,6 +148,15 @@ describe('PitchCoreAdapter', () => {
         pipeline: createPipelineTelemetry({
           adaptiveGateOpen: true,
           arbitration: 'yin-only',
+          confidence: {
+            agreement: 0.68,
+            calibrated: 0.754,
+            periodicity: 0.72,
+            signal: 1,
+            stability: 0.72,
+            uncertaintyCents: 11.428,
+          },
+          configFingerprint: 161_782_394,
           decision: 'tracking-acquiring',
           fixedGateOpen: true,
           gateThreshold: 0.003125,
@@ -155,7 +173,7 @@ describe('PitchCoreAdapter', () => {
     });
     const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
     expect(confirmed.frame.freq).toBeCloseTo(220);
-    expect(confirmed.frame.confidence).toBe(0.72);
+    expect(confirmed.frame.confidence).toBeCloseTo(0.81);
 
     expect(loadModule).toHaveBeenCalledOnce();
     expect(fallback).toHaveBeenCalledTimes(2);
@@ -175,6 +193,26 @@ describe('PitchCoreAdapter', () => {
       selectedFrequency: 440,
       targetFrequencies: [],
     });
+  });
+
+  it('resets confidence-window history when the detection range changes', async () => {
+    const loadModule: PitchCoreModuleLoader = vi.fn(async () => {
+      throw new Error('missing module');
+    });
+    let frequency = 82.4069;
+    const fallback = vi.fn(() => ({ confidence: 0.9, frequency }));
+    const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
+
+    await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    const settled = await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    expect(settled.frame.pipeline.confidence.stability).toBe(1);
+
+    frequency = 110;
+    const afterRangeChange = await adapter.process(BUFFER, 48_000, STATS, {
+      minFrequency: 70,
+      maxFrequency: 1_200,
+    });
+    expect(afterRangeChange.frame.pipeline.confidence.stability).toBeCloseTo(0.72);
   });
 
   it('disables a broken processor and keeps serving the smoothed fallback', async () => {
@@ -206,7 +244,7 @@ describe('PitchCoreAdapter', () => {
     expect(first.frame.confidence).toBe(0);
     const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
     expect(confirmed.frame.freq).toBeCloseTo(82.4069);
-    expect(confirmed.frame.confidence).toBe(0.64);
+    expect(confirmed.frame.confidence).toBeCloseTo(0.774);
 
     expect(process).toHaveBeenCalledOnce();
     expect(processorFree).toHaveBeenCalledOnce();
@@ -220,6 +258,13 @@ function createWasmFrame(free: () => void) {
     arbitration: 'fused',
     cents: 0,
     confidence: 1.2,
+    confidence_agreement: 0.98,
+    confidence_calibrated: 0.91,
+    confidence_periodicity: 0.93,
+    confidence_signal: 1,
+    confidence_stability: 0.89,
+    confidence_uncertainty_cents: 4.5,
+    config_fingerprint: 161_782_394,
     decision: 'published',
     freq: 440,
     fixed_gate_open: true,
@@ -231,6 +276,7 @@ function createWasmFrame(free: () => void) {
     harmonic_4: 0,
     harmonic_5: 0,
     has_frequency: true,
+    has_interference: false,
     has_raw_frequency: true,
     has_secondary_candidate: true,
     has_selected_candidate: true,
@@ -239,6 +285,10 @@ function createWasmFrame(free: () => void) {
     has_yin_candidate: true,
     held: false,
     in_tune: true,
+    interference_candidate_frequency: 0,
+    interference_competing_target_frequency: 0,
+    interference_distance_cents: 0,
+    interference_selected_target_frequency: 0,
     is_power: false,
     level: 1.2,
     noise_floor: 0,

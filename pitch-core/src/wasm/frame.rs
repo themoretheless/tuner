@@ -7,6 +7,13 @@ pub struct WasmDetectionFrame {
     arbitration: String,
     cents: f32,
     confidence: f32,
+    confidence_agreement: f32,
+    confidence_calibrated: f32,
+    confidence_periodicity: f32,
+    confidence_signal: f32,
+    confidence_stability: f32,
+    confidence_uncertainty_cents: f32,
+    config_fingerprint: u32,
     decision: String,
     freq: f32,
     fixed_gate_open: bool,
@@ -19,6 +26,7 @@ pub struct WasmDetectionFrame {
     held: bool,
     raw_freq: f32,
     has_frequency: bool,
+    has_interference: bool,
     has_raw_frequency: bool,
     has_secondary_candidate: bool,
     has_selected_candidate: bool,
@@ -26,6 +34,10 @@ pub struct WasmDetectionFrame {
     has_target: bool,
     has_yin_candidate: bool,
     in_tune: bool,
+    interference_candidate_frequency: f32,
+    interference_competing_target_frequency: f32,
+    interference_distance_cents: f32,
+    interference_selected_target_frequency: f32,
     is_power: bool,
     level: f32,
     noise_floor: f32,
@@ -70,6 +82,41 @@ impl WasmDetectionFrame {
     #[wasm_bindgen(getter)]
     pub fn confidence(&self) -> f32 {
         self.confidence
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_agreement(&self) -> f32 {
+        self.confidence_agreement
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_calibrated(&self) -> f32 {
+        self.confidence_calibrated
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_periodicity(&self) -> f32 {
+        self.confidence_periodicity
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_signal(&self) -> f32 {
+        self.confidence_signal
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_stability(&self) -> f32 {
+        self.confidence_stability
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn confidence_uncertainty_cents(&self) -> f32 {
+        self.confidence_uncertainty_cents
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn config_fingerprint(&self) -> u32 {
+        self.config_fingerprint
     }
 
     #[wasm_bindgen(getter)]
@@ -133,6 +180,11 @@ impl WasmDetectionFrame {
     }
 
     #[wasm_bindgen(getter)]
+    pub fn has_interference(&self) -> bool {
+        self.has_interference
+    }
+
+    #[wasm_bindgen(getter)]
     pub fn has_raw_frequency(&self) -> bool {
         self.has_raw_frequency
     }
@@ -165,6 +217,26 @@ impl WasmDetectionFrame {
     #[wasm_bindgen(getter)]
     pub fn in_tune(&self) -> bool {
         self.in_tune
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn interference_candidate_frequency(&self) -> f32 {
+        self.interference_candidate_frequency
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn interference_competing_target_frequency(&self) -> f32 {
+        self.interference_competing_target_frequency
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn interference_distance_cents(&self) -> f32 {
+        self.interference_distance_cents
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn interference_selected_target_frequency(&self) -> f32 {
+        self.interference_selected_target_frequency
     }
 
     #[wasm_bindgen(getter)]
@@ -286,8 +358,17 @@ impl From<DetectionFrame> for WasmDetectionFrame {
         let has_yin_candidate = pipeline.yin.is_some();
         let has_secondary_candidate = pipeline.secondary.is_some();
         let has_selected_candidate = pipeline.selected.is_some();
+        let has_interference = pipeline.interference.is_some();
         let has_spectral_evidence = pipeline.spectral.is_some();
         let spectral = pipeline.spectral.unwrap_or_default();
+        let interference = pipeline
+            .interference
+            .unwrap_or(crate::PipelineInterferenceTelemetry {
+                candidate_frequency: 0.0,
+                competing_target_frequency: 0.0,
+                distance_cents: 0.0,
+                selected_target_frequency: 0.0,
+            });
         let (has_target, target_midi, target_frequency) =
             frame.target.as_ref().map_or((false, -1, 0.0), |target| {
                 (
@@ -301,6 +382,13 @@ impl From<DetectionFrame> for WasmDetectionFrame {
             arbitration: pipeline.arbitration.as_str().to_string(),
             cents: frame.cents,
             confidence: frame.confidence,
+            confidence_agreement: pipeline.confidence.agreement,
+            confidence_calibrated: pipeline.confidence.calibrated,
+            confidence_periodicity: pipeline.confidence.periodicity,
+            confidence_signal: pipeline.confidence.signal,
+            confidence_stability: pipeline.confidence.stability,
+            confidence_uncertainty_cents: pipeline.confidence.uncertainty_cents,
+            config_fingerprint: pipeline.config_fingerprint,
             decision: pipeline.decision.as_str().to_string(),
             freq: frame.freq.unwrap_or(0.0),
             fixed_gate_open: pipeline.fixed_gate_open,
@@ -313,6 +401,7 @@ impl From<DetectionFrame> for WasmDetectionFrame {
             held: pipeline.held,
             raw_freq: frame.raw_freq.unwrap_or(0.0),
             has_frequency,
+            has_interference,
             has_raw_frequency,
             has_secondary_candidate,
             has_selected_candidate,
@@ -320,6 +409,10 @@ impl From<DetectionFrame> for WasmDetectionFrame {
             has_target,
             has_yin_candidate,
             in_tune: frame.in_tune,
+            interference_candidate_frequency: interference.candidate_frequency,
+            interference_competing_target_frequency: interference.competing_target_frequency,
+            interference_distance_cents: interference.distance_cents,
+            interference_selected_target_frequency: interference.selected_target_frequency,
             is_power: frame.is_power,
             level: frame.level,
             noise_floor: pipeline.noise_floor,

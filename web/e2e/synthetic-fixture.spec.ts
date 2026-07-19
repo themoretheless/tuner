@@ -8,6 +8,7 @@ test('detects E2 through the synthetic fixture without microphone access', async
   await expect(page.getByTestId('session-status')).toContainText(/LISTENING|СЛУШАЕТ/);
   await expect(page.getByTestId('detected-note')).toHaveText('E2');
   await expect(page.getByTestId('detected-frequency')).toHaveText('82.4');
+  await expect(page.getByTestId('note-confidence')).toContainText(/уверенность|confidence/i);
   await expect(page.getByTestId('session-status')).toHaveAttribute('data-detector-backend', 'wasm');
 });
 
@@ -39,6 +40,8 @@ test('streams the canonical detection result inside the algorithm view', async (
   )).toBeGreaterThan(1);
   await expect(page.getByTestId('pipeline-frame-inspector')).toContainText(/WASM/);
   await expect(page.getByTestId('pipeline-what-if-frequency')).toHaveText('82.4 Hz');
+  await expect(page.getByTestId('pipeline-evidence')).toBeVisible();
+  await expect(page.getByTestId('pipeline-evidence').locator('code')).toHaveText(/[0-9A-F]{8}/);
 
   const captureButton = page.getByTestId('pipeline-baseline-capture');
   const captureSize = await captureButton.evaluate((element) => ({
@@ -90,4 +93,24 @@ test('streams the canonical detection result inside the algorithm view', async (
   await page.getByRole('button', { name: /STOP MICROPHONE|ВЫКЛЮЧИТЬ МИКРОФОН/ }).click();
   await expect(page.getByTestId('pipeline-live-note')).toHaveText('—');
   await expect(page.getByTestId('pipeline-live-frequency')).toHaveText('—');
+});
+
+test('turns octave measurements into a concrete intonation adjustment', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?fixture=E2');
+  await page.getByTestId('mic-toggle').click();
+  await page.getByRole('tab', { name: /Analysis|Анализ/ }).click();
+
+  const panel = page.getByTestId('intonation-setup');
+  await expect(panel).toBeVisible();
+  await expect(page.locator('.visual-canvas').first()).toBeVisible();
+  await panel.locator('input').nth(0).fill('82.4069');
+  await panel.locator('input').nth(1).fill('164.8138');
+  await panel.locator('input').nth(2).fill('166');
+
+  await expect(panel).toContainText(/увеличьте|increase/i);
+  await expect(panel).toContainText(/\+12\./);
+  const viewportWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(documentWidth).toBe(viewportWidth);
 });

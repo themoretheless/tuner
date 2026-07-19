@@ -17,6 +17,13 @@ interface WasmTunerFrame {
   readonly arbitration: string;
   readonly cents: number;
   readonly confidence: number;
+  readonly confidence_agreement: number;
+  readonly confidence_calibrated: number;
+  readonly confidence_periodicity: number;
+  readonly confidence_signal: number;
+  readonly confidence_stability: number;
+  readonly confidence_uncertainty_cents: number;
+  readonly config_fingerprint: number;
   readonly decision: string;
   readonly freq: number;
   readonly fixed_gate_open: boolean;
@@ -29,6 +36,7 @@ interface WasmTunerFrame {
   readonly held: boolean;
   readonly raw_freq: number;
   readonly has_frequency: boolean;
+  readonly has_interference: boolean;
   readonly has_raw_frequency: boolean;
   readonly has_secondary_candidate: boolean;
   readonly has_selected_candidate: boolean;
@@ -36,6 +44,10 @@ interface WasmTunerFrame {
   readonly has_target: boolean;
   readonly has_yin_candidate: boolean;
   readonly in_tune: boolean;
+  readonly interference_candidate_frequency: number;
+  readonly interference_competing_target_frequency: number;
+  readonly interference_distance_cents: number;
+  readonly interference_selected_target_frequency: number;
   readonly is_power: boolean;
   readonly level: number;
   readonly noise_floor: number;
@@ -162,10 +174,25 @@ export function readWasmFrame(frame: WasmTunerFrame): DetectionFrame {
     pipeline: normalizePipelineTelemetry({
       adaptiveGateOpen: frame.adaptive_gate_open,
       arbitration: frame.arbitration,
+      confidence: {
+        agreement: frame.confidence_agreement,
+        calibrated: frame.confidence_calibrated,
+        periodicity: frame.confidence_periodicity,
+        signal: frame.confidence_signal,
+        stability: frame.confidence_stability,
+        uncertaintyCents: frame.confidence_uncertainty_cents,
+      },
+      configFingerprint: frame.config_fingerprint,
       decision: frame.decision,
       fixedGateOpen: frame.fixed_gate_open,
       gateThreshold: frame.gate_threshold,
       held: frame.held,
+      interference: frame.has_interference ? {
+        candidateFrequency: frame.interference_candidate_frequency,
+        competingTargetFrequency: frame.interference_competing_target_frequency,
+        distanceCents: frame.interference_distance_cents,
+        selectedTargetFrequency: frame.interference_selected_target_frequency,
+      } : null,
       noiseFloor: frame.noise_floor,
       sampleRate: frame.sample_rate,
       secondary: frame.has_secondary_candidate ? {

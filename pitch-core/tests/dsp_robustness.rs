@@ -218,10 +218,38 @@ fn selected_e2_rejects_the_adjacent_a2_string_before_acquisition() {
     }
     .render();
     let mut engine = e2_engine();
+    let low_e = Note {
+        name: "E",
+        octave: 2,
+        frequency: E2,
+    };
+    let a = Note {
+        name: "A",
+        octave: 2,
+        frequency: 110.0,
+    };
+    engine.set_frame_context(Some(FrameContext {
+        display_targets: vec![low_e.clone(), a.clone()],
+        tuning_targets: vec![low_e.clone(), a],
+        selected_target: Some(low_e.clone()),
+        idle_target: Some(low_e),
+        ..FrameContext::default()
+    }));
+    let mut last_frame = None;
 
     for _ in 0..8 {
-        assert!(engine.process(&samples, SAMPLE_RATE).freq.is_none());
+        let frame = engine.process(&samples, SAMPLE_RATE);
+        assert!(frame.freq.is_none());
+        last_frame = Some(frame);
     }
+
+    let last_frame = last_frame.expect("last rejected A2 frame");
+    let interference = last_frame
+        .pipeline
+        .interference
+        .expect("rejected A2 should remain visible as competing-string evidence");
+    assert!((interference.selected_target_frequency - E2).abs() < 0.01);
+    assert!((interference.competing_target_frequency - 110.0).abs() < 0.1);
 }
 
 #[test]

@@ -175,19 +175,19 @@ function normalizeOffsets(value: unknown): number[] {
     .map((offset) => normalizeInteger(offset, -25, 25, 0));
 }
 
-function normalizeDisplayMode(value: unknown): DisplayMode {
+export function normalizeDisplayMode(value: unknown): DisplayMode {
   return value === 'needle' || value === 'strobe' ? value : 'gauge';
 }
 
-function normalizeAudioBackend(value: unknown): AudioBackend {
+export function normalizeAudioBackend(value: unknown): AudioBackend {
   return value === 'native' ? 'native' : 'web';
 }
 
-function normalizeThemeMode(value: unknown): ThemeMode {
+export function normalizeThemeMode(value: unknown): ThemeMode {
   return value === 'light' || value === 'colorblind' ? value : 'dark';
 }
 
-function normalizeLayoutMode(value: unknown): LayoutMode {
+export function normalizeLayoutMode(value: unknown): LayoutMode {
   return value === 'stage' || value === 'compact' ? value : 'default';
 }
 

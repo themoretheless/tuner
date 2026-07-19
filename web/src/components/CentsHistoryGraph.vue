@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useL10n } from '../stores/l10n'
-import type { CentsHistoryPoint } from '../composables/useCentsHistory'
+import type { CentsHistoryPoint } from '../domain/centsHistory'
 
 const props = defineProps<{
   points: CentsHistoryPoint[]

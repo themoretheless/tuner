@@ -1,7 +1,7 @@
 use super::config::{NativeAudioConfig, NativeAudioNote};
 use pitch_core::{
-    DetectorConfig, EngineConfig, PipelineCandidate, PipelineSpectralTelemetry, PipelineTelemetry,
-    TunerEngine, Tuning,
+    DetectorConfig, EngineConfig, PipelineCandidate, PipelineConfidenceTelemetry,
+    PipelineSpectralTelemetry, PipelineTelemetry, TunerEngine, Tuning,
 };
 use serde::Serialize;
 use std::time::Instant;
@@ -36,10 +36,13 @@ struct NativePipelineCandidate {
 struct NativePipelineTelemetry {
     adaptive_gate_open: bool,
     arbitration: &'static str,
+    confidence: NativePipelineConfidenceTelemetry,
+    config_fingerprint: u32,
     decision: &'static str,
     fixed_gate_open: bool,
     gate_threshold: f32,
     held: bool,
+    interference: Option<NativePipelineInterferenceTelemetry>,
     noise_floor: f32,
     processing_ms: f32,
     sample_rate: f32,
@@ -49,6 +52,26 @@ struct NativePipelineTelemetry {
     tracked: bool,
     window_samples: u32,
     yin: Option<NativePipelineCandidate>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePipelineConfidenceTelemetry {
+    agreement: f32,
+    calibrated: f32,
+    periodicity: f32,
+    signal: f32,
+    stability: f32,
+    uncertainty_cents: f32,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativePipelineInterferenceTelemetry {
+    candidate_frequency: f32,
+    competing_target_frequency: f32,
+    distance_cents: f32,
+    selected_target_frequency: f32,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -66,10 +89,20 @@ impl NativePipelineTelemetry {
         Self {
             adaptive_gate_open: telemetry.adaptive_gate_open,
             arbitration: telemetry.arbitration.as_str(),
+            confidence: NativePipelineConfidenceTelemetry::from_core(telemetry.confidence),
+            config_fingerprint: telemetry.config_fingerprint,
             decision: telemetry.decision.as_str(),
             fixed_gate_open: telemetry.fixed_gate_open,
             gate_threshold: telemetry.gate_threshold,
             held: telemetry.held,
+            interference: telemetry
+                .interference
+                .map(|value| NativePipelineInterferenceTelemetry {
+                    candidate_frequency: value.candidate_frequency,
+                    competing_target_frequency: value.competing_target_frequency,
+                    distance_cents: value.distance_cents,
+                    selected_target_frequency: value.selected_target_frequency,
+                }),
             noise_floor: telemetry.noise_floor,
             processing_ms: telemetry.processing_ms,
             sample_rate: telemetry.sample_rate,
@@ -81,6 +114,19 @@ impl NativePipelineTelemetry {
             tracked: telemetry.tracked,
             window_samples: telemetry.window_samples,
             yin: telemetry.yin.map(NativePipelineCandidate::from_core),
+        }
+    }
+}
+
+impl NativePipelineConfidenceTelemetry {
+    fn from_core(telemetry: PipelineConfidenceTelemetry) -> Self {
+        Self {
+            agreement: telemetry.agreement,
+            calibrated: telemetry.calibrated,
+            periodicity: telemetry.periodicity,
+            signal: telemetry.signal,
+            stability: telemetry.stability,
+            uncertainty_cents: telemetry.uncertainty_cents,
         }
     }
 }
@@ -295,10 +341,20 @@ mod tests {
                 "pipeline": {
                     "adaptiveGateOpen": false,
                     "arbitration": "none",
+                    "confidence": {
+                        "agreement": 0.0,
+                        "calibrated": 0.0,
+                        "periodicity": 0.0,
+                        "signal": 0.0,
+                        "stability": 0.0,
+                        "uncertaintyCents": 100.0,
+                    },
+                    "configFingerprint": 0,
                     "decision": "no-candidate",
                     "fixedGateOpen": false,
                     "gateThreshold": 0.0,
                     "held": false,
+                    "interference": null,
                     "noiseFloor": 0.0,
                     "processingMs": 0.0,
                     "sampleRate": 0.0,

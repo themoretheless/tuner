@@ -14,6 +14,11 @@ const props = defineProps<{
 
 const { t } = useL10n()
 const confidencePercent = computed(() => Math.round(Math.max(0, Math.min(1, props.confidence ?? 0)) * 100))
+const liveAnnouncement = computed(() => (
+  props.isDetected
+    ? `${props.display ?? ''} ${t('detected')}`
+    : t('waiting.signal')
+))
 
 // Non-breaking space: keeps placeholder rows at their normal line height (a
 // plain space collapses and the row would contribute zero height).
@@ -21,7 +26,8 @@ const NBSP = ' '
 </script>
 
 <template>
-  <div class="text-center pt-2 pb-1 select-none" aria-live="polite">
+  <div class="text-center pt-2 pb-1 select-none">
+    <span class="sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnouncement }}</span>
     <!-- Both states render the same three rows so detection flickering on
          and off never changes the block height and shifts the layout below. -->
     <div class="flex flex-col items-center">
@@ -34,8 +40,12 @@ const NBSP = ' '
       <div class="text-sm text-slate-400 mt-0.5">{{ isDetected ? t('detected') : NBSP }}</div>
       <div class="mt-1 text-[10px] text-slate-500">
         <template v-if="isDetected && (confidence != null || isPowerChord)">
-          <span v-if="confidence != null">conf {{ confidencePercent }}%</span>
-          <span v-if="isPowerChord" class="text-amber-400 ml-1">(power)</span>
+          <span v-if="confidence != null" data-testid="note-confidence">
+            {{ t('confidence.short') }} {{ confidencePercent }}%
+          </span>
+          <span v-if="isPowerChord" class="text-amber-400 ml-1">
+            {{ t('power.short') }}
+          </span>
         </template>
         <template v-else>&nbsp;</template>
       </div>

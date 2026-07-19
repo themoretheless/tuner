@@ -8,6 +8,7 @@ import {
   isAudioFrameInputPort,
   isDetectionFrameInputPort,
   isExactPcmCaptureInputPort,
+  isDiagnosableAudioInputPort,
   type ExactPcmCapture,
   type ExactPcmCaptureInputPort,
   type AudioInputPort,
@@ -98,13 +99,14 @@ export function useTunerSession(options: TunerSessionOptions) {
     }
   }, { deep: true, immediate: true });
 
-  const detectionFrame = computed<DetectionFrame>(() => {
+  const sourceDetectionFrame = computed<DetectionFrame>(() => {
     const port = activeInputPort.value;
     if (isDetectionFrameInputPort(port)) {
       return port.frame.value ?? createUnresolvedDetectionFrame();
     }
     return pitch.detectionFrame.value;
   });
+  const detectionFrame = sourceDetectionFrame;
   const detectedFrequency = computed(() => detectionFrame.value.freq);
   const detectionFrameResolved = computed(() => (
     isDetectionFrameInputPort(activeInputPort.value)
@@ -113,6 +115,10 @@ export function useTunerSession(options: TunerSessionOptions) {
 
   const adapterError = computed(() => activeInputPort.value.error.value);
   const error = computed(() => loadError.value ?? adapterError.value);
+  const inputDiagnostics = computed(() => {
+    const port = activeInputPort.value;
+    return isDiagnosableAudioInputPort(port) ? port.inputDiagnostics.value : null;
+  });
 
   const status = computed(() => {
     const state = lifecycleSnapshot.value.status;
@@ -291,11 +297,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     analyser: audio.analyser,
     audioSampleRate: audio.sampleRate,
     clearError,
-    currentFrequency: computed(() => (
-      isDetectionFrameInputPort(activeInputPort.value)
-        ? detectionFrame.value.freq
-        : pitch.currentFrequency.value
-    )),
+    currentFrequency: computed(() => detectionFrame.value.freq),
     detectionFrame,
     detectionFrameTimebase: computed(() => (
       isDetectionFrameInputPort(activeInputPort.value) ? null : pitch.frameTimebase.value
@@ -319,6 +321,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     fileAudioName: fileAudio.fileName,
     fileAudioProgress: fileAudio.progress,
     inputDevices: audio.inputDevices,
+    inputDiagnostics,
     isListening,
     nativeAudioAvailable: nativeAudio.available,
     refreshInputDevices: audio.refreshInputDevices,

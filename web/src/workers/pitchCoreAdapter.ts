@@ -1,10 +1,20 @@
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import {
+  ConfidenceEvidenceEstimator,
+  detectCompetingTarget,
+  strongestCandidateFrequency,
+} from '../domain/confidenceEvidence';
+import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
+  pipelineConfigFingerprint,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../types/frames';
+import type {
+  DetectionFrameSemantics,
+  PitchDetectorBackend,
+} from '../types/detectorBackend';
 import {
   normalizeLevel,
   type PitchAnalysis,
@@ -21,9 +31,6 @@ import {
   readWasmFrame,
   type StatefulWasmTunerProcessor,
 } from './pitchFrameCodec';
-
-export type PitchDetectorBackend = 'typescript' | 'wasm';
-export type DetectionFrameSemantics = 'resolved' | 'unresolved';
 
 export interface WorkerPitchFrame {
   backend: PitchDetectorBackend;
@@ -50,6 +57,7 @@ export class PitchCoreAdapter {
   private readonly fallback: FallbackPitchDetector;
   private fallbackGuidance: PitchGuidance | undefined;
   private readonly fallbackTracker = new StreamingPitchTracker();
+  private readonly fallbackConfidence = new ConfidenceEvidenceEstimator();
   private lastMaxFrequency: number | null = null;
   private lastMinFrequency: number | null = null;
   private readonly loadModule: PitchCoreModuleLoader;
@@ -77,14 +85,17 @@ export class PitchCoreAdapter {
     pipelineConfig?: PipelineConfig,
   ): Promise<WorkerPitchFrame> {
     const rangeChanged = this.updateRange(range);
+    if (rangeChanged) this.fallbackConfidence.reset();
     const pipelineChanged = pipelineConfig != null;
     if (pipelineConfig) {
       this.pipelineConfig = normalizePipelineConfig(pipelineConfig);
       this.fallbackTracker.setPipelineConfig(this.pipelineConfig);
+      this.fallbackConfidence.reset();
     }
     if (frameContext) {
       this.fallbackGuidance = guidanceFromContext(frameContext);
       this.fallbackTracker.setContext(frameContext);
+      this.fallbackConfidence.reset();
     }
     const processor = await this.getProcessor();
     if (!processor) return this.fallbackFrame(buffer, sampleRate, stats, range);
@@ -100,6 +111,7 @@ export class PitchCoreAdapter {
       const wasmFrame = processor.process(buffer, sampleRate);
       try {
         this.fallbackTracker.reset();
+        this.fallbackConfidence.reset();
         const frame = readWasmFrame(wasmFrame);
         frame.pipeline.processingMs = nowMs() - started;
         return {
@@ -124,12 +136,14 @@ export class PitchCoreAdapter {
     this.fallbackGuidance = undefined;
     this.pipelineConfig = createDefaultPipelineConfig();
     this.fallbackTracker.reset();
+    this.fallbackConfidence.reset();
     const processor = await pending?.catch(() => null);
     processor?.free();
   }
 
   async reset(): Promise<void> {
     this.fallbackTracker.reset();
+    this.fallbackConfidence.reset();
     const processor = await this.processorPromise?.catch(() => null);
     processor?.reset();
   }
@@ -153,6 +167,7 @@ export class PitchCoreAdapter {
   private disableProcessor(processor: StatefulWasmTunerProcessor) {
     this.processorPromise = Promise.resolve(null);
     this.fallbackTracker.reset();
+    this.fallbackConfidence.reset();
     processor.free();
   }
 
@@ -176,18 +191,34 @@ export class PitchCoreAdapter {
     const decision = !analysis.fixedGateOpen && !tracked
       ? 'fixed-gate-rejected'
       : trackerTelemetry.decision;
+    const confidence = this.fallbackConfidence.observe({
+      decision,
+      noiseFloor: trackerTelemetry.noiseFloor,
+      outputConfidence: tracked?.confidence ?? 0,
+      rawFrequency: trackerTelemetry.selected?.frequency ?? null,
+      rms: stats.rms,
+      secondary: analysis.secondary,
+      yin: analysis.yin,
+    });
     const frame = createUnresolvedDetectionFrame({
-      confidence: tracked?.confidence ?? 0,
+      confidence: tracked ? confidence.calibrated : 0,
       freq: tracked?.frequency ?? null,
       rawFreq: trackerTelemetry.selected?.frequency ?? null,
       level: normalizeLevel(stats.rms),
       pipeline: {
         adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
         arbitration: analysis.arbitration,
+        confidence,
+        configFingerprint: pipelineConfigFingerprint(this.pipelineConfig),
         decision,
         fixedGateOpen: analysis.fixedGateOpen,
         gateThreshold: trackerTelemetry.gateThreshold,
         held: decision === 'held',
+        interference: detectCompetingTarget(
+          strongestCandidateFrequency(analysis.yin, analysis.secondary),
+          this.fallbackGuidance?.selectedFrequency,
+          this.fallbackGuidance?.targetFrequencies ?? [],
+        ),
         noiseFloor: trackerTelemetry.noiseFloor,
         sampleRate,
         secondary: analysis.secondary,

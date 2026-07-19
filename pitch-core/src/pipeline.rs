@@ -42,12 +42,66 @@ impl PipelineConfig {
         }
         self
     }
+
+    /// Stable, non-cryptographic provenance id shared with the web fallback.
+    /// The byte order is contractual; append new fields rather than reordering.
+    pub fn fingerprint(self) -> u32 {
+        let normalized = self.normalized();
+        let bytes = [
+            1,
+            normalized.adaptive_gate_enabled as u8,
+            normalized.dc_removal_enabled as u8,
+            normalized.fixed_gate_enabled as u8,
+            normalized.harmonic_enabled as u8,
+            normalized.hold_enabled as u8,
+            normalized.octave_enabled as u8,
+            normalized.power_chord_enabled as u8,
+            normalized.secondary_detector_enabled as u8,
+            normalized.tracking_enabled as u8,
+            normalized.yin_enabled as u8,
+        ];
+        bytes.into_iter().fold(2_166_136_261, |hash, byte| {
+            (hash ^ u32::from(byte)).wrapping_mul(16_777_619)
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PipelineCandidate {
     pub confidence: f32,
     pub frequency: f32,
+}
+
+/// Independent evidence behind the user-facing confidence value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PipelineConfidenceTelemetry {
+    pub agreement: f32,
+    pub calibrated: f32,
+    pub periodicity: f32,
+    pub signal: f32,
+    pub stability: f32,
+    pub uncertainty_cents: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PipelineInterferenceTelemetry {
+    pub candidate_frequency: f32,
+    pub competing_target_frequency: f32,
+    pub distance_cents: f32,
+    pub selected_target_frequency: f32,
+}
+
+impl Default for PipelineConfidenceTelemetry {
+    fn default() -> Self {
+        Self {
+            agreement: 0.0,
+            calibrated: 0.0,
+            periodicity: 0.0,
+            signal: 0.0,
+            stability: 0.0,
+            uncertainty_cents: 100.0,
+        }
+    }
 }
 
 /// Small, fixed-size spectral summary used by the diagnostics UI.
@@ -130,10 +184,13 @@ impl PipelineDecision {
 pub struct PipelineTelemetry {
     pub adaptive_gate_open: bool,
     pub arbitration: PipelineArbitration,
+    pub confidence: PipelineConfidenceTelemetry,
+    pub config_fingerprint: u32,
     pub decision: PipelineDecision,
     pub fixed_gate_open: bool,
     pub gate_threshold: f32,
     pub held: bool,
+    pub interference: Option<PipelineInterferenceTelemetry>,
     pub noise_floor: f32,
     pub processing_ms: f32,
     pub sample_rate: f32,
@@ -160,5 +217,31 @@ mod tests {
 
         assert!(normalized.yin_enabled);
         assert!(!normalized.secondary_detector_enabled);
+    }
+
+    #[test]
+    fn fingerprint_is_stable_and_changes_with_normalized_configuration() {
+        let stable = PipelineConfig::default().fingerprint();
+        let fast = PipelineConfig {
+            tracking_enabled: false,
+            ..PipelineConfig::default()
+        }
+        .fingerprint();
+        let normalized = PipelineConfig {
+            yin_enabled: false,
+            secondary_detector_enabled: false,
+            ..PipelineConfig::default()
+        }
+        .fingerprint();
+        let explicit = PipelineConfig {
+            yin_enabled: true,
+            secondary_detector_enabled: false,
+            ..PipelineConfig::default()
+        }
+        .fingerprint();
+
+        assert_eq!(stable, PipelineConfig::default().fingerprint());
+        assert_ne!(stable, fast);
+        assert_eq!(normalized, explicit);
     }
 }

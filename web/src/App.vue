@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, provide, ref, watch } from 'vue';
-import { createFeaturePorts, featurePortKeys } from './app/featurePorts';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Minimize2 } from '@lucide/vue';
+import { provideFeaturePorts } from './app/featurePorts';
 import { useTuner } from './composables/useTuner';
 import { useL10n } from './stores/l10n';
 import LiveTunerView from './features/tuner/LiveTunerView.vue';
@@ -12,13 +13,9 @@ const PracticeView = defineAsyncComponent(() => import('./features/practice/Prac
 
 type AppView = 'tuner' | 'pipeline' | 'library' | 'practice' | 'analysis';
 
-const tuner = useTuner();
-const ports = createFeaturePorts(tuner);
-provide(featurePortKeys.live, ports.live);
-provide(featurePortKeys.library, ports.library);
-provide(featurePortKeys.practice, ports.practice);
-provide(featurePortKeys.analysis, ports.analysis);
-provide(featurePortKeys.pipeline, ports.pipeline);
+const application = useTuner();
+const tuner = application.shell;
+provideFeaturePorts(application.featurePorts);
 
 const { lang, t, toggleLang } = useL10n();
 const activeView = ref<AppView>('tuner');
@@ -59,7 +56,7 @@ function handleKey(event: KeyboardEvent) {
   }
 }
 
-watch(tuner.layoutMode, (layout) => {
+watch(() => tuner.layoutMode.value, (layout) => {
   if (layout === 'stage') activeView.value = 'tuner';
 });
 
@@ -78,6 +75,16 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
         </div>
       </div>
       <div class="header-actions">
+        <button
+          v-if="tuner.layoutMode.value === 'stage'"
+          type="button"
+          class="utility-button"
+          :aria-label="t('appearance.exitStage')"
+          :title="t('appearance.exitStage')"
+          @click="tuner.setLayoutMode('default')"
+        >
+          <Minimize2 :size="16" aria-hidden="true" />
+        </button>
         <button type="button" class="utility-button" :aria-label="t('language.toggle')" @click="toggleLang">
           {{ lang === 'ru' ? 'RU' : 'EN' }}
         </button>

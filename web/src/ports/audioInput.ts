@@ -1,12 +1,11 @@
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { PitchDetectionRange } from '../utils/pitch';
+import type { AudioInputDiagnostics } from '../domain/audioInputDiagnostics';
+import type { ReadableValue } from '../application/ports/value';
 
+export type { ReadableValue } from '../application/ports/value';
 export type AudioInputId = 'web' | 'native' | 'synthetic' | 'file';
-
-export interface ReadableValue<T> {
-  readonly value: T;
-}
 
 export interface AudioFrame {
   buffer: Float32Array<ArrayBuffer>;
@@ -58,6 +57,10 @@ export interface DeviceSelectableAudioInputPort extends AudioFrameInputPort {
   selectInputDevice(deviceId: string): void;
 }
 
+export interface DiagnosableAudioInputPort extends AudioFrameInputPort {
+  readonly inputDiagnostics: ReadableValue<AudioInputDiagnostics | null>;
+}
+
 export interface DetectionFrameInputPort extends AudioInputPortBase {
   readonly frame: ReadableValue<DetectionFrame | null>;
   readonly output: 'detection-frame';
@@ -90,6 +93,12 @@ export function isDeviceSelectableAudioInputPort(
     && 'refreshInputDevices' in port
     && 'selectInputDevice' in port
     && 'selectedInputDeviceId' in port;
+}
+
+export function isDiagnosableAudioInputPort(
+  port: AudioInputPort,
+): port is DiagnosableAudioInputPort {
+  return isAudioFrameInputPort(port) && 'inputDiagnostics' in port;
 }
 
 export function isDetectionFrameInputPort(port: AudioInputPort): port is DetectionFrameInputPort {

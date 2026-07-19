@@ -1,16 +1,21 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue';
 import { useAnalysisPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
 import CentsHistoryGraph from '../../components/CentsHistoryGraph.vue';
 import DisplayModeSelector from '../../components/DisplayModeSelector.vue';
 import DisplayPreferences from '../../components/DisplayPreferences.vue';
 import FreqReadout from '../../components/FreqReadout.vue';
+import IntonationSetupPanel from '../../components/IntonationSetupPanel.vue';
 import Spectrogram from '../../components/Spectrogram.vue';
 import Spectrum from '../../components/Spectrum.vue';
 import Waveform from '../../components/Waveform.vue';
 
 const analysis = useAnalysisPort();
 const { t } = useL10n();
+
+onMounted(analysis.activate);
+onUnmounted(analysis.deactivate);
 </script>
 
 <template>
@@ -20,10 +25,15 @@ const { t } = useL10n();
         <h2 id="analysis-heading">{{ t('nav.analysis') }}</h2>
         <p>{{ t('analysis.subtitle') }}</p>
       </div>
-      <button v-if="!analysis.isListening" type="button" class="btn btn-primary" @click="analysis.start()">
-        {{ t('start.mic') }}
+      <button type="button" class="btn btn-primary" @click="analysis.isListening ? analysis.stop() : analysis.start()">
+        {{ analysis.isListening ? t('stop.mic') : t('start.mic') }}
       </button>
     </header>
+
+    <div v-if="analysis.error" class="error-banner" role="alert">
+      <span>{{ analysis.error }}</span>
+      <button type="button" @click="analysis.clearError()">{{ t('dismiss') }}</button>
+    </div>
 
     <div class="analysis-toolbar card">
       <label class="toggle-control">
@@ -81,6 +91,11 @@ const { t } = useL10n();
           @theme-change="analysis.setThemeMode"
         />
       </div>
+      <IntonationSetupPanel
+        class="analysis-wide"
+        :detected-frequency="analysis.detectionFrame.freq"
+        :is-listening="analysis.isListening"
+      />
     </div>
   </section>
 </template>

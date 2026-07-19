@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createCustomLibraryController } from '../src/application/customLibraryController';
+import { createCustomLibraryController } from '../src/application/controllers/customLibraryController';
 import {
   INSTRUMENTS,
   TUNINGS,

@@ -7,6 +7,11 @@ import type {
   ExactPcmCaptureInputPort,
 } from '../ports/audioInput';
 import { createAudioContext, errorMessage } from '../utils/audio';
+import {
+  createAudioInputDiagnostics,
+  REQUESTED_AUDIO_PROCESSING,
+  type AudioInputDiagnostics,
+} from '../domain/audioInputDiagnostics';
 
 const DEFAULT_SAMPLE_RATE = 44100;
 
@@ -16,6 +21,7 @@ export interface WebAudioInputAdapter
   extends ExactPcmCaptureInputPort, DeviceSelectableAudioInputPort {
   analyser: Ref<AnalyserNode | null>;
   inputDevices: Ref<MediaDeviceInfo[]>;
+  inputDiagnostics: Ref<AudioInputDiagnostics | null>;
   refreshInputDevices(): Promise<void>;
   sampleRate: Ref<number>;
   selectedInputDeviceId: Ref<string>;
@@ -36,6 +42,7 @@ export function useAudioInput(
   const error = ref<string | null>(null);
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
+  const inputDiagnostics = ref<AudioInputDiagnostics | null>(null);
   const sampleRate = ref(DEFAULT_SAMPLE_RATE);
   const exactPcmCaptureAvailable = ref(false);
   const available = computed(() => (
@@ -72,6 +79,7 @@ export function useAudioInput(
   async function start() {
     error.value = null;
     if (isListening.value) return true;
+    inputDiagnostics.value = null;
     if (!available.value) {
       error.value = 'Microphone API unavailable';
       return false;
@@ -81,10 +89,7 @@ export function useAudioInput(
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...(selectedInputDeviceId.value ? { deviceId: { exact: selectedInputDeviceId.value } } : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
+          ...REQUESTED_AUDIO_PROCESSING,
         },
       });
 
@@ -107,6 +112,11 @@ export function useAudioInput(
         }
       };
       sampleRate.value = audioContext.sampleRate;
+      const trackSettings = stream.getAudioTracks()[0]?.getSettings?.() ?? {};
+      inputDiagnostics.value = createAudioInputDiagnostics(
+        trackSettings as Partial<MediaTrackSettings>,
+        audioContext.sampleRate,
+      );
       const nextAnalyser = audioContext.createAnalyser();
       nextAnalyser.fftSize = fftSize;
       nextAnalyser.smoothingTimeConstant = 0.55;
@@ -280,6 +290,7 @@ export function useAudioInput(
     finishExactPcmCapture,
     id: 'web',
     inputDevices,
+    inputDiagnostics,
     isListening,
     output: 'audio-frame',
     readFrame,

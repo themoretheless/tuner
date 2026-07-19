@@ -1,16 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ref } from 'vue';
+import { createSettingsStore } from '../src/composables/useSettings';
 import { useTuningState } from '../src/composables/useTuningState';
-
-beforeEach(() => {
-  // useSettings persists asynchronously through window timers; give the
-  // node test environment a window so those saves are harmless no-ops.
-  vi.stubGlobal('window', globalThis);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 // E2 (82.41) and A2 (110) sit either side of ~95.2 Hz; readings wobbling a
 // few cents around that midpoint used to flip the auto target every frame,
@@ -18,7 +9,11 @@ afterEach(() => {
 describe('auto target stickiness', () => {
   it('keeps the current target through jitter around the midpoint', () => {
     const frequency = ref<number | null>(null);
-    const state = useTuningState(frequency);
+    const settings = createSettingsStore({
+      load: async () => ({}),
+      save: async () => {},
+    });
+    const state = useTuningState(frequency, { settings });
 
     frequency.value = 95.0; // closest string: E2, just below the midpoint
     expect(state.targetNote.value.name).toBe('E');
@@ -36,5 +31,6 @@ describe('auto target stickiness', () => {
     frequency.value = null;
     frequency.value = 95.0;
     expect(state.targetNote.value.name).toBe('E');
+    settings.dispose();
   });
 });

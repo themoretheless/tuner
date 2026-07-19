@@ -117,8 +117,8 @@ function blockHelp(block: PipelineHelpId): PipelineBlockHelp {
     <PipelineLiveResult
       :error="pipeline.error"
       :format-freq="pipeline.formatFreq"
-      :frame="pipeline.detectionFrame"
-      :has-detection="pipeline.hasDetection"
+      :frame="pipeline.presentationFrame"
+      :has-detection="pipeline.presentationHasDetection"
       :is-listening="pipeline.isListening"
       :session-status="pipeline.sessionStatus"
       :target-frequency="pipeline.targetNote.frequency"
@@ -133,6 +133,7 @@ function blockHelp(block: PipelineHelpId): PipelineBlockHelp {
       :format-freq="pipeline.formatFreq"
       :frame="pipeline.detectionFrame"
       :is-listening="pipeline.isListening"
+      :input-diagnostics="pipeline.inputDiagnostics"
       :preset="pipeline.preset"
       :target-frequency="pipeline.targetNote.frequency"
     />
