@@ -54,7 +54,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 42 | insta snapshot tests for full DetectionResult on fixture WAVs | P2 | 56 | r2:dx-quality | [PARTIAL 2026-07-18] 19 real WAV temporal gates exist; per-frame golden snapshots remain. |
 | 43 | Browser-language auto-detect via navigator.languages with persisted override | P2 | 56 | r3:i18n-breadth | Foundation for all localization; cheap and immediately broadens reach. |
 | 44 | Preallocate YIN buffers as module singletons across calls | P2 | 56 | r4:perf-bundle | pitch.ts reallocates per size change; pin to max guitar size. [DONE 2026-07-11] |
-| 45 | Playwright E2E for mic-permission-denied flow | P2 | 56 | r4:docs-dx | Drive fake getUserMedia, assert permission UI path renders. |
+| 45 | Playwright E2E for mic-permission-denied flow | P2 | 56 | r4:docs-dx | Drive fake getUserMedia, assert permission UI path renders. [DONE 2026-07-21] Denial, actionable UI error and successful retry are browser-tested. |
 | 46 | localize hardcoded English in-tune hint | P2 | 55 | r1:review |  |
 | 47 | Goertzel bank locked to 6 selected-string targets and their first 4 harmonics | P2 | 55 | r2:algorithms | Cheap targeted detection when string is known. |
 | 48 | WASM streaming instantiation via instantiateStreaming for pitch-core | P2 | 55 | r4:perf-bundle | wasm-bindgen loader uses `instantiateStreaming`; Playwright verifies the live WASM path. [DONE 2026-07-11] |
@@ -99,7 +99,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 87 | bass 4/5-string tunings | P3 | 48 | r1:review |  |
 | 88 | A4 clamp on commit not keystroke | P3 | 48 | r1:review |  |
 | 89 | reference-tone playback feedback | P3 | 48 | r1:review |  |
-| 90 | devicechange listener refresh | P3 | 48 | r1:review |  |
+| 90 | devicechange listener refresh | P3 | 48 | r1:review | [DONE 2026-07-21] Debounced refresh preserves a missing saved device and restores it when the catalog recovers. |
 | 91 | per-instrument detection frequency range | P3 | 48 | r1:review |  |
 | 92 | split useTuner god-composable | P3 | 48 | r1:review | [DONE 2026-07-19] |
 | 93 | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | P3 | 48 | r2:algorithms | Predictive smoothing tracks vibrato/glide better than EMA. |
@@ -518,6 +518,7 @@ The 187 cards below preserve detailed pre-refactor evidence and stable `C#` refe
 ### Status Notes
 
 - 2026-07-19: R186 is complete. Device selection now treats both `starting` and `listening` web sessions as restartable intent; a regression test holds the first permission request open and verifies that the second start receives the new `deviceId`.
+- 2026-07-21: R32/R190/M45/M90 are complete. Mocked browser audio covers permission denial/retry, track loss/restart and transient `devicechange`; selected-device persistence survives catalog blips, stale starts are revision-cancelled and active Web/Native switching is registry-tested.
 - 2026-07-21: R31/M127 are complete. One sample-indexed contract replays licensed bass E1, guitar E2 and violin A4 through native Rust and browser WASM frame by frame, while Rust tests project the same sessions through Tauri wire frames and egui view state.
 - 2026-07-19: R73 is complete. A PCM/float WAV adapter joins the shared session registry, exact AudioWorklet PCM windows carry source sample indices through the worker, and debug capture exports replayable PCM16 WAV + JSON v2 from the same analyzed stream.
 - 2026-07-12: R17 confidence/full-frame browser follow-up is complete. WASM `TunerProcessor` owns detector, smoothing, level, power and `FrameResolver`; revisioned context crosses the worker boundary once per change; TS fallback emits measured normalized-periodicity confidence; stop/restart explicitly resets worker state.

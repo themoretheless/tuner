@@ -6,14 +6,16 @@ import type {
   ExactPcmCapture,
   ExactPcmCaptureInputPort,
 } from '../ports/audioInput';
-import { createAudioContext, errorMessage } from '../utils/audio';
+import { createAudioContext } from '../utils/audio';
 import {
   createAudioInputDiagnostics,
   REQUESTED_AUDIO_PROCESSING,
   type AudioInputDiagnostics,
 } from '../domain/audioInputDiagnostics';
+import { classifyMicrophoneStartFailure } from '../domain/microphoneStartFailure';
 
 const DEFAULT_SAMPLE_RATE = 44100;
+const DEVICE_REFRESH_DEBOUNCE_MS = 250;
 
 export type { AudioFrame } from '../ports/audioInput';
 
@@ -50,8 +52,11 @@ export function useAudioInput(
   ));
 
   let audioContext: AudioContext | null = null;
+  let deviceRefreshRevision = 0;
+  let deviceRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
+  let streamRevision = 0;
   let completedPcmCapture: ExactPcmCapture | null = null;
   let pcmCaptureNode: AudioWorkletNode | null = null;
   let pcmTimeline: SampleTimeline | null = null;
@@ -60,25 +65,29 @@ export function useAudioInput(
 
   async function refreshInputDevices() {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
+    const revision = ++deviceRefreshRevision;
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
+      if (revision !== deviceRefreshRevision) return;
       inputDevices.value = devices.filter((device) => device.kind === 'audioinput');
-      if (
-        selectedInputDeviceId.value &&
-        inputDevices.value.length > 0 &&
-        inputDevices.value.some((device) => device.deviceId) &&
-        !inputDevices.value.some((device) => device.deviceId === selectedInputDeviceId.value)
-      ) {
-        selectedInputDeviceId.value = '';
-      }
     } catch {
-      inputDevices.value = [];
+      // A transient browser/OS enumeration failure must not erase the last
+      // usable catalog or the persisted device preference.
     }
+  }
+
+  function scheduleInputDeviceRefresh() {
+    if (deviceRefreshTimer != null) clearTimeout(deviceRefreshTimer);
+    deviceRefreshTimer = setTimeout(() => {
+      deviceRefreshTimer = null;
+      void refreshInputDevices();
+    }, DEVICE_REFRESH_DEBOUNCE_MS);
   }
 
   async function start() {
     error.value = null;
     if (isListening.value) return true;
+    const revision = ++streamRevision;
     inputDiagnostics.value = null;
     if (!available.value) {
       error.value = 'Microphone API unavailable';
@@ -86,12 +95,17 @@ export function useAudioInput(
     }
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      const nextStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...(selectedInputDeviceId.value ? { deviceId: { exact: selectedInputDeviceId.value } } : {}),
           ...REQUESTED_AUDIO_PROCESSING,
         },
       });
+      if (revision !== streamRevision) {
+        nextStream.getTracks().forEach((track) => track.stop());
+        return false;
+      }
+      stream = nextStream;
 
       // If the mic track ends involuntarily (unplugged / OS revoked), stop
       // cleanly instead of leaving isListening true and reading stale zeros.
@@ -106,6 +120,7 @@ export function useAudioInput(
       if (audioContext.state === 'suspended') {
         await audioContext.resume().catch(() => {});
       }
+      if (revision !== streamRevision) return false;
       audioContext.onstatechange = () => {
         if (audioContext?.state === 'suspended' && isListening.value) {
           void audioContext.resume().catch(() => {});
@@ -124,20 +139,31 @@ export function useAudioInput(
       source = audioContext.createMediaStreamSource(stream);
       source.connect(nextAnalyser);
       await setupExactPcmPath(audioContext, source);
+      if (revision !== streamRevision) {
+        cleanup();
+        return false;
+      }
       analyser.value = nextAnalyser;
       isListening.value = true;
       void refreshInputDevices();
       return true;
     } catch (e: unknown) {
-      error.value = errorMessage(e, 'Microphone access denied or unavailable');
+      if (revision !== streamRevision) return false;
+      error.value = classifyMicrophoneStartFailure(
+        e,
+        Boolean(selectedInputDeviceId.value),
+      ).message;
       cleanup();
+      isListening.value = false;
       return false;
     }
   }
 
   function handleTrackEnded() {
-    error.value = 'Microphone disconnected';
-    void stop();
+    streamRevision += 1;
+    error.value = 'Microphone disconnected. Reconnect it and start listening again.';
+    cleanup();
+    isListening.value = false;
   }
 
   async function setupExactPcmPath(
@@ -217,6 +243,9 @@ export function useAudioInput(
     }
     sampleRate.value = DEFAULT_SAMPLE_RATE;
     if (stream) {
+      stream.getAudioTracks().forEach((track) => {
+        track.removeEventListener('ended', handleTrackEnded);
+      });
       stream.getTracks().forEach((track) => track.stop());
       stream = null;
     }
@@ -224,6 +253,7 @@ export function useAudioInput(
   }
 
   async function stop() {
+    streamRevision += 1;
     cleanup();
     isListening.value = false;
   }
@@ -272,11 +302,13 @@ export function useAudioInput(
 
   onMounted(() => {
     void refreshInputDevices();
-    navigator.mediaDevices?.addEventListener?.('devicechange', refreshInputDevices);
+    navigator.mediaDevices?.addEventListener?.('devicechange', scheduleInputDeviceRefresh);
   });
 
   onUnmounted(() => {
-    navigator.mediaDevices?.removeEventListener?.('devicechange', refreshInputDevices);
+    navigator.mediaDevices?.removeEventListener?.('devicechange', scheduleInputDeviceRefresh);
+    if (deviceRefreshTimer != null) clearTimeout(deviceRefreshTimer);
+    deviceRefreshRevision += 1;
     void stop();
   });
 

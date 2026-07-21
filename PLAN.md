@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (293 open/partial, 101 closed stable `R#` items).
+- [recommendation.md](recommendation.md) - current extract (290 open/partial, 104 closed stable `R#` items).
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) and historical detailed `C#` evidence; revalidate old findings against the status overlay.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
@@ -34,7 +34,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 155 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, eight E2E flows, licensed native/WASM/Tauri/egui replay parity and a blocking 19-capture corpus; transition/SNR/soak remain in M7 |
+| M0 safety net | Done baseline | 159 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, eleven E2E flows, licensed native/WASM/Tauri/egui replay parity and a blocking 19-capture corpus; transition/SNR/soak remain in M7 |
 | M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Done | One-line compatibility facade, 124-line Vue composition adapter, framework-independent use cases, injected `TunerInputSet`, explicit capabilities and five segregated feature-port contracts are architecture-tested |
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-21:** M0 is complete for the current refactor gate: toolchain pins, `155` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and eight browser flows including licensed native/WASM replay, full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation. Tauri wire frames and egui view state consume the same replay contract.
+**Status 2026-07-21:** M0 is complete for the current refactor gate: toolchain pins, `159` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and eleven browser flows including licensed native/WASM replay, full-frame WASM, synthetic/file detection, exact PCM capture, responsive Algorithm/Library navigation and mocked permission/device-loss recovery. Tauri wire frames and egui view state consume the same replay contract; active Web/Native switching is registry-tested.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -134,14 +134,14 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Release: Tauri CSP; macOS notarize / Windows sign; CI "zero network in release build" proof + cargo-deny/npm-audit.
 **Verify / DoD:** per-item; Lighthouse PWA offline passes; CI zero-fetch test green.
 
-**Status 2026-07-20:** lifecycle visibility and native teardown propagation are complete: restart intent is immediate, failed stop retains its backend for retry, snapshots expose typed operations, and the Tauri API boundary is injectable in adapter tests. Device-loss evidence, typed user-facing diagnostics, CSP/signing and accessibility gates remain.
+**Status 2026-07-21:** lifecycle visibility, native teardown propagation and web input recovery evidence are complete: restart intent is immediate, failed stop retains its backend for retry, snapshots expose typed operations, the Tauri API boundary is injectable, stale mic starts are revision-cancelled, and permission denial/track loss/devicechange/backend switching are tested. Cross-platform typed user-facing diagnostics, CSP/signing and accessibility gates remain.
 
 ---
 
 ## Now / Next / Later
 
-- **Now:** add permission/device-loss and backend-switch recovery evidence over the injected input registry.
-- **Next:** add typed diagnostics, SNR/noise/reverb corpus transforms and differential/benchmark/soak gates.
+- **Now:** add cross-platform typed diagnostics with actionable presentation for web, Tauri and egui.
+- **Next:** add SNR/noise/reverb corpus transforms and differential/benchmark/soak gates.
 - **Later:** complete M7 phase-aware accuracy work and the remaining M8 accessibility/release gates.
 
 ## Working conventions

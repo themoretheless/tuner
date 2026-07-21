@@ -40,7 +40,7 @@
 - Web/native/synthetic/file adapters реализуют один TS `AudioInputPort`; интерактивный WAV-вход декодирует PCM/float без browser resampling, публикует sample-indexed окна и проходит общий session pipeline.
 - `useTunerApplication` является composition root и внедряет типизированный `TunerInputSet` в session; lifecycle больше не создаёт конкретные web/file/native/synthetic adapters. Worker и main-thread fallback используют общий stateful processor и единый protocol contract.
 - Spectrum больше не считается, когда скрыт, но включённый Rust frame всё ещё клонирует `Vec<f32>`.
-- Лицензированный корпус из 19 реальных WAV покрывает guitar, bass, ukulele, violin и voice и блокирует CI по временным quality-метрикам. Не хватает SNR/noise/reverb матрицы, permission/device-loss E2E, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
+- Лицензированный корпус из 19 реальных WAV покрывает guitar, bass, ukulele, violin и voice и блокирует CI по временным quality-метрикам. Permission/device-loss/backend-switch recovery уже проверяется; не хватает SNR/noise/reverb матрицы, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
 - На вкладке Algorithm работают live route, составная уверенность с реальным разбросом окон, отпечаток конфигурации, диагностика обработки микрофона, предупреждение о конкурирующей струне, decision timeline, freeze/replay inspector, harmonic/octave/noise views, latency budget, virtual bypass и baseline A/B overlay. Debug capture пишет тот же PCM, который анализирует AudioWorklet, и выгружает mono PCM16 WAV + JSON v2 с sample timebase/SHA-256. Rust replay v2 и общий лицензированный контракт автоматически сравнивают native/WASM кадры и проверяют Tauri/egui projections; mic self-test и общая typed error taxonomy остаются открытыми.
 - Release hardening (signing/notarization/CSP/checksums) остаётся открытым.
 
@@ -58,7 +58,7 @@
 2. **Input provenance:** кадр несёт отпечаток pipeline-конфигурации и предупреждение о соседней струне; web-порт отдельно сообщает фактические AGC/noise/echo/sample-rate настройки.
 3. **Presentation review:** канонические кадры остаются на аудиочасах, а отдельный visual frame обновляется через `requestAnimationFrame` на частоте дисплея по правилу latest-frame-wins; смысловые переходы проходят сразу, Analysis получил мастер мензуры, а экранный диктор больше не зачитывает меняющийся процент.
 
-После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-21: `155` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, восемь browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Последний replay-проход добавил frame-by-frame parity для bass E1, guitar E2 и violin A4 через native Rust/browser WASM, Tauri wire contract и egui view state.
+После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-21: `159` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, одиннадцать browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Replay-проход добавил frame-by-frame parity для bass E1, guitar E2 и violin A4 через native Rust/browser WASM, Tauri wire contract и egui view state; следующий input-проход закрепил permission denial, track loss/restart, transient devicechange и Web/Native switching.
 
 ## Возможности
 
@@ -301,7 +301,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `155` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и восемь browser flows. Lifecycle публикует typed start/stop/runtime failures, native runtime errors доходят до UI, teardown сохраняет control handle до подтверждённой остановки и допускает безопасный retry, а лицензированный replay контракт блокирует расхождение native/WASM session frames.
+M0 safety net закрыт для текущего refactor gate: `159` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и одиннадцать browser flows. Lifecycle публикует typed start/stop/runtime failures, native runtime errors доходят до UI, teardown сохраняет control handle до подтверждённой остановки и допускает безопасный retry, stale web starts отменяются по revision, а лицензированный replay контракт блокирует расхождение native/WASM session frames.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
@@ -331,9 +331,9 @@ CLI принимает PCM WAV или raw `f32le`, использует тот �
 ## Следующие улучшения (рекомендуемые)
 
 - Протянуть аналогичный output-audio capability contract в egui только при работе над реальным cross-platform playback, не связывая platform adapters напрямую.
-- Добавить permission/device-loss и backend-switch recovery tests поверх готового file/Web/native контракта.
+- Ввести единый typed diagnostic contract и локализованную actionable presentation для web, Tauri и egui; recovery tests поверх file/Web/native контракта уже добавлены.
 - Расширить corpus фиксированными SNR/noise/reverb сценариями; добавить criterion/soak/visual-regression suites и DSP fuzzing.
-- Довести exact browser PCM envelope до автоматического replay parity для всех backend-ов.
+- Расширить автоматический exact-PCM replay с трёх лицензированных captures на весь corpus и явно зафиксировать допустимую деградацию TypeScript fallback.
 - Закрыть release hardening: CSP, signing/notarization, checksums и dependency audit gates.
 
 ---
@@ -352,7 +352,7 @@ CLI принимает PCM WAV или raw `f32le`, использует тот �
 
 Мы проектировали **как будто с нуля**, уделяя особое внимание слабой зацепленности между аудио, вычислениями и UI.
 
-Основные native/core/session/UI границы, contextual full-frame WASM/native ownership, controller/port decomposition, общий web output-audio port, confidence/smoothing parity, licensed cross-backend replay, music registry, generated note math и file/WAV input выполнены. Дальше — device-loss/diagnostics и quality/release фазы из ARCHITECTURE.md.
+Основные native/core/session/UI границы, contextual full-frame WASM/native ownership, controller/port decomposition, общий web output-audio port, confidence/smoothing parity, licensed cross-backend replay, input recovery, music registry, generated note math и file/WAV input выполнены. Дальше — typed diagnostics и quality/release фазы из ARCHITECTURE.md.
 
 ## Идеи и предложения (Top 500)
 
@@ -429,7 +429,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M42 | P2 | dx-quality | insta snapshot tests for full DetectionResult on fixture WAVs | [PARTIAL 2026-07-18] 19 real WAV temporal gates exist; per-frame golden snapshots remain. |
 | M43 | P2 | i18n-breadth | Browser-language auto-detect via navigator.languages with persisted override | Foundation for all localization; cheap and immediately broadens reach. |
 | M44 | P2 | perf-bundle | Preallocate YIN buffers as module singletons across calls | pitch.ts reallocates per size change; pin to max guitar size. [DONE 2026-07-11] |
-| M45 | P2 | docs-dx | Playwright E2E for mic-permission-denied flow | Drive fake getUserMedia, assert permission UI path renders. |
+| M45 | P2 | docs-dx | Playwright E2E for mic-permission-denied flow | Drive fake getUserMedia, assert permission UI path renders. [DONE 2026-07-21] Denial, actionable UI error and successful retry are browser-tested. |
 | M46 | P2 | review | localize hardcoded English in-tune hint |  |
 | M47 | P2 | algorithms | Goertzel bank locked to 6 selected-string targets and their first 4 harmonics | Cheap targeted detection when string is known. |
 | M48 | P2 | perf-bundle | WASM streaming instantiation via instantiateStreaming for pitch-core | wasm-bindgen loader uses `instantiateStreaming`; Playwright verifies the live WASM path. [DONE 2026-07-11] |
@@ -474,7 +474,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M87 | P3 | review | bass 4/5-string tunings |  |
 | M88 | P3 | review | A4 clamp on commit not keystroke |  |
 | M89 | P3 | review | reference-tone playback feedback |  |
-| M90 | P3 | review | devicechange listener refresh |  |
+| M90 | P3 | review | devicechange listener refresh | [DONE 2026-07-21] Debounced refresh preserves a missing saved device and restores it when the catalog recovers. |
 | M91 | P3 | review | per-instrument detection frequency range |  |
 | M92 | P3 | review | split useTuner god-composable | [DONE 2026-07-19] |
 | M93 | P3 | algorithms | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | Predictive smoothing tracks vibrato/glide better than EMA. |
@@ -898,7 +898,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 - Native adapters общие и realtime-safe; web/native/synthetic/file реализуют единый TS `AudioInputPort`, включая sample-indexed WAV и exact PCM capture capability.
 - Web/Tauri/egui используют pitch-core для primary detection; full-frame browser WASM владеет smoothing/resolution, а TS fallback проверяется теми же cents/confidence fixtures и общим smoothing trace manifest.
 - Таблицы строев и note/cents primitives генерируются из canonical registry/expression sources; stale output блокируется проверкой.
-- Real-WAV temporal gate выполнен; нужны SNR/noise/reverb, benchmark/soak/permission/device-loss/visual regression tests и более широкий DSP fuzzing.
+- Real-WAV temporal gate и permission/device-loss recovery выполнены; нужны SNR/noise/reverb, benchmark/soak/visual regression tests и более широкий DSP fuzzing.
 - Diagnostics, typed errors, automated a11y и release hardening ещё не закрыты.
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).

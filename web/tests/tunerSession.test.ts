@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
 import { useTunerSession } from '../src/composables/useTunerSession';
+import { useAudioInput } from '../src/composables/useAudioInput';
 import { useTunerInputSet } from '../src/adapters/vue/useTunerInputSet';
 import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
 import { encodeMonoPcm16Wav } from '../src/audio/wav';
+import type { NativeAudioApiLoader } from '../src/platform/nativeAudioApi';
 import type { AudioBackend } from '../src/utils/settingsStorage';
 
 describe('useTunerSession', () => {
@@ -186,6 +188,40 @@ describe('useTunerSession', () => {
     await session.stop();
   });
 
+  it('cancels startup when the microphone track ends during audio-context resume', async () => {
+    let releaseResume!: () => void;
+    let resumeStarted = false;
+    const resumeGate = new Promise<void>((resolve) => {
+      releaseResume = resolve;
+    });
+    class SuspendedAudioContext extends FakeAudioContext {
+      override state: AudioContextState = 'suspended';
+
+      override async resume() {
+        resumeStarted = true;
+        await resumeGate;
+        this.state = 'running';
+      }
+    }
+    const track = new TestMediaStreamTrack();
+    installWebAudioFakes(vi.fn().mockResolvedValue(createMediaStream(track)));
+    vi.stubGlobal('window', {
+      AudioContext: SuspendedAudioContext,
+      setTimeout,
+    });
+    const adapter = useAudioInput(ref(''));
+
+    const starting = adapter.start();
+    await vi.waitFor(() => expect(resumeStarted).toBe(true));
+    track.dispatchEvent(new Event('ended'));
+    releaseResume();
+
+    await expect(starting).resolves.toBe(false);
+    expect(adapter.isListening.value).toBe(false);
+    expect(adapter.error.value).toContain('Microphone disconnected');
+    expect(track.stop).toHaveBeenCalledOnce();
+  });
+
   it('keeps the effective backend stable when native availability arrives late', async () => {
     installWebAudioFakes(vi.fn().mockResolvedValue(createMediaStream()));
     const selectedInputDeviceId = ref('');
@@ -208,6 +244,49 @@ describe('useTunerSession', () => {
     expect(session.usingNativeAudio.value).toBe(false);
     await session.stop();
   });
+
+  it('moves an active session from web to native and back through the input registry', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(createMediaStream());
+    installWebAudioFakes(getUserMedia);
+    const commands: string[] = [];
+    const nativeAudioApiLoader: NativeAudioApiLoader = async () => ({
+      async invoke(command) {
+        commands.push(command);
+        return command === 'native_audio_available' ? true : undefined;
+      },
+      async listen() {
+        return () => {};
+      },
+    });
+    const selectedInputDeviceId = ref('');
+    const audioBackend = ref<AudioBackend>('web');
+    const inputs = useTunerInputSet({
+      nativeAudioApiLoader,
+      selectedInputDeviceId,
+      syntheticFixture: null,
+    });
+    await inputs.native.refreshAvailability();
+    const session = useTunerSession({ audioBackend, inputs, selectedInputDeviceId });
+
+    await session.start();
+    expect(session.activeInputId.value).toBe('web');
+
+    await session.setAudioBackend('native');
+    expect(session.activeInputId.value).toBe('native');
+    expect(session.isListening.value).toBe(true);
+
+    await session.setAudioBackend('web');
+    expect(session.activeInputId.value).toBe('web');
+    expect(session.isListening.value).toBe(true);
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(commands).toEqual([
+      'native_audio_available',
+      'start_native_audio',
+      'stop_native_audio',
+    ]);
+
+    await session.stop();
+  });
 });
 
 function installWebAudioFakes(getUserMedia: ReturnType<typeof vi.fn>) {
@@ -224,21 +303,22 @@ function installWebAudioFakes(getUserMedia: ReturnType<typeof vi.fn>) {
   });
 }
 
-function createMediaStream() {
-  const track = {
-    addEventListener: vi.fn(),
-    stop: vi.fn(),
-  };
+function createMediaStream(track: TestMediaStreamTrack = new TestMediaStreamTrack()) {
   return {
     getAudioTracks: () => [track],
     getTracks: () => [track],
   } as unknown as MediaStream;
 }
 
+class TestMediaStreamTrack extends EventTarget {
+  readonly getSettings = vi.fn().mockReturnValue({});
+  readonly stop = vi.fn();
+}
+
 class FakeAudioContext {
   onstatechange: (() => void) | null = null;
   readonly sampleRate = 44_100;
-  readonly state = 'running';
+  state: AudioContextState = 'running';
 
   close() {
     return Promise.resolve();
@@ -258,5 +338,9 @@ class FakeAudioContext {
       connect: vi.fn(),
       disconnect: vi.fn(),
     };
+  }
+
+  resume() {
+    return Promise.resolve();
   }
 }

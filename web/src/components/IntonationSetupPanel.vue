@@ -131,26 +131,6 @@ function setValue(id: MeasurementId, event: Event) {
   line-height: 1.45;
 }
 
-.icon-button {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-muted);
-}
-
-.icon-button:hover:not(:disabled) {
-  border-color: var(--accent-strong);
-  color: var(--accent);
-}
-
-.icon-button:disabled {
-  opacity: 0.35;
-}
-
 .intonation-measurements {
   display: grid;
   gap: 8px;
