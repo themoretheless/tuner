@@ -29,7 +29,7 @@
 
 ## Current Audit / Technical Debt
 
-Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md). После актуализации там **294 открытых/частичных `R#` пункта** и **100 закрытых или устаревших** в стабильном closure registry.
+Канонический текущий extract того, что сейчас сделано плохо или неправильно: [recommendation.md](recommendation.md). После актуализации там **293 открытых/частичных `R#` пункта** и **101 закрытый или устаревший** в стабильном closure registry.
 Единый ranked **Top 500 (`M#`) и historical grounded audit (`C#`)**: [TOP-500-backlog.md](TOP-500-backlog.md).
 Все 500 строк также сохранены ниже в README и зеркалах документов. `[DONE YYYY-MM-DD]` означает проверенное закрытие; это реестр идей и рисков, а не утверждение, что 500 независимых функций уже выпущены.
 
@@ -41,7 +41,7 @@
 - `useTunerApplication` является composition root и внедряет типизированный `TunerInputSet` в session; lifecycle больше не создаёт конкретные web/file/native/synthetic adapters. Worker и main-thread fallback используют общий stateful processor и единый protocol contract.
 - Spectrum больше не считается, когда скрыт, но включённый Rust frame всё ещё клонирует `Vec<f32>`.
 - Лицензированный корпус из 19 реальных WAV покрывает guitar, bass, ukulele, violin и voice и блокирует CI по временным quality-метрикам. Не хватает SNR/noise/reverb матрицы, permission/device-loss E2E, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
-- На вкладке Algorithm работают live route, составная уверенность с реальным разбросом окон, отпечаток конфигурации, диагностика обработки микрофона, предупреждение о конкурирующей струне, decision timeline, freeze/replay inspector, harmonic/octave/noise views, latency budget, virtual bypass и baseline A/B overlay. Debug capture пишет тот же PCM, который анализирует AudioWorklet, и выгружает mono PCM16 WAV + JSON v2 с sample timebase/SHA-256; Rust CLI создаёт sample-indexed replay envelope. Cross-backend replay comparison, mic self-test и общая typed error taxonomy остаются открытыми.
+- На вкладке Algorithm работают live route, составная уверенность с реальным разбросом окон, отпечаток конфигурации, диагностика обработки микрофона, предупреждение о конкурирующей струне, decision timeline, freeze/replay inspector, harmonic/octave/noise views, latency budget, virtual bypass и baseline A/B overlay. Debug capture пишет тот же PCM, который анализирует AudioWorklet, и выгружает mono PCM16 WAV + JSON v2 с sample timebase/SHA-256. Rust replay v2 и общий лицензированный контракт автоматически сравнивают native/WASM кадры и проверяют Tauri/egui projections; mic self-test и общая typed error taxonomy остаются открытыми.
 - Release hardening (signing/notarization/CSP/checksums) остаётся открытым.
 
 Фактическая блок-схема определения высоты, внутренний decision flow и целевой модульный pipeline: [TUNER-PIPELINE.md](TUNER-PIPELINE.md).
@@ -58,7 +58,7 @@
 2. **Input provenance:** кадр несёт отпечаток pipeline-конфигурации и предупреждение о соседней струне; web-порт отдельно сообщает фактические AGC/noise/echo/sample-rate настройки.
 3. **Presentation review:** канонические кадры остаются на аудиочасах, а отдельный visual frame обновляется через `requestAnimationFrame` на частоте дисплея по правилу latest-frame-wins; смысловые переходы проходят сразу, Analysis получил мастер мензуры, а экранный диктор больше не зачитывает меняющийся процент.
 
-После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-21: `155` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, семь browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Последний проход добавил fail-closed Worker fallback, native runtime-error event, retryable teardown, transactional settings hydration/import и mobile tabs без слипшихся подписей.
+После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-21: `155` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, восемь browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Последний replay-проход добавил frame-by-frame parity для bass E1, guitar E2 и violin A4 через native Rust/browser WASM, Tauri wire contract и egui view state.
 
 ## Возможности
 
@@ -301,7 +301,7 @@ npx tauri icon ./icon.png
 
 Исторические ревью, текущий code-audit и Top 500 сведены в [ARCHITECTURE.md](ARCHITECTURE.md), [recommendation.md](recommendation.md) и едином [TOP-500-backlog.md](TOP-500-backlog.md). README больше не является местом полного аудита.
 
-M0 safety net закрыт для текущего refactor gate: `155` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и семь browser flows. Lifecycle публикует typed start/stop/runtime failures, native runtime errors доходят до UI, а teardown сохраняет control handle до подтверждённой остановки и допускает безопасный retry.
+M0 safety net закрыт для текущего refactor gate: `155` Vitest tests, `71` pitch-core tests с all-features, лицензированный corpus `19/19`, закреплённые Node/Rust toolchains, CI fmt/clippy/test/wasm/codegen/quality gates, generated registry/note-math parity, общие pitch/confidence и smoothing manifests, synthetic/file session harness, pure-use-case/Vue-adapter architecture tests и восемь browser flows. Lifecycle публикует typed start/stop/runtime failures, native runtime errors доходят до UI, teardown сохраняет control handle до подтверждённой остановки и допускает безопасный retry, а лицензированный replay контракт блокирует расхождение native/WASM session frames.
 
 Сейчас есть три рабочих shell path: Vue web, Tauri desktop и egui native. Переход к полностью общему core/session ещё не завершён:
 - часть domain уже вынесена в `pitch-core/src/domain.rs`;
@@ -331,7 +331,7 @@ CLI принимает PCM WAV или raw `f32le`, использует тот �
 ## Следующие улучшения (рекомендуемые)
 
 - Протянуть аналогичный output-audio capability contract в egui только при работе над реальным cross-platform playback, не связывая platform adapters напрямую.
-- Добавить cross-backend replay comparison и device-loss recovery tests поверх готового file/Web/native контракта.
+- Добавить permission/device-loss и backend-switch recovery tests поверх готового file/Web/native контракта.
 - Расширить corpus фиксированными SNR/noise/reverb сценариями; добавить criterion/soak/visual-regression suites и DSP fuzzing.
 - Довести exact browser PCM envelope до автоматического replay parity для всех backend-ов.
 - Закрыть release hardening: CSP, signing/notarization, checksums и dependency audit gates.
@@ -352,7 +352,7 @@ CLI принимает PCM WAV или raw `f32le`, использует тот �
 
 Мы проектировали **как будто с нуля**, уделяя особое внимание слабой зацепленности между аудио, вычислениями и UI.
 
-Основные native/core/session/UI границы, contextual full-frame WASM/native ownership, controller/port decomposition, общий web output-audio port, confidence/smoothing parity, music registry, generated note math и file/WAV input выполнены. Дальше — cross-backend replay и quality/release фазы из ARCHITECTURE.md.
+Основные native/core/session/UI границы, contextual full-frame WASM/native ownership, controller/port decomposition, общий web output-audio port, confidence/smoothing parity, licensed cross-backend replay, music registry, generated note math и file/WAV input выполнены. Дальше — device-loss/diagnostics и quality/release фазы из ARCHITECTURE.md.
 
 ## Идеи и предложения (Top 500)
 
@@ -511,7 +511,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M124 | P3 | review | label A4 input |  |
 | M125 | P3 | review | label tuning select |  |
 | M126 | P3 | review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-19] Rust sample-indexed JSON and exact shared browser PCM/WAV+JSON v2 exist; automated cross-backend replay comparison remains. |
+| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [DONE 2026-07-21] Rust replay v2 is sample-indexed; a shared licensed contract compares native/WASM frames and verifies Tauri/egui projections. |
 | M128 | P3 | algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |
@@ -891,7 +891,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 ## Технический долг и что сделано плохо
 
-Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, и исторический детальный `C#` audit находятся в одном [TOP-500-backlog.md](TOP-500-backlog.md). Текущий source of truth: [recommendation.md](recommendation.md): в первом диапазоне **103** пункта открыто/частично и **77** закрыты, независимый пост-рефакторный проход содержит **191** открытый и **23** закрытых пункта — **294 открытых и 100 закрытых всего**, разложенных по 36 SOLID/DRY-кусочкам.
+Полный ranked Top 500 того, что сделано плохо, неправильно, рискованно или стратегически недостроено, и исторический детальный `C#` audit находятся в одном [TOP-500-backlog.md](TOP-500-backlog.md). Текущий source of truth: [recommendation.md](recommendation.md): в первом диапазоне **102** пункта открыто/частично и **78** закрыты, независимый пост-рефакторный проход содержит **191** открытый и **23** закрытых пункта — **293 открытых и 101 закрытый всего**, разложенных по 36 SOLID/DRY-кусочкам.
 
 Ключевые проблемы на сегодня (выборка):
 - Controller/port/settings/tuning decomposition и единый web output-audio owner выполнены и защищены архитектурными/adapter tests; следующий coupling-риск — скрытые lifecycle failures и платформенная error taxonomy.

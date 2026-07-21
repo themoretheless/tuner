@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "configRevision": "session-replay-v1",
+  "windowSamples": 8192,
+  "hopSeconds": 0.033,
+  "maximumFrames": 32,
+  "range": {
+    "minFrequency": 30,
+    "maxFrequency": 900
+  },
+  "tolerances": {
+    "frequencyCents": 0.5,
+    "rawFrequencyCents": 0.5,
+    "cents": 0.5,
+    "confidence": 0.01,
+    "rms": 0.0001
+  },
+  "cases": [
+    {
+      "id": "bass-e1",
+      "capture": "corpus/audio/bass-e1.wav",
+      "target": {
+        "name": "E",
+        "octave": 1,
+        "midi": 28,
+        "frequency": 41.20344
+      }
+    },
+    {
+      "id": "guitar-e2",
+      "capture": "corpus/audio/guitar-e2.wav",
+      "target": {
+        "name": "E",
+        "octave": 2,
+        "midi": 40,
+        "frequency": 82.40689
+      }
+    },
+    {
+      "id": "violin-a4",
+      "capture": "corpus/audio/violin-a4.wav",
+      "target": {
+        "name": "A",
+        "octave": 4,
+        "midi": 69,
+        "frequency": 440
+      }
+    }
+  ]
+}

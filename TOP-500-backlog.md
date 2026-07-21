@@ -136,7 +136,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 124 | label A4 input | P3 | 42 | r1:review |  |
 | 125 | label tuning select | P3 | 42 | r1:review |  |
 | 126 | FFT-accelerate YIN/MPM | P3 | 42 | r1:review |  |
-| 127 | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | P3 | 42 | r2:dx-quality | [PARTIAL 2026-07-19] Rust sample-indexed JSON and exact shared browser PCM/WAV+JSON v2 exist; automated cross-backend replay comparison remains. |
+| 127 | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | P3 | 42 | r2:dx-quality | [DONE 2026-07-21] Rust replay v2 is sample-indexed; a shared licensed contract compares native/WASM frames and verifies Tauri/egui projections. |
 | 128 | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | P3 | 42 | r2:algorithms | Extra fusion vote robust to missing fundamental. |
 | 129 | Window-state persistence across launches | P3 | 42 | r2:native-os | Restores size/position; expected desktop polish. |
 | 130 | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | P3 | 42 | r2:a11y-deep | Brings native app to accessibility parity. |
@@ -518,7 +518,8 @@ The 187 cards below preserve detailed pre-refactor evidence and stable `C#` refe
 ### Status Notes
 
 - 2026-07-19: R186 is complete. Device selection now treats both `starting` and `listening` web sessions as restartable intent; a regression test holds the first permission request open and verifies that the second start receives the new `deviceId`.
-- 2026-07-19: R73 is complete. A PCM/float WAV adapter joins the shared session registry, exact AudioWorklet PCM windows carry source sample indices through the worker, and debug capture exports replayable PCM16 WAV + JSON v2 from the same analyzed stream. Automated cross-backend comparison remains.
+- 2026-07-21: R31/M127 are complete. One sample-indexed contract replays licensed bass E1, guitar E2 and violin A4 through native Rust and browser WASM frame by frame, while Rust tests project the same sessions through Tauri wire frames and egui view state.
+- 2026-07-19: R73 is complete. A PCM/float WAV adapter joins the shared session registry, exact AudioWorklet PCM windows carry source sample indices through the worker, and debug capture exports replayable PCM16 WAV + JSON v2 from the same analyzed stream.
 - 2026-07-12: R17 confidence/full-frame browser follow-up is complete. WASM `TunerProcessor` owns detector, smoothing, level, power and `FrameResolver`; revisioned context crosses the worker boundary once per change; TS fallback emits measured normalized-periodicity confidence; stop/restart explicitly resets worker state.
 - 2026-07-11: R15/C155 note-math follow-up is complete. One registry/expression generator emits Rust/TypeScript note names, MIDI/frequency/cents/closest-target and formatting primitives; deterministic property sweeps and codegen freshness gate both targets. Remaining related work is file/WAV input.
 - 2026-07-11: R9/C47/C53 native-frame follow-up is complete. `FrameResolver` owns target/cents/hysteresis, Tauri receives a revisioned A4/tuning/selected-target context, Vue trusts native semantics, Rust/TS smoothing shares traces, and the top-level `frequency` alias is gone.

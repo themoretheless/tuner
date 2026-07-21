@@ -233,6 +233,7 @@ impl NativeFrameProcessor {
 mod tests {
     use super::*;
     use crate::native_audio::config::{NativeAudioRange, NativeFrameContext, NativePipelineConfig};
+    use tuner_test_support::{cents_error, load_session_replay_contract, read_fixture_capture};
 
     #[test]
     fn processor_uses_shared_pitch_core() {
@@ -254,6 +255,79 @@ mod tests {
         assert!((frame.freq.expect("pitch") - 440.0).abs() < 2.0);
         assert!(frame.confidence > 0.5);
         assert!(frame.level > 0.0);
+    }
+
+    #[test]
+    fn licensed_session_replay_reaches_native_wire_frames() {
+        let contract = load_session_replay_contract();
+        assert_eq!(contract.schema_version, 1);
+
+        for replay_case in contract.cases {
+            let capture = read_fixture_capture(&replay_case.capture);
+            let sample_rate = capture.sample_rate;
+            let samples = capture.samples;
+            let target = NativeAudioNote {
+                frequency: replay_case.target.frequency,
+                name: replay_case.target.name.clone(),
+                octave: replay_case.target.octave,
+            };
+            let mut processor = NativeFrameProcessor::new(NativeAudioConfig {
+                context: NativeFrameContext {
+                    display_targets: vec![target.clone()],
+                    idle_target: Some(target.clone()),
+                    selected_target: Some(target.clone()),
+                    tuning_targets: vec![target.clone()],
+                    ..NativeFrameContext::default()
+                },
+                range: NativeAudioRange {
+                    min_frequency: contract.range.min_frequency,
+                    max_frequency: contract.range.max_frequency,
+                },
+                ..NativeAudioConfig::default()
+            });
+            let hop_samples = (sample_rate * contract.hop_seconds).round() as usize;
+            let expected_note = format!("{}{}", replay_case.target.name, replay_case.target.octave);
+            let mut published_frames = 0usize;
+
+            for frame_index in 0..contract.maximum_frames {
+                let start = frame_index * hop_samples;
+                let end = start + contract.window_samples;
+                if end > samples.len() {
+                    break;
+                }
+                let frame = processor.process(&samples[start..end], sample_rate);
+                let serialized = serde_json::to_value(&frame).expect("serializable native frame");
+                assert!(
+                    serialized.get("freq").is_some(),
+                    "{} wire freq",
+                    replay_case.id
+                );
+                assert!(
+                    serialized.get("rawFreq").is_some(),
+                    "{} wire rawFreq",
+                    replay_case.id
+                );
+                let Some(frequency) = frame.freq else {
+                    continue;
+                };
+                published_frames += 1;
+                assert_eq!(frame.note, expected_note, "{} note", replay_case.id);
+                assert_eq!(
+                    frame.target.as_ref().map(|note| note.frequency),
+                    Some(target.frequency),
+                    "{} target",
+                    replay_case.id
+                );
+                assert!(
+                    cents_error(frequency, target.frequency) < 35.0,
+                    "{} published {frequency:.3} Hz for {:.3} Hz target",
+                    replay_case.id,
+                    target.frequency
+                );
+            }
+
+            assert!(published_frames > 0, "{} never acquired", replay_case.id);
+        }
     }
 
     #[test]

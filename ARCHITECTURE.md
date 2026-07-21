@@ -27,7 +27,7 @@ Remaining weaknesses:
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - Interactive PCM/float WAV input is implemented without browser resampling and feeds sample-indexed overlapping windows through the same session pipeline; device-loss recovery E2E remains incomplete.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
-- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency. A licensed 19-WAV corpus, blocking temporal quality gate, sample-indexed Rust replay and exact shared browser PCM/WAV+JSON v2 capture now exist; cross-backend replay comparison, mic self-test, typed errors, benchmarks, noise/SNR matrices, soak tests and release hardening remain incomplete.
+- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency. A licensed 19-WAV corpus, blocking temporal quality gate, sample-indexed Rust replay v2, exact shared browser PCM/WAV+JSON v2 capture and automated native/WASM/Tauri/egui replay parity now exist; mic self-test, typed errors, benchmarks, noise/SNR matrices, soak tests and release hardening remain incomplete.
 - egui persistence and the egui WASM singleton are still separate platform-specific designs.
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
@@ -38,7 +38,7 @@ The broader competitor pass in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473
 
 The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/native/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
 
-The current list contains 294 open/partial `R#` findings and a 100-item closure registry: 103/77 in the original range and 191/23 in the independent post-refactor pass. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
+The current list contains 293 open/partial `R#` findings and a 101-item closure registry: 102/78 in the original range and 191/23 in the independent post-refactor pass. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
 
 ## Implemented Dependency Shape
 
@@ -112,7 +112,7 @@ This shape deliberately sends resolved targets instead of teaching Tauri about e
 
 The 473-repository pass changes the architecture roadmap in five concrete ways:
 
-1. **Accuracy work starts with evidence.** `pitch-core::quality` owns pure temporal failure metrics; the licensed 19-WAV corpus has verified provenance/checksums, blocking per-scenario thresholds and a CI JSON artifact. Rust replay envelopes and browser PCM/WAV+JSON v2 captures are sample-indexed; automated cross-backend comparison remains the parity gap. Top-K candidates and phase-aware policy remain core contracts, not Vue experiments.
+1. **Accuracy work starts with evidence.** `pitch-core::quality` owns pure temporal failure metrics; the licensed 19-WAV corpus has verified provenance/checksums, blocking per-scenario thresholds and a CI JSON artifact. Rust replay v2 and browser PCM/WAV+JSON v2 captures are sample-indexed; one licensed contract now compares native Rust and browser WASM frame by frame and verifies Tauri/egui projections. Top-K candidates and phase-aware policy remain core contracts, not Vue experiments.
 2. **Musical formats are adapters.** Scala `.scl`, `.kbm`, AnaMark `.tun`, MIDI and MusicXML parsers belong behind explicit format ports. They validate into versioned domain values and commit only after preview.
 3. **Practice gets its own application layer.** Exercise generation, playback, evaluation, scheduling and persistence must not expand `useTuner.ts`; Practice consumes narrow ports like every other feature.
 4. **Output audio has one owner.** Reference tones, ear training and metronome need a shared resumed `AudioContext`, mixer and cancellable playback scopes. The metronome clock is audio/sample time, never the paint or `setInterval` clock.
@@ -209,7 +209,7 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 | Vue | Five feature views, tuning model/commands/detection and plain visual frames shipped | Keep command/query ports narrow as features grow |
 | Rust library | `lib.rs` is a small re-export layer over focused modules | Consider crate split only if module boundaries prove insufficient |
 | Portability | Native and browser primary paths share core/frame/context ownership; fallback confidence is fixture-gated | File input and fallback power flags remain |
-| QA | Synthetic, lifecycle, profile, controller, architecture, core, real-WAV and E2E tests shipped | Cross-backend replay, SNR, failure and soak suites |
+| QA | Synthetic, lifecycle, profile, controller, architecture, core, real-WAV, cross-backend replay and E2E tests shipped | SNR, permission/device-loss, failure and soak suites |
 | Performance | Native callback DSP/allocations removed; hidden FFT and Analysis capture are feature-gated | Enabled spectrum frame still owns a Vec; add benchmarks/soak evidence |
 | Product design | Task-based views, explicit states, themes and responsive layout shipped | Diagnostics and automated visual/a11y coverage |
 | Build/release | WASM, production web and full Tauri bundle verified | Pin tooling, CSP, signing and checksums |
@@ -308,7 +308,7 @@ egui/src/
 - AudioWorklet sample timeline and exact capture for web. [done]
 - Better WASM packaging.
 
-**Status 2026-07-21: baseline extended.** `155` Vitest tests, `71` pitch-core all-feature tests, test-source typechecking, pure-use-case/Vue-adapter/output boundaries, Worker constructor/runtime/timeout degradation tests, lifecycle failure/retry, native runtime-error and retryable teardown tests, native/browser context tests, generated-source/property gates, seven Playwright flows including synthetic start/stop and view-scroll reset, workspace strict clippy, production web/WASM build, manual desktop/`390 px`/`320 px` visual QA and full Tauri `.app`/`.dmg` bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust replay, interactive file/WAV input and exact shared browser PCM/WAV+JSON v2 capture are sample-indexed. Remaining: automated cross-backend replay comparison, SNR/noise/reverb scenarios, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
+**Status 2026-07-21: baseline extended.** `155` Vitest tests, `71` pitch-core all-feature tests, test-source typechecking, pure-use-case/Vue-adapter/output boundaries, Worker constructor/runtime/timeout degradation tests, lifecycle failure/retry, native runtime-error and retryable teardown tests, native/browser context tests, generated-source/property gates, eight Playwright flows including licensed native/WASM replay, synthetic start/stop and view-scroll reset, workspace strict clippy, production web/WASM build, manual desktop/`390 px`/`320 px` visual QA and full Tauri `.app`/`.dmg` bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust replay v2, interactive file/WAV input and exact shared browser PCM/WAV+JSON v2 capture are sample-indexed; bass E1, guitar E2 and violin A4 are parity-gated across native Rust/browser WASM with Tauri-wire and egui-view projections. Remaining: SNR/noise/reverb scenarios, benchmark/soak/permission suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
@@ -318,8 +318,8 @@ egui/src/
 
 ## Immediate Next Actions (Concrete)
 
-1. Add automated cross-backend replay comparison over the sample-indexed Rust and browser capture envelopes.
-2. Extend the licensed corpus with fixed SNR/noise/reverb scenarios, then add permission/device-loss E2E, criterion benchmarks and a restart soak test.
+1. Add permission/device-loss and backend-switch E2E over the injected input registry.
+2. Add actionable typed diagnostics, then extend the licensed corpus with fixed SNR/noise/reverb scenarios, criterion benchmarks and a restart soak test.
 3. Split file import/source-switching from the remaining `useTunerSession` orchestration without moving lifecycle policy back into views.
 4. Add actionable typed user-facing diagnostics, explicit requested-vs-active backend UX and device-loss recovery evidence.
 5. Enforce CSP/signing/checksum/dependency release gates.
@@ -626,7 +626,7 @@ The following categorized list (200 items) was created to be implementation-conc
 199. User satisfaction micro-survey (anonymous, 1-click "useful?") after 10 successful tunings.
 200. Maintain a living "What we deliberately chose not to do" section (anti-roadmap) in ARCHITECTURE.md.
 
-**Next step after the 2026-07-19 input/capture pass:** do not start another horizontal feature batch. Audio ports, interactive file/WAV input, exact browser PCM capture, native/browser frame semantics, confidence/smoothing parity, generated music data/note math and the first real-audio quality gate are complete; add cross-backend replay comparison and measured SNR/noise/reverb evidence next.
+**Next step after the 2026-07-21 replay pass:** do not start another horizontal feature batch. Audio ports, interactive file/WAV input, exact browser PCM capture, native/browser frame semantics, confidence/smoothing parity, generated music data/note math, the first real-audio quality gate and licensed cross-backend replay are complete; add device-loss evidence, typed diagnostics and measured SNR/noise/reverb evidence next.
 
 ### Статус интеграции бэклогов
 - [TOP-500-backlog.md](TOP-500-backlog.md) — canonical master Top 500 (`M#`) plus historical grounded audit (`C#`).
@@ -681,10 +681,10 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | Status | Slice | Current Owner | Next Small Boundary |
 | --- | --- | --- | --- |
 | Done | Live lifecycle | `session/sessionLifecycleContract.ts`, `sessionLifecycle.ts`, `ports/tunerInputSet.ts`, injected `platform/nativeAudioApi.ts` | Extract file/source workflow from `useTunerSession`; keep the state machine and adapters independent |
-| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, four adapters, sample timeline and WAV codec | Add cross-backend replay comparison and device-loss evidence |
+| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, four adapters, sample timeline, WAV codec and licensed replay parity | Add device-loss evidence |
 | Done web / partial cross-platform | Tone port | `ports/audioOutput.ts`, `platform/webAudioOutput.ts`, `application/services/metronomeScheduler.ts`; egui `AudioManager` | Keep adapters separate; share only capability semantics when egui playback is revisited |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
-| Done primary | Pitch domain | Generated note math, detector/confidence fixtures, smoothing traces, native/browser full-frame context and 19 real-WAV quality scenarios are shared | Keep fallback power degradation explicit; add SNR and cross-backend replay evidence |
+| Done primary | Pitch domain | Generated note math, detector/confidence fixtures, smoothing traces, native/browser full-frame context, 19 real-WAV quality scenarios and licensed cross-backend replay are shared | Keep fallback power degradation explicit; add SNR evidence |
 | Done | Practice workflow | `domain/practice.ts`, `domain/metronome.ts`, `useEarTraining.ts`, `adapters/vue/controllers/practiceController.ts` | Playback stays behind `AudioOutputPort`; keep scheduler independent of Vue |
 | Done | Profile persistence | `settings/profileCodec.ts`, `normalizeSettings.ts` | Add migration only when V2 exists |
 | Open | Diagnostics | Scattered platform errors | Add typed categories and mic health view model |
@@ -1014,7 +1014,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M124 | P3 | review | label A4 input |  |
 | M125 | P3 | review | label tuning select |  |
 | M126 | P3 | review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-19] Rust sample-indexed JSON and exact shared browser PCM/WAV+JSON v2 exist; automated cross-backend replay comparison remains. |
+| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [DONE 2026-07-21] Rust replay v2 is sample-indexed; a shared licensed contract compares native/WASM frames and verifies Tauri/egui projections. |
 | M128 | P3 | algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |
@@ -1396,14 +1396,14 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 The synchronized problem map is split by purpose:
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) plus historical detailed `C#` evidence; revalidate old audit claims against the current status overlay.
-- [recommendation.md](recommendation.md) - current grounded extract: 294 open/partial and 100 closed stable `R#` references.
+- [recommendation.md](recommendation.md) - current grounded extract: 293 open/partial and 101 closed stable `R#` references.
 
 Key highlights that directly block the target architecture:
-- Add automated cross-backend replay over exact PCM envelopes.
-- Split file/source workflow from `useTunerSession`, then add typed user-facing diagnostics, requested-vs-active backend UX and device-loss recovery evidence.
+- Add permission/device-loss and backend-switch evidence over the injected input registry.
+- Split file/source workflow from `useTunerSession`, then add typed user-facing diagnostics and explicit requested-vs-active backend UX.
 - Complete shared power semantics and remove remaining platform policy drift (`R18`, `R106-R110`).
 - Remove enabled-spectrum frame allocation and decouple web detection from paint cadence (`R26-R28`, `R76`, `R87`).
-- Add real-audio parity/failure/performance/stability suites (`R31-R38`, `R148-R165`).
+- Add real-audio failure/performance/stability suites (`R32-R38`, `R148-R165`).
 - Finish diagnostics, typed errors, accessibility and release hardening (`R22`, `R41-R44`, `R133-R147`).
 
 When closing any of these open problems, update [recommendation.md](recommendation.md), the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` status changes, this file, [README.md](README.md), and if the execution order changes, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).

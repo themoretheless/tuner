@@ -7,8 +7,8 @@ use pitch_core::{
 };
 use serde::Serialize;
 
-pub const SCHEMA_VERSION: u32 = 1;
-pub const CONFIG_REVISION: &str = concat!("pitch-core-", env!("CARGO_PKG_VERSION"), "-replay-v1");
+pub const SCHEMA_VERSION: u32 = 2;
+pub const CONFIG_REVISION: &str = concat!("pitch-core-", env!("CARGO_PKG_VERSION"), "-replay-v2");
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,10 +38,14 @@ struct ReplayFrame {
     time_seconds: f32,
     raw_frequency: Option<f32>,
     published_frequency: Option<f32>,
+    target_frequency: Option<f32>,
     note: String,
     cents: f32,
     confidence: f32,
     rms: f32,
+    level: f32,
+    in_tune: bool,
+    is_power: bool,
     yin: Option<CandidateReport>,
     secondary: Option<CandidateReport>,
     selected: Option<CandidateReport>,
@@ -120,10 +124,14 @@ impl ReplayEnvelope {
             time_seconds: (sample_index + pipeline.window_samples as usize) as f32 / sample_rate,
             raw_frequency: frame.raw_freq,
             published_frequency: frame.freq,
+            target_frequency: frame.target.as_ref().map(|target| target.frequency),
             note: frame.note,
             cents: frame.cents,
             confidence: frame.confidence,
             rms: frame.rms,
+            level: frame.level,
+            in_tune: frame.in_tune,
+            is_power: frame.is_power,
             yin: pipeline.yin.map(Into::into),
             secondary: pipeline.secondary.map(Into::into),
             selected: pipeline.selected.map(Into::into),

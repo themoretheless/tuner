@@ -18,8 +18,8 @@ mod trace_report;
 use audio::{read_capture, read_capture_with_raw_rate};
 use checksum::sha256;
 use pitch_core::{
-    DetectionFrame, DetectorConfig, EngineConfig, Note, PipelineCandidate, PipelineConfig,
-    TunerEngine, Tuning,
+    frequency_to_nearest_midi, note_name_from_midi, octave_from_midi, DetectionFrame,
+    DetectorConfig, EngineConfig, Note, PipelineCandidate, PipelineConfig, TunerEngine, Tuning,
 };
 use std::error::Error;
 use std::path::Path;
@@ -64,7 +64,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut sample_index = 0usize;
-    while sample_index + WINDOW_SAMPLES <= capture.samples.len() {
+    let mut frame_count = 0usize;
+    while sample_index + WINDOW_SAMPLES <= capture.samples.len()
+        && options
+            .max_frames
+            .is_none_or(|maximum| frame_count < maximum)
+    {
         let frame = engine.process(
             &capture.samples[sample_index..sample_index + WINDOW_SAMPLES],
             capture.sample_rate,
@@ -75,6 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             print_tsv_frame(sample_index, capture.sample_rate, &frame);
         }
         sample_index += hop_samples;
+        frame_count += 1;
     }
 
     if let Some(report) = report {
@@ -113,9 +119,10 @@ fn replay_hop_samples(sample_rate: f32, sample_count: usize) -> Result<usize, Bo
 fn target_tuning(target_frequency: Option<f32>) -> Tuning {
     let strings = target_frequency
         .map(|frequency| {
+            let midi = frequency_to_nearest_midi(frequency, 440.0);
             vec![Note {
-                name: "Target",
-                octave: 0,
+                name: note_name_from_midi(midi),
+                octave: octave_from_midi(midi),
                 frequency,
             }]
         })

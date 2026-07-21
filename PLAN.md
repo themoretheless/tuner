@@ -5,7 +5,7 @@
 into dependency-ordered milestones with a definition of done. README.md links here.
 
 This is the **single source of truth for execution order**. The other docs stay as references:
-- [recommendation.md](recommendation.md) - current extract (317 open/partial, 77 closed stable `R#` items).
+- [recommendation.md](recommendation.md) - current extract (293 open/partial, 101 closed stable `R#` items).
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) and historical detailed `C#` evidence; revalidate old findings against the status overlay.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - WHAT it should become (layers + Phases 0-7 + 200 ideas). Cited below as `Phase N`.
 - This file - WHEN/IN WHAT ORDER, and how each step is verified.
@@ -30,18 +30,18 @@ If not, it doesn't belong in this plan.
 Each milestone is independently shippable and verified with `cargo test -p pitch-core`,
 `vue-tsc --noEmit`, and `cargo check` on egui. Behavior-preserving milestones are marked **[BP]**.
 
-## Status Overlay (2026-07-19)
+## Status Overlay (2026-07-21)
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 144 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, six E2E flows and a blocking 19-capture licensed corpus; transition/SNR/soak remain in M7 |
+| M0 safety net | Done baseline | 155 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, eight E2E flows, licensed native/WASM/Tauri/egui replay parity and a blocking 19-capture corpus; transition/SNR/soak remain in M7 |
 | M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
-| M3 web decomposition | Done | One-line compatibility facade, 116-line Vue composition adapter, framework-independent use cases, explicit capabilities and five segregated feature-port contracts are architecture-tested |
+| M3 web decomposition | Done | One-line compatibility facade, 124-line Vue composition adapter, framework-independent use cases, injected `TunerInputSet`, explicit capabilities and five segregated feature-port contracts are architecture-tested |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
-| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset and real-WAV temporal gate are done; phase-aware tracking, stress scenarios and differential/benchmark/soak gates remain |
+| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate and licensed cross-backend replay are done; phase-aware tracking, stress scenarios and differential/benchmark/soak gates remain |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
 
 ---
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-20:** M0 is complete for the current refactor gate: toolchain pins, `144` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and six browser flows including full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation.
+**Status 2026-07-21:** M0 is complete for the current refactor gate: toolchain pins, `155` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and eight browser flows including licensed native/WASM replay, full-frame WASM, synthetic/file detection, exact PCM capture and responsive Algorithm/Library navigation. Tauri wire frames and egui view state consume the same replay contract.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -83,7 +83,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `useTuner` composes them; settings stays persistence-only.
 **Verify / DoD:** `useTuner` < ~150 LOC; each new composable single-responsibility; `vue-tsc` green; behavior preserved.
 
-**Status 2026-07-20:** complete. `useTuner.ts` is a one-line compatibility export over the 116-line Vue composition adapter. `application/` contains framework-independent use cases/value contracts, `app/ports/` owns implementation-independent screen contracts, and `adapters/vue/` owns their reactive implementations. The old concrete `TunerApplicationServices` bag and factory-derived `ReturnType` contracts are gone. Tuning uses explicit selection/settings commands plus a domain detection machine. Unit and architecture tests enforce dependency direction.
+**Status 2026-07-21:** complete. `useTuner.ts` is a one-line compatibility export over the 124-line Vue composition adapter. `application/` contains framework-independent use cases/value contracts, `app/ports/` owns implementation-independent screen contracts, and `adapters/vue/` owns their reactive implementations. The old concrete `TunerApplicationServices` bag and factory-derived `ReturnType` contracts are gone; a typed `TunerInputSet` is constructed only in the composition root. Tuning uses explicit selection/settings commands plus a domain detection machine. Unit and architecture tests enforce dependency direction.
 
 ## M4 - Finish pitch-core layering **[BP]**
 **Goal:** small focused modules + a detector trait. Phase 1.
@@ -123,7 +123,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - HPS octave guard from the existing 2048 FFT; runtime DC-block + ~30-40Hz high-pass; adaptive noise-floor gate; per-string tau bounds when a string is selected; confidence-weighted fusion (YIN+MPM+HPS).
 **Verify / DoD:** fixture corpus + equivalence harness pass; no regression vs M0 baselines.
 
-**Status 2026-07-18:** partial. A licensed guitar/bass/ukulele/violin/voice corpus, deterministic rebuild/checksums, temporal metrics, per-scenario thresholds and blocking CI artifact are complete. The next evidence slices are fixed SNR/noise/reverb transforms, differential baselines, cross-backend replay, criterion hot-path benchmarks and restart soak tests.
+**Status 2026-07-21:** partial. A licensed guitar/bass/ukulele/violin/voice corpus, deterministic rebuild/checksums, temporal metrics, per-scenario thresholds, blocking CI artifact and sample-indexed native/WASM/Tauri/egui replay parity are complete. The next evidence slices are fixed SNR/noise/reverb transforms, differential baselines, criterion hot-path benchmarks and restart soak tests.
 
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
@@ -140,9 +140,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** compare sample-indexed Rust replay and exact browser PCM/WAV+JSON v2 across backends.
-- **Next:** add SNR/noise/reverb corpus transforms and differential/benchmark/soak gates, then close lifecycle error propagation and device-loss recovery gaps.
-- **Later:** complete M7 phase-aware accuracy work and the remaining M8 diagnostics/a11y/release gates.
+- **Now:** add permission/device-loss and backend-switch recovery evidence over the injected input registry.
+- **Next:** add typed diagnostics, SNR/noise/reverb corpus transforms and differential/benchmark/soak gates.
+- **Later:** complete M7 phase-aware accuracy work and the remaining M8 accessibility/release gates.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

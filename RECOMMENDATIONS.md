@@ -2,9 +2,9 @@
 
 Документ превращает `README.md` и `ARCHITECTURE.md` в практические рекомендации: что делать дальше, в каком порядке, какой риск закрываем и как понять, что шаг завершен. Фокус тот же: модульность, разбиение кода, слабая зацепленность, предсказуемые контракты.
 
-Problem sources: [recommendation.md](recommendation.md) is the current extract (296 open/partial and 98 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
+Problem sources: [recommendation.md](recommendation.md) is the current extract (293 open/partial and 101 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-19:** session state machine, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, composite decision evidence, configuration/input provenance, measured fallback confidence, monitor-synchronized visual presentation, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, intonation setup, responsive live canvases, offline SW, licensed 19-WAV quality gate, interactive file/WAV input and exact shared browser PCM capture are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-07-21:** session state machine, injected input registry, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, composite decision evidence, configuration/input provenance, measured fallback confidence, monitor-synchronized visual presentation, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, intonation setup, responsive live canvases, offline SW, licensed 19-WAV quality gate, interactive file/WAV input, exact shared browser PCM capture and licensed cross-backend replay parity are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
 
 ## Executive Summary
 
@@ -12,13 +12,13 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Добавить автоматическое cross-backend сравнение sample-indexed Rust replay и browser PCM/WAV+JSON v2 envelope.
-2. Вынести создание четырёх input adapters из `useTunerSession` и внедрять capability registry в controller.
-3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms и session-adapter parity.
-4. Добавить benchmark/soak/permission/device-loss/visual suites и более широкий DSP fuzzing.
-5. Ввести typed user-facing diagnostics/errors и завершить accessibility/release gates.
-6. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
-7. Унифицировать power/harmonic flags для explicit TS fallback либо документировать capability contract.
+1. Добавить permission/device-loss и backend-switch recovery evidence поверх внедрённого input registry.
+2. Ввести typed user-facing diagnostics/errors с единым category contract для web, Tauri и egui.
+3. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms.
+4. Добавить criterion benchmark, restart soak, visual suites и более широкий DSP fuzzing.
+5. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
+6. Унифицировать power/harmonic flags для explicit TS fallback либо документировать capability contract.
+7. Завершить accessibility, CSP, signing, checksum и dependency release gates.
 8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
 
 ## Recommendation Matrix
@@ -221,7 +221,7 @@ interface AudioInputPortBase {
 - Web/native/synthetic/file adapters проходят общий lifecycle/session suite.
 - Session сужает capabilities по `output`, а не вызывает backend-specific start/stop branches.
 - Exact PCM capture доступен через отдельную capability и не расширяет native resolved-frame port.
-- Следующий input-quality шаг — device-loss/backend-switch E2E и cross-backend replay comparison.
+- Следующий input-quality шаг — device-loss/backend-switch E2E и typed diagnostic categories; licensed cross-backend replay comparison уже закрыт.
 
 ### 6. Create TunerSessionController
 
@@ -296,7 +296,7 @@ web/src/adapters/storage/tauriProfileStore.ts
 
 ### 8. Split Application Controllers
 
-**Status 2026-07-20: done.** The compatibility `useTuner.ts` is one line, `adapters/vue/useTunerApplication.ts` is a 116-line composition adapter, application use cases run on plain value cells without Vue, and feature-specific adapters depend on explicit segregated capabilities while implementing factory-independent contracts from `app/ports/`.
+**Status 2026-07-21: done.** The compatibility `useTuner.ts` is one line, `adapters/vue/useTunerApplication.ts` is a 124-line composition adapter and the composition root injects a framework-neutral `TunerInputSet`. Application use cases run on plain value cells without Vue, and feature-specific adapters depend on explicit segregated capabilities while implementing factory-independent contracts from `app/ports/`.
 
 **Problem**
 
@@ -469,14 +469,14 @@ Extend the current manifests with real WAV/SNR cases and failure traces. Keep th
 
 ## Recommended Next 8 Commits
 
-1. `Compare sample-indexed replay across backends`
-2. `Inject the audio-input registry into tuner session`
-3. `Add device-loss recovery evidence`
-4. `Add typed pipeline diagnostics`
-5. `Add SNR fixtures and restart soak gates`
-6. `Separate recyclable spectrum transport from detection frames`
-7. `Unify fallback power capability semantics`
-8. `Add release security and accessibility gates`
+1. `Add device-loss recovery evidence`
+2. `Add typed pipeline diagnostics`
+3. `Add SNR fixtures and restart soak gates`
+4. `Separate recyclable spectrum transport from detection frames`
+5. `Unify fallback power capability semantics`
+6. `Add release security and accessibility gates`
+7. `Decouple file/source workflow from tuner session`
+8. `Add requested-vs-active backend UX`
 
 This sequence attacks the current P0/P1 open items first: replay parity, lifecycle error visibility, realtime safety and core evidence. Application/practice/tuning/settings/output decomposition is complete and should now be preserved rather than repeated.
 

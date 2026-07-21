@@ -6,6 +6,7 @@ pub struct Options {
     pub raw_sample_rate: Option<f32>,
     pub range: Option<(f32, f32)>,
     pub target_frequency: Option<f32>,
+    pub max_frames: Option<usize>,
     pub json: bool,
 }
 
@@ -15,6 +16,7 @@ pub fn parse_options() -> Result<Options, Box<dyn Error>> {
     let mut raw_sample_rate = None;
     let mut range = None;
     let mut target_frequency = None;
+    let mut max_frames = None;
     let mut json = false;
 
     while let Some(argument) = args.next() {
@@ -30,6 +32,9 @@ pub fn parse_options() -> Result<Options, Box<dyn Error>> {
                 range = Some((minimum, maximum));
             }
             "--target" => target_frequency = Some(parse_positive(args.next(), "target frequency")?),
+            "--max-frames" => {
+                max_frames = Some(parse_positive_usize(args.next(), "maximum frames")?)
+            }
             "-h" | "--help" => return Err(usage().into()),
             value if value.starts_with('-') => {
                 return Err(format!("unknown option {value}\n{}", usage()).into());
@@ -51,6 +56,7 @@ pub fn parse_options() -> Result<Options, Box<dyn Error>> {
         raw_sample_rate,
         range,
         target_frequency,
+        max_frames,
         json,
     })
 }
@@ -66,6 +72,17 @@ fn parse_positive(value: Option<String>, label: &str) -> Result<f32, Box<dyn Err
     }
 }
 
+fn parse_positive_usize(value: Option<String>, label: &str) -> Result<usize, Box<dyn Error>> {
+    let parsed = value
+        .ok_or_else(|| format!("missing {label}\n{}", usage()))?
+        .parse::<usize>()?;
+    if parsed > 0 {
+        Ok(parsed)
+    } else {
+        Err(format!("{label} must be positive").into())
+    }
+}
+
 fn usage() -> &'static str {
-    "usage: trace <capture.wav|capture.f32le> [--sample-rate HZ] [--range MIN MAX] [--target HZ] [--json]"
+    "usage: trace <capture.wav|capture.f32le> [--sample-rate HZ] [--range MIN MAX] [--target HZ] [--max-frames COUNT] [--json]"
 }

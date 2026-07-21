@@ -57,7 +57,11 @@ fn normalized_ratio(value: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::TunerViewState;
-    use pitch_core::DetectionFrame;
+    use pitch_core::{
+        canonical_note_name, DetectionFrame, DetectorConfig, EngineConfig, FrameContext, Note,
+        TunerEngine,
+    };
+    use tuner_test_support::{cents_error, load_session_replay_contract, read_fixture_capture};
 
     #[test]
     fn clamps_detector_ratios_at_the_ui_boundary() {
@@ -74,5 +78,75 @@ mod tests {
 
         assert_eq!(state.confidence, 0.0);
         assert_eq!(state.level, 1.0);
+    }
+
+    #[test]
+    fn licensed_session_replay_reaches_egui_view_state() {
+        let contract = load_session_replay_contract();
+        assert_eq!(contract.schema_version, 1);
+
+        for replay_case in contract.cases {
+            let capture = read_fixture_capture(&replay_case.capture);
+            let sample_rate = capture.sample_rate;
+            let samples = capture.samples;
+            let target = Note {
+                frequency: replay_case.target.frequency,
+                name: canonical_note_name(&replay_case.target.name).expect("canonical target"),
+                octave: replay_case.target.octave,
+            };
+            let mut engine = TunerEngine::with_config(EngineConfig {
+                detector: DetectorConfig::default().with_frequency_range(
+                    contract.range.min_frequency,
+                    contract.range.max_frequency,
+                ),
+                frame_context: Some(FrameContext {
+                    display_targets: vec![target.clone()],
+                    idle_target: Some(target.clone()),
+                    selected_target: Some(target.clone()),
+                    tuning_targets: vec![target.clone()],
+                    ..FrameContext::default()
+                }),
+                spectrum_bins: 0,
+                ..EngineConfig::default()
+            });
+            let hop_samples = (sample_rate * contract.hop_seconds).round() as usize;
+            let expected_note = format!("{}{}", replay_case.target.name, replay_case.target.octave);
+            let mut state = TunerViewState::default();
+            let mut published_frames = 0usize;
+            let mut processed_frames = 0usize;
+
+            for frame_index in 0..contract.maximum_frames {
+                let start = frame_index * hop_samples;
+                let end = start + contract.window_samples;
+                if end > samples.len() {
+                    break;
+                }
+                let waveform = &samples[start..end];
+                let frame = engine.process(waveform, sample_rate);
+                let frequency = frame.freq;
+                state.apply(frame, waveform, sample_rate);
+                processed_frames += 1;
+                if let Some(frequency) = frequency {
+                    published_frames += 1;
+                    assert_eq!(
+                        state.note.as_deref(),
+                        Some(expected_note.as_str()),
+                        "{} note",
+                        replay_case.id
+                    );
+                    assert!(
+                        cents_error(frequency, target.frequency) < 35.0,
+                        "{} published {frequency:.3} Hz for {:.3} Hz target",
+                        replay_case.id,
+                        target.frequency
+                    );
+                }
+            }
+
+            assert_eq!(state.frame_id, processed_frames as u64);
+            assert_eq!(state.sample_rate, sample_rate);
+            assert_eq!(state.waveform.len(), contract.window_samples);
+            assert!(published_frames > 0, "{} never acquired", replay_case.id);
+        }
     }
 }

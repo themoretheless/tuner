@@ -6,9 +6,9 @@ This is the canonical **current open-problems extract** for the worktree. It kee
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-In the first audit range, **77 findings are verified closed or obsolete and 103 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 191 open and 23 closed findings, so the combined current total is 294 open and 100 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+In the first audit range, **78 findings are verified closed or obsolete and 102 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 191 open and 23 closed findings, so the combined current total is 293 open and 101 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `155` Vitest tests with test-source typechecking; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/strict clippy/fmt; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production build; seven browser flows covering shared confidence parity, full-frame WASM, synthetic start/stop, Algorithm evidence, intonation setup, exact PCM debug capture, responsive Library navigation and view-scroll reset; manual desktop/`390x844`/`320x700` visual QA; and a full Tauri `.app`/`.dmg` build.
+Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `155` Vitest tests with test-source typechecking; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/strict clippy/fmt; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production build; eight browser flows covering shared confidence parity, full-frame WASM, three-capture native/WASM replay, synthetic start/stop, Algorithm evidence, intonation setup, exact PCM debug capture, responsive Library navigation and view-scroll reset; native-wire and egui-view replay projections; manual desktop/`390x844`/`320x700` visual QA; and a full Tauri `.app`/`.dmg` build.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.
@@ -32,11 +32,11 @@ Notation used across docs:
 2. **Input and frame provenance:** bounded telemetry carries a stable pipeline-configuration fingerprint and competing-string warning; the web microphone reports effective AGC/noise/echo processing and sample rates through an optional port capability.
 3. **Presentation review:** measured frames remain detector-clocked while a separate latest-frame-wins visual frame follows `requestAnimationFrame`; semantic transitions stay immediate, Algorithm shows evidence in real time, Analysis adds a pure-domain intonation setup, and the note live region no longer announces changing confidence.
 
-Post-iteration review caught a missing diagnostics prop, mixed-language labels and mobile overflow from live canvas intrinsic widths, then verified desktop/mobile layout, seven Playwright flows and all 19 real captures.
+Post-iteration review caught a missing diagnostics prop, mixed-language labels and mobile overflow from live canvas intrinsic widths, then verified desktop/mobile layout, eight Playwright flows and all 19 real captures.
 
-The 2026-07-21 SOLID/GoF pass moved input construction to the composition root behind `TunerInputSet`, consolidated duplicate fallback frame assembly, added a shared Worker protocol and deterministic degradation tests, propagated native runtime failures through lifecycle, made teardown retryable, isolated settings hydration merge/rollback, replaced mutable view bindings with explicit commands, and fixed primary mobile tabs at 320 px. Its final review closed `R278` and `R334`; partially improved findings remain open below.
+The 2026-07-21 SOLID/GoF pass moved input construction to the composition root behind `TunerInputSet`, consolidated duplicate fallback frame assembly, added a shared Worker protocol and deterministic degradation tests, propagated native runtime failures through lifecycle, made teardown retryable, isolated settings hydration merge/rollback, replaced mutable view bindings with explicit commands, and fixed primary mobile tabs at 320 px. Its final review closed `R278` and `R334`. The following replay pass added one sample-indexed contract over licensed bass E1, guitar E2 and violin A4 captures, compared native Rust with browser WASM frame by frame, and projected the same sessions through Tauri wire frames and egui view state, closing `R31`.
 
-## Closed R Registry (100)
+## Closed R Registry (101)
 
 | Stable IDs | Verified closure evidence |
 | --- | --- |
@@ -60,10 +60,11 @@ The 2026-07-21 SOLID/GoF pass moved input construction to the composition root b
 | R1, R6, R7, R10, R49, R181, R199, R231, R371, R375, R378 | Thin application composition root returning only feature/shell ports; tuning model/commands/detection split; injected settings/storage factory; normalized display commands; shallow top-level persistence watches; feature-scoped visualization lifecycle; visible Stage exit; matched Analysis start/stop/error controls |
 | R195, R196, R197 | One injected web output port owns a lazily resumed context, master mixer and cancellable scopes; reference/timed requests are revision-safe and the metronome schedules against the audio clock |
 | R278, R334 | Native stop retains its control handle until acknowledgement and has a timeout/retry test; Playwright now verifies synthetic start plus stop, idle status and cleared detection |
+| R31 | One sample-indexed licensed replay contract drives native Rust, browser WASM, Tauri wire frames and egui view state; frequencies, confidence, cents, targets, gates and decisions are parity-gated |
 
 Do not renumber the remaining entries; plans and old review notes still cite these stable IDs.
 
-## Open Problems (103 stable R-items)
+## Open Problems (102 stable R-items)
 
 ### Architecture & Coupling
 11. **P1: Persistence, URL/app state and live session state are tangled.** Settings are watched and saved while live audio and tuning selection mutate.
@@ -99,9 +100,6 @@ Do not renumber the remaining entries; plans and old review notes still cite the
     **Recommendation:** Cache dimensions/DPR and skip backing-store checks unless `ResizeObserver` or DPR changes.
 
 ### Testing & Verification
-31. **P0: Rust/Web domain equivalence harness is partial.** Built-in tuning/note parity, native/WASM/TS pitch/confidence fixtures and an offline real-WAV core gate exist, but Tauri/egui/web session-output equivalence is not covered yet.
-    **Recommendation:** Replay the same licensed captures through native events, egui and browser session adapters.
-
 32. **P1: Fake-mic E2E coverage is still shallow.** Playwright now verifies `?fixture=E2` through the UI without microphone access, but permission-denied, device loss and mocked `getUserMedia` flows are not covered yet.
     **Recommendation:** Extend Playwright with denied-permission, device-unplug and fake WAV pipeline tests.
 
@@ -133,8 +131,8 @@ Do not renumber the remaining entries; plans and old review notes still cite the
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
 
-45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, injected input/output ports, file/WAV and exact browser PCM capture, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, focused application controllers, feature ports and profile schema are in place. Automated cross-backend replay, actionable typed diagnostic categories, device-loss evidence and release hardening remain.
-    **Recommendation:** Continue with replay evidence and typed user-facing diagnostics before adding another broad feature surface.
+45. **P1: The architecture plan is substantially advanced but incomplete.** Session lifecycle, injected input/output ports, file/WAV and exact browser PCM capture, native realtime processing, contextual full-frame WASM/native ownership, generated note math, measured fallback confidence, focused application controllers, feature ports, profile schema and automated licensed cross-backend replay are in place. Actionable typed diagnostic categories, device-loss evidence and release hardening remain.
+    **Recommendation:** Continue with device-loss evidence and typed user-facing diagnostics before adding another broad feature surface.
 
 ### More Architecture & Coupling Issues
 
@@ -236,7 +234,7 @@ commit and should reduce coupling between audio, DSP, state and presentation.
 | Order | Status | Slice | Boundary Result | Next Step |
 | --- | --- | --- | --- | --- |
 | 1 | Done | Session state machine | Serialized lifecycle with cancellation/failure tests | Keep adapters behind commands only [DONE 2026-07-11] |
-| 2 | Done | Audio input port | Discriminated TS port + registry cover web/native/synthetic/file adapters, sample timeline and exact capture capability | Add cross-backend replay and device-loss evidence [DONE 2026-07-19] |
+| 2 | Done | Audio input port | Discriminated TS port + registry cover web/native/synthetic/file adapters, sample timeline, exact capture capability and licensed cross-backend replay | Add device-loss evidence [DONE 2026-07-21] |
 | 3 | Done | Native frame context | Tauri consumes typed resolved context and Vue trusts its canonical frame | Keep wire/context/smoothing fixtures green [DONE 2026-07-11] |
 | 4 | Done | egui frame adoption | egui state consumes `DetectionFrame` | Replace remaining static WASM globals later |
 | 5 | Done | Practice controller | Ear training, history/export and metronome coordination have a focused controller | Keep output behind its injected port [DONE 2026-07-19] |
@@ -755,7 +753,7 @@ Tags: `bug` = concrete correctness/architecture problem grounded in current code
 
 The canonical source is [TOP-500-backlog.md](TOP-500-backlog.md). This mirror keeps all 500 proposals in this file as requested. Rows with dated `[DONE]` markers are retained for traceability and are not part of the current open list; every unmarked row is open, partial, optional, or not yet revalidated.
 
-Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M177**.
+Verified closed master items: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71, M92, M127, M177**.
 
 <!-- TOP500_RECOMMENDATION:START -->
 <details open>
@@ -889,7 +887,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 | M124 | P3 | 42 | r1:review | label A4 input |  |
 | M125 | P3 | 42 | r1:review | label tuning select |  |
 | M126 | P3 | 42 | r1:review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | 42 | r2:dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [PARTIAL 2026-07-19] Rust sample-indexed JSON and exact shared browser PCM/WAV+JSON v2 exist; automated cross-backend replay comparison remains. |
+| M127 | P3 | 42 | r2:dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [DONE 2026-07-21] Rust replay v2 is sample-indexed; a shared licensed contract compares native/WASM frames and verifies Tauri/egui projections. |
 | M128 | P3 | 42 | r2:algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | 42 | r2:native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | 42 | r2:a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |
@@ -1270,7 +1268,7 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 ## How to Use This List
 - **Execution order is in [PLAN.md](PLAN.md)** - milestones cite these item numbers (`R#`) and sequence them with dependencies and a definition of done. Start there rather than fixing items ad hoc.
 - For the full requested Top 500 and historical evidence, use [TOP-500-backlog.md](TOP-500-backlog.md); revalidate old `C#` claims before acting on them.
-- Next dependency order: automated cross-backend replay comparison, then SNR/benchmark/soak gates, actionable typed diagnostics, requested-vs-active backend UX and device-loss evidence.
+- Next dependency order: device-loss/backend-switch evidence, actionable typed diagnostics, then SNR/benchmark/soak gates and requested-vs-active backend UX.
 - Every fix should reduce coupling.
 - Update this file, the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` ranking or status changes, [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](README.md), [PLAN.md](PLAN.md) and relevant action steps in [RECOMMENDATIONS.md](RECOMMENDATIONS.md) when an item is resolved.
 - Turn items into GitHub issues with links back here.
@@ -1310,17 +1308,17 @@ Verified closed master items in this pass: **M1, M2, M3, M5, M6, M7, M11, M13, M
 - Made detailed block help viewport-aware and internally scrollable, fixed the baseline action width selector, and added Playwright regression assertions for both layouts.
 - Completed the 473-repository music/instrument scan and recorded 50 deduplicated `G#` proposals in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md).
 - Added a provenance-checked corpus of 19 licensed guitar/bass/ukulele/violin/voice WAVs, deterministic rebuild, temporal threshold evaluation and a blocking JSON CI artifact.
-- Added a sample-indexed Rust WAV/f32 replay envelope, deterministic interactive WAV sessions and hidden exact shared browser PCM/WAV+JSON v2 capture; automated cross-backend comparison remains open.
+- Added a sample-indexed Rust WAV/f32 replay v2 envelope, deterministic interactive WAV sessions and hidden exact shared browser PCM/WAV+JSON v2 capture, then parity-gated licensed bass E1, guitar E2 and violin A4 sessions across native Rust/browser WASM plus Tauri/egui projections.
 - Split the Vue application boundary into framework-independent value-based use cases, explicit UI-facing contracts in `app/ports/`, reactive implementations in `adapters/vue/` and a 124-line composition adapter; removed the concrete service bag and factory-derived `ReturnType` coupling.
 - Made session failures explicit and retryable: restart intent is synchronous, failed adapter teardown retains its backend, native stop IPC rejects instead of disappearing, and the Tauri API loader is injected for adapter tests.
 - Moved all four input-adapter constructors into the composition root behind `TunerInputSet`, consolidated fallback frame assembly, added Worker degradation contracts, and made settings hydration/import transactional.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary
-- This file contains 103 current open/partial `R#` findings (`R1`-`R180` range); 77 findings in that range are closed.
-- The independent post-refactor pass now has **191 open and 23 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **294 open and 100 closed items total.**
+- This file contains 102 current open/partial `R#` findings (`R1`-`R180` range); 78 findings in that range are closed.
+- The independent post-refactor pass now has **191 open and 23 closed `R#` findings (`R181`-`R394`)**, organized by 36 finer SOLID/DRY pieces. **293 open and 101 closed items total.**
 - The historical 187-item `C#` audit is preserved inside [TOP-500-backlog.md](TOP-500-backlog.md); it is not the current-open count.
-- Each of the three requested documents mirrors exactly 500 `M#` rows; 30 verified master items carry dated `[DONE]` markers.
-- Highest impact now is: cross-backend replay comparison, SNR/differential/benchmark/soak gates, typed diagnostics, device-loss recovery and release hardening.
+- Each of the three requested documents mirrors exactly 500 `M#` rows; 31 verified master items carry dated `[DONE]` markers.
+- Highest impact now is: device-loss recovery, typed diagnostics, SNR/differential/benchmark/soak gates and release hardening.
 
 Update this file when fixing. Link from issues.

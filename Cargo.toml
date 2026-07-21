@@ -5,6 +5,7 @@ members = [
     "pitch-core",
     "egui",
     "desktop/src-tauri",
+    "test-support",
 ]
 
 # Common profile settings for the workspace (native + future wasm)
