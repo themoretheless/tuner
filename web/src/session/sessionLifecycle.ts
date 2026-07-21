@@ -106,11 +106,12 @@ export class SessionLifecycle {
     });
   }
 
-  fail(): Promise<void> {
+  fail(message?: string): Promise<void> {
     this.desiredListening = false;
     const revision = ++this.revision;
     this.failure = {
       backend: this.activeBackend,
+      message,
       operation: 'runtime',
     };
     this.setStatus('error');
@@ -121,6 +122,12 @@ export class SessionLifecycle {
       if (!stopped.ok) this.failure = stopped.failure;
       this.setStatus('error');
     });
+  }
+
+  clearFailure() {
+    if (!this.failure) return;
+    this.failure = null;
+    this.publish();
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -164,6 +171,10 @@ export class SessionLifecycle {
 
   private setStatus(status: SessionStatus) {
     this.status = status;
+    this.publish();
+  }
+
+  private publish() {
     this.options.onChange?.(this.snapshot());
   }
 }

@@ -12,6 +12,13 @@ import {
   type PitchDetectionRange,
 } from '../utils/pitch';
 
+export const NATIVE_AUDIO_FRAME_EVENT = 'native-audio-frame';
+export const NATIVE_AUDIO_ERROR_EVENT = 'native-audio-error';
+
+export interface NativeAudioErrorPayload {
+  message?: unknown;
+}
+
 export interface NativeAudioFramePayload {
   cents?: unknown;
   confidence?: unknown;
@@ -30,6 +37,12 @@ export interface NativeAudioConfiguration {
   context: FrameContext;
   pipeline: PipelineConfig;
   range: PitchDetectionRange;
+}
+
+export function normalizeNativeAudioError(payload: NativeAudioErrorPayload = {}) {
+  return typeof payload.message === 'string' && payload.message.trim()
+    ? payload.message
+    : 'Native audio stream failed';
 }
 
 export function createNativeAudioConfiguration(): NativeAudioConfiguration {

@@ -6,6 +6,7 @@ import { fillSyntheticAudioBuffer, type SyntheticAudioFixture } from '../utils/s
 // synthetic fixture exercises the same buffer size as a real microphone.
 const DEFAULT_FFT_SIZE = 8192;
 const DEFAULT_SAMPLE_RATE = 44100;
+const FRAME_INTERVAL_MS = 33;
 
 export interface SyntheticAudioInputAdapter extends AudioFrameInputPort {
   enabled: ComputedRef<boolean>;
@@ -16,6 +17,7 @@ export interface SyntheticAudioInputAdapter extends AudioFrameInputPort {
 export function useSyntheticAudioInput(
   fixture: SyntheticAudioFixture | null,
   fftSize = DEFAULT_FFT_SIZE,
+  nowMs: () => number = () => globalThis.performance?.now() ?? Date.now(),
 ): SyntheticAudioInputAdapter {
   const error = ref<string | null>(null);
   const isListening = ref(false);
@@ -23,7 +25,10 @@ export function useSyntheticAudioInput(
   const enabled = computed(() => fixture != null);
 
   let buffer = new Float32Array(fftSize) as Float32Array<ArrayBuffer>;
-  let sampleCursor = 0;
+  let activeFrameStart = 0;
+  let frameIndex = 0;
+  let framePrepared = false;
+  let nextAdvanceAt = 0;
 
   async function start() {
     error.value = null;
@@ -32,14 +37,14 @@ export function useSyntheticAudioInput(
       return false;
     }
     sampleRate.value = fixture.sampleRate;
-    sampleCursor = 0;
+    resetTimeline();
     isListening.value = true;
     return true;
   }
 
   async function stop() {
     isListening.value = false;
-    sampleCursor = 0;
+    resetTimeline();
   }
 
   function readFrame(): AudioFrame | null {
@@ -48,18 +53,42 @@ export function useSyntheticAudioInput(
     if (buffer.length !== fftSize) {
       buffer = new Float32Array(fftSize) as Float32Array<ArrayBuffer>;
     }
-    const startSample = sampleCursor;
-    sampleCursor = fillSyntheticAudioBuffer(buffer, fixture, sampleCursor);
+    const now = nowMs();
+    if (!framePrepared) {
+      prepareFrame(fixture, 0);
+      nextAdvanceAt = now + FRAME_INTERVAL_MS;
+    } else if (now >= nextAdvanceAt) {
+      const elapsedSteps = Math.floor((now - nextAdvanceAt) / FRAME_INTERVAL_MS) + 1;
+      frameIndex += elapsedSteps;
+      const startSample = Math.round(
+        frameIndex * fixture.sampleRate * FRAME_INTERVAL_MS / 1000,
+      );
+      prepareFrame(fixture, startSample);
+      nextAdvanceAt += elapsedSteps * FRAME_INTERVAL_MS;
+    }
 
     return {
       buffer,
       sampleRate: fixture.sampleRate,
       timebase: {
-        endSample: sampleCursor,
+        endSample: activeFrameStart + fftSize,
         source: 'synthetic',
-        startSample,
+        startSample: activeFrameStart,
       },
     };
+  }
+
+  function prepareFrame(activeFixture: SyntheticAudioFixture, startSample: number) {
+    activeFrameStart = startSample;
+    fillSyntheticAudioBuffer(buffer, activeFixture, startSample);
+    framePrepared = true;
+  }
+
+  function resetTimeline() {
+    activeFrameStart = 0;
+    frameIndex = 0;
+    framePrepared = false;
+    nextAdvanceAt = 0;
   }
 
   function clearError() {

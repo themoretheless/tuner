@@ -51,9 +51,13 @@ export function createAnalysisPort(services: Dependencies): AnalysisPort {
     setDisplayMode: display.setDisplayMode,
     setLayoutMode: display.setLayoutMode,
     setLeftHanded: display.setLeftHanded,
+    setShowSpectrogram: (value: boolean) => { settings.showSpectrogram.value = value; },
+    setShowSpectrum: (value: boolean) => { settings.showSpectrum.value = value; },
+    setShowWaveform: (value: boolean) => { settings.showWaveform.value = value; },
     setThemeMode: display.setThemeMode,
     start: listening.start,
     stop: listening.stop,
+    toggle: listening.toggle,
     toggleFullscreen: display.toggleFullscreen,
   });
 }

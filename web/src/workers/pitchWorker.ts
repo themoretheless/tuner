@@ -2,46 +2,19 @@ import {
   analyzePitchFrame,
   computeSignalStats,
   normalizeLevel,
-  type PitchDetectionRange,
-  type SignalStats,
 } from '../utils/pitch';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
-import type { FrameContext } from '../types/frames';
-import type { PipelineConfig } from '../domain/pipelineConfig';
-import type { AudioFrameTimebase } from '../ports/audioInput';
 import {
   PitchCoreAdapter,
   type PitchCoreWasmModule,
   type WorkerPitchFrame,
 } from './pitchCoreAdapter';
-
-interface PitchRequest {
-  type: 'process';
-  id: number;
-  buffer: ArrayBuffer;
-  frameContext?: FrameContext;
-  pipelineConfig?: PipelineConfig;
-  range: PitchDetectionRange;
-  sampleRate: number;
-  stats?: SignalStats;
-  timebase: AudioFrameTimebase | null;
-  wasmModuleUrl: string;
-}
-
-interface ResetRequest {
-  type: 'reset';
-}
-
-interface PitchResponse extends WorkerPitchFrame {
-  buffer: ArrayBuffer;
-  id: number;
-  timebase: AudioFrameTimebase | null;
-}
+import type { PitchWorkerRequest, PitchWorkerResponse } from './pitchWorkerProtocol';
 
 let adapter: PitchCoreAdapter | null = null;
 let adapterModuleUrl = '';
 
-self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
+self.onmessage = async (event: MessageEvent<PitchWorkerRequest>) => {
   if (event.data.type === 'reset') {
     await adapter?.reset();
     return;
@@ -80,7 +53,7 @@ self.onmessage = async (event: MessageEvent<PitchRequest | ResetRequest>) => {
     };
   }
   self.postMessage(
-    { id, buffer, timebase, ...detection } satisfies PitchResponse,
+    { id, buffer, timebase, ...detection } satisfies PitchWorkerResponse,
     { transfer: [buffer] },
   );
 };

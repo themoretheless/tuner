@@ -21,6 +21,7 @@ const actionHint = computed(() => {
       data-testid="mic-toggle"
       class="mic-btn focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#11151b] focus:ring-emerald-500"
       :class="{ listening: isListening, pending: status === 'starting' || status === 'stopping' }"
+      :disabled="status === 'stopping'"
       @click="$emit('toggle')"
       :aria-label="t('toggle.microphone')"
     >

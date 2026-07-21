@@ -7,6 +7,19 @@ use serde::Serialize;
 use std::time::Instant;
 
 pub(crate) const EVENT_NAME: &str = "native-audio-frame";
+pub(crate) const ERROR_EVENT_NAME: &str = "native-audio-error";
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeAudioError {
+    message: String,
+}
+
+impl NativeAudioError {
+    pub(crate) fn new(message: String) -> Self {
+        Self { message }
+    }
+}
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

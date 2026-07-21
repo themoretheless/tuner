@@ -1,5 +1,5 @@
 use super::config::SharedNativeAudioSettings;
-use super::frame::{NativeFrameProcessor, EVENT_NAME};
+use super::frame::{NativeAudioError, NativeFrameProcessor, ERROR_EVENT_NAME, EVENT_NAME};
 use audio_input::{InputConfig, InputStream};
 use tauri::{AppHandle, Emitter};
 
@@ -17,6 +17,7 @@ impl NativeAudioRuntime {
             .map(|settings| settings.snapshot())
             .unwrap_or_default();
         let mut processor = NativeFrameProcessor::new(initial_config);
+        let error_app = app.clone();
         let input = InputStream::open(
             InputConfig::default(),
             move |samples, sample_rate| {
@@ -31,7 +32,9 @@ impl NativeAudioRuntime {
                 let frame = processor.process(samples, sample_rate);
                 let _ = app.emit(EVENT_NAME, frame);
             },
-            |error| eprintln!("native audio input error: {error}"),
+            move |error| {
+                let _ = error_app.emit(ERROR_EVENT_NAME, NativeAudioError::new(error));
+            },
         )?;
         Ok(Self { input })
     }

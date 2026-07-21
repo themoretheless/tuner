@@ -25,7 +25,12 @@ onUnmounted(analysis.deactivate);
         <h2 id="analysis-heading">{{ t('nav.analysis') }}</h2>
         <p>{{ t('analysis.subtitle') }}</p>
       </div>
-      <button type="button" class="btn btn-primary" @click="analysis.isListening ? analysis.stop() : analysis.start()">
+      <button
+        type="button"
+        class="btn btn-primary"
+        :disabled="analysis.sessionStatus === 'stopping'"
+        @click="analysis.toggle"
+      >
         {{ analysis.isListening ? t('stop.mic') : t('start.mic') }}
       </button>
     </header>
@@ -37,15 +42,27 @@ onUnmounted(analysis.deactivate);
 
     <div class="analysis-toolbar card">
       <label class="toggle-control">
-        <input v-model="analysis.showWaveform" type="checkbox" />
+        <input
+          :checked="analysis.showWaveform"
+          type="checkbox"
+          @change="analysis.setShowWaveform(($event.target as HTMLInputElement).checked)"
+        />
         <span>{{ t('waveform') }}</span>
       </label>
       <label class="toggle-control">
-        <input v-model="analysis.showSpectrum" type="checkbox" />
+        <input
+          :checked="analysis.showSpectrum"
+          type="checkbox"
+          @change="analysis.setShowSpectrum(($event.target as HTMLInputElement).checked)"
+        />
         <span>{{ t('spectrum') }}</span>
       </label>
       <label class="toggle-control">
-        <input v-model="analysis.showSpectrogram" type="checkbox" />
+        <input
+          :checked="analysis.showSpectrogram"
+          type="checkbox"
+          @change="analysis.setShowSpectrogram(($event.target as HTMLInputElement).checked)"
+        />
         <span>{{ t('spectrogram') }}</span>
       </label>
       <DisplayModeSelector :mode="analysis.displayMode" @change="analysis.setDisplayMode" />

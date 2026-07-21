@@ -50,14 +50,6 @@ function providerLocked(block: 'yinEnabled' | 'secondaryDetectorEnabled') {
   return enabled(block) && !enabled(other);
 }
 
-function toggleMicrophone() {
-  if (pipeline.sessionStatus === 'starting' || pipeline.sessionStatus === 'listening') {
-    void pipeline.stop();
-    return;
-  }
-  void pipeline.start();
-}
-
 function blockHelp(block: PipelineHelpId): PipelineBlockHelp {
   const prefix = `pipeline.block.${block}.help`;
 
@@ -124,7 +116,7 @@ function blockHelp(block: PipelineHelpId): PipelineBlockHelp {
       :target-frequency="pipeline.targetNote.frequency"
       :target-name="pipeline.getNoteDisplay(pipeline.targetNote)"
       @dismiss-error="pipeline.clearError()"
-      @toggle-microphone="toggleMicrophone"
+      @toggle-microphone="pipeline.toggle"
     />
 
     <PipelineDiagnosticsWorkspace

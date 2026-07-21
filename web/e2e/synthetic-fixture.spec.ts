@@ -10,6 +10,10 @@ test('detects E2 through the synthetic fixture without microphone access', async
   await expect(page.getByTestId('detected-frequency')).toHaveText('82.4');
   await expect(page.getByTestId('note-confidence')).toContainText(/уверенность|confidence/i);
   await expect(page.getByTestId('session-status')).toHaveAttribute('data-detector-backend', 'wasm');
+
+  await page.getByTestId('mic-toggle').click();
+  await expect(page.getByTestId('session-status')).toContainText(/READY|ГОТОВ/);
+  await expect(page.getByTestId('detected-note')).toHaveCount(0);
 });
 
 test('streams the canonical detection result inside the algorithm view', async ({ page }) => {

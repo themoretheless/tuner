@@ -3,6 +3,7 @@ import type { PipelineConfig } from '../domain/pipelineConfig';
 import type { PitchDetectionRange } from '../utils/pitch';
 import type { AudioInputDiagnostics } from '../domain/audioInputDiagnostics';
 import type { ReadableValue } from '../application/ports/value';
+import type { DetectorBackend } from '../types/detectorBackend';
 
 export type { ReadableValue } from '../application/ports/value';
 export type AudioInputId = 'web' | 'native' | 'synthetic' | 'file';
@@ -62,6 +63,7 @@ export interface DiagnosableAudioInputPort extends AudioFrameInputPort {
 }
 
 export interface DetectionFrameInputPort extends AudioInputPortBase {
+  readonly detectorBackend: DetectorBackend;
   readonly frame: ReadableValue<DetectionFrame | null>;
   readonly output: 'detection-frame';
   setDetectionRange(range: PitchDetectionRange): Promise<void>;

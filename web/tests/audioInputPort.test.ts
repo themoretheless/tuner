@@ -9,6 +9,8 @@ import {
   type AudioInputPort,
   type DetectionFrameInputPort,
 } from '../src/ports/audioInput';
+import { createUnresolvedDetectionFrame } from '../src/domain/detectionFrame';
+import type { DetectionFrame } from '../src/types/frames';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
 
 describe('AudioInputPort contract', () => {
@@ -75,8 +77,10 @@ function createDetectionPort(): DetectionFrameInputPort & {
   lastRange: ReturnType<typeof ref<{ minFrequency: number; maxFrequency: number }>>;
 } {
   const error = ref<string | null>(null);
-  const frame = ref({
+  const frame = ref<DetectionFrame>({
+    ...createUnresolvedDetectionFrame(),
     freq: 82.4069,
+    rawFreq: 82.4069,
     confidence: 0.9,
     rms: 0.1,
     level: 0.5,
@@ -95,6 +99,7 @@ function createDetectionPort(): DetectionFrameInputPort & {
       error.value = null;
     },
     error,
+    detectorBackend: 'native',
     frame,
     id: 'native',
     isListening,
@@ -104,6 +109,7 @@ function createDetectionPort(): DetectionFrameInputPort & {
       lastRange.value = range;
     },
     async setFrameContext() {},
+    async setPipelineConfig() {},
     async start() {
       isListening.value = true;
       return true;

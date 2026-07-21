@@ -891,15 +891,22 @@ summary:focus-visible {
 
   .app-tabs {
     gap: 0;
-    overflow: visible;
-    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    align-items: end;
+    scrollbar-width: none;
+  }
+
+  .app-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .app-tabs button {
-    min-width: 0;
-    padding: 0 3px;
-    flex: 1 1 20%;
-    font-size: 0.7rem;
+    min-width: max-content;
+    padding: 0 10px;
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    white-space: nowrap;
   }
 
   .live-panel {
@@ -972,9 +979,6 @@ summary:focus-visible {
     border: 0;
   }
 
-  .app-tabs button {
-    font-size: 0.64rem;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

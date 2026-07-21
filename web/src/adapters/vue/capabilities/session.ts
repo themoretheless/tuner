@@ -10,6 +10,7 @@ export interface ListeningCapability {
   setAudioBackend(backend: AudioBackend): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
+  toggle(): Promise<void>;
 }
 
 export interface ProfileCapability {

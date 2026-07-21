@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 
 import { useTunerSession } from '../src/composables/useTunerSession';
+import { useTunerInputSet } from '../src/adapters/vue/useTunerInputSet';
 import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
@@ -47,8 +48,11 @@ describe('useTunerSession', () => {
     const selectedInputDeviceId = ref('');
     const session = useTunerSession({
       audioBackend,
+      inputs: useTunerInputSet({
+        selectedInputDeviceId,
+        syntheticFixture: resolveSyntheticAudioFixture('E2'),
+      }),
       selectedInputDeviceId,
-      syntheticFixture: resolveSyntheticAudioFixture('E2'),
     });
 
     await session.start({ minFrequency: 60, maxFrequency: 120 });
@@ -77,17 +81,19 @@ describe('useTunerSession', () => {
   });
 
   it('lets the raw pipeline analyze frames below the fixed signal gate', async () => {
+    const selectedInputDeviceId = ref('');
+    const syntheticFixture = {
+      id: 'quiet-e2',
+      label: 'Quiet E2',
+      frequency: 82.4069,
+      sampleRate: 44_100,
+      gain: 0.006,
+    };
     const session = useTunerSession({
       audioBackend: ref<AudioBackend>('web'),
+      inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture }),
       pipelineConfig: ref(pipelinePresetConfig('raw')),
-      selectedInputDeviceId: ref(''),
-      syntheticFixture: {
-        id: 'quiet-e2',
-        label: 'Quiet E2',
-        frequency: 82.4069,
-        sampleRate: 44_100,
-        gain: 0.006,
-      },
+      selectedInputDeviceId,
     });
 
     await session.start({ minFrequency: 60, maxFrequency: 120 });
@@ -104,17 +110,18 @@ describe('useTunerSession', () => {
   });
 
   it('runs an imported WAV through the same realtime session pipeline', async () => {
+    const selectedInputDeviceId = ref('');
     const session = useTunerSession({
       audioBackend: ref<AudioBackend>('web'),
-      selectedInputDeviceId: ref(''),
-      syntheticFixture: null,
+      inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null }),
+      selectedInputDeviceId,
     });
     const sampleRate = 44_100;
     const samples = Float32Array.from({ length: sampleRate }, (_, index) => (
       Math.sin(2 * Math.PI * 82.4069 * index / sampleRate) * 0.4
     ));
     const wav = encodeMonoPcm16Wav(samples, sampleRate);
-    let resolveStaleFile: ((buffer: ArrayBuffer) => void) | null = null;
+    let resolveStaleFile!: (buffer: ArrayBuffer) => void;
     const staleBuffer = new Promise<ArrayBuffer>((resolve) => {
       resolveStaleFile = resolve;
     });
@@ -128,7 +135,7 @@ describe('useTunerSession', () => {
     } as File;
 
     expect(await session.loadAudioFile(file)).toBe(true);
-    resolveStaleFile?.(wav);
+    resolveStaleFile(wav);
     expect(await staleLoad).toBe(false);
     expect(session.usingFileAudio.value).toBe(true);
     expect(session.fileAudioName.value).toBe('e2.wav');
@@ -147,7 +154,7 @@ describe('useTunerSession', () => {
   });
 
   it('restarts a pending web session when the input device changes', async () => {
-    let resolveFirstStream: ((stream: MediaStream) => void) | null = null;
+    let resolveFirstStream!: (stream: MediaStream) => void;
     const firstStream = new Promise<MediaStream>((resolve) => {
       resolveFirstStream = resolve;
     });
@@ -156,10 +163,11 @@ describe('useTunerSession', () => {
       .mockResolvedValueOnce(createMediaStream());
     installWebAudioFakes(getUserMedia);
 
+    const selectedInputDeviceId = ref('old-device');
     const session = useTunerSession({
       audioBackend: ref<AudioBackend>('web'),
-      selectedInputDeviceId: ref('old-device'),
-      syntheticFixture: null,
+      inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null }),
+      selectedInputDeviceId,
     });
 
     const initialStart = session.start();
@@ -167,7 +175,7 @@ describe('useTunerSession', () => {
     expect(session.status.value).toBe('starting');
 
     const switching = session.setInputDevice('new-device');
-    resolveFirstStream?.(createMediaStream());
+    resolveFirstStream(createMediaStream());
     await Promise.all([initialStart, switching]);
 
     expect(getUserMedia).toHaveBeenCalledTimes(2);
@@ -175,6 +183,29 @@ describe('useTunerSession', () => {
     expect(getUserMedia.mock.calls[1][0].audio.deviceId).toEqual({ exact: 'new-device' });
     expect(session.selectedInputDeviceId.value).toBe('new-device');
     expect(session.status.value).toBe('listening');
+    await session.stop();
+  });
+
+  it('keeps the effective backend stable when native availability arrives late', async () => {
+    installWebAudioFakes(vi.fn().mockResolvedValue(createMediaStream()));
+    const selectedInputDeviceId = ref('');
+    const audioBackend = ref<AudioBackend>('native');
+    const inputs = useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null });
+    await inputs.native.refreshAvailability();
+    inputs.native.available.value = false;
+    const session = useTunerSession({
+      audioBackend,
+      inputs,
+      selectedInputDeviceId,
+    });
+
+    await session.start();
+    expect(session.activeInputId.value).toBe('web');
+    inputs.native.available.value = true;
+
+    expect(session.requestedInputId.value).toBe('native');
+    expect(session.activeInputId.value).toBe('web');
+    expect(session.usingNativeAudio.value).toBe(false);
     await session.stop();
   });
 });

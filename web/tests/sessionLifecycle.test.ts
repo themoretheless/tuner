@@ -42,7 +42,7 @@ describe('SessionLifecycle', () => {
 
   it('cancels a queued start when stop wins the latest intent', async () => {
     const calls: string[] = [];
-    let resolveStart: ((started: boolean) => void) | null = null;
+    let resolveStart!: (started: boolean) => void;
     const startGate = new Promise<boolean>((resolve) => {
       resolveStart = resolve;
     });
@@ -59,7 +59,7 @@ describe('SessionLifecycle', () => {
     const starting = lifecycle.start('web');
     await Promise.resolve();
     const stopping = lifecycle.stop();
-    resolveStart?.(true);
+    resolveStart(true);
     await Promise.all([starting, stopping]);
 
     expect(calls).toEqual(['start:web', 'stop:web']);
@@ -127,10 +127,21 @@ describe('SessionLifecycle', () => {
     });
 
     await lifecycle.start('web');
-    await lifecycle.fail();
+    await lifecycle.fail('Microphone disconnected');
     expect(lifecycle.snapshot()).toEqual({
       activeBackend: null,
-      failure: { backend: 'web', operation: 'runtime' },
+      failure: {
+        backend: 'web',
+        message: 'Microphone disconnected',
+        operation: 'runtime',
+      },
+      status: 'error',
+    });
+
+    lifecycle.clearFailure();
+    expect(lifecycle.snapshot()).toEqual({
+      activeBackend: null,
+      failure: null,
       status: 'error',
     });
 
@@ -144,7 +155,7 @@ describe('SessionLifecycle', () => {
   });
 
   it('publishes a restart intent before a queued stop finishes', async () => {
-    let releaseStop: (() => void) | null = null;
+    let releaseStop!: () => void;
     const stopGate = new Promise<void>((resolve) => {
       releaseStop = resolve;
     });
@@ -162,7 +173,7 @@ describe('SessionLifecycle', () => {
     const restarting = lifecycle.start('web');
 
     expect(lifecycle.snapshot().status).toBe('starting');
-    releaseStop?.();
+    releaseStop();
     await Promise.all([stopping, restarting]);
     expect(lifecycle.snapshot()).toEqual({
       activeBackend: 'web',

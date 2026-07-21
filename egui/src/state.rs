@@ -21,12 +21,12 @@ pub(crate) struct TunerViewState {
 impl TunerViewState {
     pub(crate) fn apply(&mut self, frame: DetectionFrame, waveform: &[f32], sample_rate: f32) {
         self.cents = frame.cents;
-        self.confidence = frame.confidence;
+        self.confidence = normalized_ratio(frame.confidence);
         self.error = None;
         self.frame_id = self.frame_id.wrapping_add(1);
         self.frequency = frame.freq;
         self.is_power = frame.is_power;
-        self.level = frame.level;
+        self.level = normalized_ratio(frame.level);
         self.note = Some(frame.note);
         self.sample_rate = sample_rate;
         self.spectrum = frame.spectrum;
@@ -43,5 +43,36 @@ impl TunerViewState {
         self.note = None;
         self.spectrum.clear();
         self.waveform.clear();
+    }
+}
+
+fn normalized_ratio(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TunerViewState;
+    use pitch_core::DetectionFrame;
+
+    #[test]
+    fn clamps_detector_ratios_at_the_ui_boundary() {
+        let mut state = TunerViewState::default();
+        state.apply(
+            DetectionFrame {
+                confidence: f32::NAN,
+                level: 1.5,
+                ..DetectionFrame::default()
+            },
+            &[],
+            48_000.0,
+        );
+
+        assert_eq!(state.confidence, 0.0);
+        assert_eq!(state.level, 1.0);
     }
 }

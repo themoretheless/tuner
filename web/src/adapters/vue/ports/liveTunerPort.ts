@@ -74,6 +74,7 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     setTuning: tuning.setTuning,
     start: listening.start,
     stop: listening.stop,
+    toggle: listening.toggle,
     toggleReferenceTone: referenceTone.toggleReferenceTone,
     toggleString: tuning.toggleString,
     useMicrophoneInput: session.useMicrophoneInput,

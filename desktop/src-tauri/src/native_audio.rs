@@ -19,6 +19,29 @@ pub struct NativeAudioState {
     settings: SharedNativeAudioSettings,
 }
 
+impl NativeAudioState {
+    fn stop_with_timeout(&self, timeout: Duration) -> Result<(), String> {
+        let mut control = self
+            .control
+            .lock()
+            .map_err(|_| "Native audio state lock failed")?;
+        let Some(active) = control.as_ref() else {
+            return Ok(());
+        };
+
+        let _ = active.stop.send(());
+        match active.stopped.recv_timeout(timeout) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                *control = None;
+                Ok(())
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err("Native audio backend did not stop in time".to_string())
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub fn native_audio_available() -> bool {
     audio_input::default_input_available()
@@ -92,19 +115,7 @@ fn run_audio_thread(
 
 #[tauri::command]
 pub fn stop_native_audio(state: State<'_, NativeAudioState>) -> Result<(), String> {
-    let control = state
-        .control
-        .lock()
-        .map_err(|_| "Native audio state lock failed")?
-        .take();
-    if let Some(control) = control {
-        let _ = control.stop.send(());
-        control
-            .stopped
-            .recv_timeout(Duration::from_secs(2))
-            .map_err(|_| "Native audio backend did not stop in time")?;
-    }
-    Ok(())
+    state.stop_with_timeout(Duration::from_secs(2))
 }
 
 #[tauri::command]
@@ -125,4 +136,30 @@ fn set_config(
         .map_err(|_| "Native audio settings lock failed")?
         .update(config);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timed_out_stop_keeps_control_for_retry() {
+        let state = NativeAudioState::default();
+        let (stop_tx, _stop_rx) = mpsc::channel();
+        let (stopped_tx, stopped_rx) = mpsc::channel();
+        *state.control.lock().expect("state lock") = Some(NativeAudioControl {
+            stop: stop_tx,
+            stopped: stopped_rx,
+        });
+
+        assert_eq!(
+            state.stop_with_timeout(Duration::ZERO),
+            Err("Native audio backend did not stop in time".to_string()),
+        );
+        assert!(state.control.lock().expect("state lock").is_some());
+
+        stopped_tx.send(()).expect("stop acknowledgement");
+        assert_eq!(state.stop_with_timeout(Duration::ZERO), Ok(()));
+        assert!(state.control.lock().expect("state lock").is_none());
+    }
 }

@@ -11,11 +11,13 @@ describe('framework-independent application use cases', () => {
   it('coordinates listening through capabilities and plain value cells', async () => {
     const clearHistory = vi.fn();
     const stopReferenceTone = vi.fn();
+    const status = cell<SessionStatus>('idle');
     const session = {
       clearError: vi.fn(),
       setAudioBackend: vi.fn(async () => {}),
-      start: vi.fn(async () => {}),
-      stop: vi.fn(async () => {}),
+      start: vi.fn(async () => { status.value = 'listening'; }),
+      status,
+      stop: vi.fn(async () => { status.value = 'idle'; }),
     };
     const controller = createListeningController({
       clearHistory,
@@ -31,6 +33,11 @@ describe('framework-independent application use cases', () => {
     await controller.stop();
     expect(session.stop).toHaveBeenCalledOnce();
     expect(stopReferenceTone).toHaveBeenCalledOnce();
+
+    await controller.toggle();
+    expect(session.start).toHaveBeenCalledTimes(2);
+    await controller.toggle();
+    expect(session.stop).toHaveBeenCalledTimes(2);
   });
 
   it('normalizes display commands without a Vue runtime', async () => {

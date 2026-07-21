@@ -22,12 +22,6 @@ const { t } = useL10n();
 const debugEnabled = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).has('debug');
 
-function toggleMic() {
-  if (tuner.sessionStatus === 'starting' || tuner.sessionStatus === 'listening') {
-    void tuner.stop();
-  }
-  else void tuner.start();
-}
 </script>
 
 <template>
@@ -48,7 +42,7 @@ function toggleMic() {
       <MicButton
         :is-listening="tuner.isListening"
         :status="tuner.sessionStatus"
-        @toggle="toggleMic"
+        @toggle="tuner.toggle"
       />
       <LevelMeter :level="tuner.volume" :active="tuner.isListening" />
 
@@ -126,7 +120,7 @@ function toggleMic() {
       </div>
 
       <InputDeviceSelector
-        v-if="!tuner.usingNativeAudio && !tuner.usingFileAudio"
+        v-if="!tuner.usingNativeAudio && !tuner.usingFileAudio && !tuner.usingSyntheticAudio"
         :devices="tuner.inputDevices"
         :selected-device-id="tuner.selectedInputDeviceId"
         @refresh="tuner.refreshInputDevices"
@@ -153,7 +147,7 @@ function toggleMic() {
           <span aria-hidden="true">{{ tuner.referencePlaying ? '■' : '▶' }}</span>
           <span>{{ t('play.reference') }}</span>
         </button>
-        <button type="button" class="btn btn-primary" @click="toggleMic">
+        <button type="button" class="btn btn-primary" @click="tuner.toggle">
           {{ tuner.usingFileAudio
             ? (tuner.isListening ? t('audio.file.stop') : t('audio.file.replay'))
             : (tuner.isListening ? t('stop.mic') : t('start.mic')) }}

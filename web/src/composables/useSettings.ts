@@ -1,5 +1,6 @@
 import { effectScope, ref, watch } from 'vue';
 import { decodeUserProfile, encodeUserProfile } from '../settings/profileCodec';
+import { mergeHydratedSettings, settingsChanged } from '../settings/mergeHydratedSettings';
 import { createSettingsState } from '../settings/settingsState';
 import {
   loadPersistedSettings,
@@ -23,6 +24,7 @@ export function createSettingsStore(storage: SettingsStoragePort = defaultStorag
   const scope = effectScope(true);
   let disposed = false;
   let isLoading = false;
+  let hydrationHasLocalEdits = false;
   let loadPromise: Promise<void> | null = null;
   let saveTail: Promise<void> = Promise.resolve();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -31,13 +33,19 @@ export function createSettingsStore(storage: SettingsStoragePort = defaultStorag
     if (loadPromise) return loadPromise;
     loadPromise = (async () => {
       isLoading = true;
+      const baseline = state.snapshot();
       try {
-        state.apply(await storage.load());
+        const loadedSettings = await storage.load();
+        const current = state.snapshot();
+        hydrationHasLocalEdits = settingsChanged(current, baseline);
+        state.apply(mergeHydratedSettings(loadedSettings, baseline, current));
       } catch {
-        state.apply({});
+        // Keep any local edits made while the storage adapter was loading.
+        hydrationHasLocalEdits = settingsChanged(state.snapshot(), baseline);
       } finally {
         isLoading = false;
         loaded.value = true;
+        if (hydrationHasLocalEdits) scheduleSave();
       }
     })();
     return loadPromise;
@@ -57,14 +65,25 @@ export function createSettingsStore(storage: SettingsStoragePort = defaultStorag
     await load();
     const profile = decodeUserProfile(payload);
     if (!profile) return false;
+    const previous = state.snapshot();
     isLoading = true;
     try {
       state.apply(profile.settings);
     } finally {
       isLoading = false;
     }
-    await save();
-    return true;
+    try {
+      await save();
+      return true;
+    } catch {
+      isLoading = true;
+      try {
+        state.apply(previous);
+      } finally {
+        isLoading = false;
+      }
+      return false;
+    }
   }
 
   function scheduleSave() {
@@ -98,10 +117,3 @@ export function createSettingsStore(storage: SettingsStoragePort = defaultStorag
 }
 
 export type SettingsStore = ReturnType<typeof createSettingsStore>;
-
-let defaultStore: SettingsStore | null = null;
-
-export function useSettings() {
-  defaultStore ??= createSettingsStore();
-  return defaultStore;
-}

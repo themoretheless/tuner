@@ -23,3 +23,16 @@ test('library tabs preserve a focused, overflow-free workflow', async ({ page })
   ));
   expect(hasOverflow).toBe(false);
 });
+
+test('switching primary views returns long pages to the top', async ({ page }) => {
+  await page.goto('/?fixture=E2');
+  await page.getByRole('tab', { name: /Algorithm|Алгоритм/ }).click();
+  await expect(page.getByRole('heading', { name: /Algorithm|Алгоритм/, level: 2 }))
+    .toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+  await page.getByRole('tab', { name: /Tuner|Тюнер/ }).click();
+
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+});

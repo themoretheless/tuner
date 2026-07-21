@@ -13,6 +13,7 @@ export interface ShellPort {
   setLayoutMode(value: unknown): void;
   start(): Promise<void>;
   stop(): Promise<void>;
+  toggle(): Promise<void>;
   strings: ReadableValue<Note[]>;
   themeMode: ReadableValue<ThemeMode>;
   toggleReferenceTone(): Promise<void>;

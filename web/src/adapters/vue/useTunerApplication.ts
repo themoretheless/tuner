@@ -2,7 +2,7 @@ import { computed, onScopeDispose } from 'vue';
 import type { TunerApplication } from '../../app/tunerApplication';
 import { useCentsHistory } from '../../composables/useCentsHistory';
 import { useReferenceTone } from '../../composables/useReferenceTone';
-import { useSettings } from '../../composables/useSettings';
+import { createSettingsStore } from '../../composables/useSettings';
 import { useTunerSession } from '../../composables/useTunerSession';
 import { useTuningState } from '../../composables/useTuningState';
 import { createDisplayController } from '../../application/controllers/displayController';
@@ -10,6 +10,7 @@ import { createListeningController } from '../../application/controllers/listeni
 import { createProfileController } from '../../application/controllers/profileController';
 import { browserFullscreenPort } from '../../ports/fullscreen';
 import { createWebAudioOutputPort } from '../../platform/webAudioOutput';
+import { syntheticAudioFixtureFromLocation } from '../../utils/syntheticAudio';
 import { useDetectionController } from './controllers/detectionController';
 import { usePipelineController } from './controllers/pipelineController';
 import { usePracticeController } from './controllers/practiceController';
@@ -20,13 +21,20 @@ import { createLiveTunerPort } from './ports/liveTunerPort';
 import { createPipelinePort } from './ports/pipelinePort';
 import { createPracticePort } from './ports/practicePort';
 import { createShellPort } from './ports/shellPort';
+import { useTunerInputSet } from './useTunerInputSet';
 
 export function useTunerApplication(): TunerApplication {
   const audioOutput = createWebAudioOutputPort();
   onScopeDispose(() => { void audioOutput.dispose().catch(() => {}); });
-  const settings = useSettings();
+  const settings = createSettingsStore();
+  onScopeDispose(settings.dispose);
+  const inputs = useTunerInputSet({
+    selectedInputDeviceId: settings.selectedInputDeviceId,
+    syntheticFixture: syntheticAudioFixtureFromLocation(),
+  });
   const session = useTunerSession({
     audioBackend: settings.audioBackend,
+    inputs,
     pipelineConfig: settings.pipelineConfig,
     selectedInputDeviceId: settings.selectedInputDeviceId,
   });

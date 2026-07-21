@@ -9,7 +9,7 @@ import type { TuningCapability } from '../capabilities/tuning';
 
 interface Dependencies {
   display: Pick<DisplayCapability, 'layoutMode' | 'leftHanded' | 'setLayoutMode' | 'themeMode'>;
-  listening: Pick<ListeningCapability, 'start' | 'stop'>;
+  listening: Pick<ListeningCapability, 'start' | 'stop' | 'toggle'>;
   referenceTone: Pick<ReferenceToneCapability, 'toggleReferenceTone'>;
   session: Pick<SessionCapability, 'detectorBackend' | 'isListening' | 'status'>;
   tuning: Pick<TuningCapability, 'strings' | 'toggleString'>;
@@ -27,6 +27,7 @@ export function createShellPort(
     setLayoutMode: display.setLayoutMode,
     start: listening.start,
     stop: listening.stop,
+    toggle: listening.toggle,
     strings: tuning.strings,
     themeMode: display.themeMode,
     toggleReferenceTone: referenceTone.toggleReferenceTone,

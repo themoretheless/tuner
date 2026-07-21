@@ -32,11 +32,9 @@ const sessionLabel = computed(() => {
   return tuner.isListening.value ? t('listening') : t('ready');
 });
 
-function toggleMic() {
-  if (tuner.sessionStatus.value === 'starting' || tuner.sessionStatus.value === 'listening') {
-    void tuner.stop();
-  }
-  else void tuner.start();
+function selectView(view: AppView) {
+  activeView.value = view;
+  window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
 function handleKey(event: KeyboardEvent) {
@@ -44,7 +42,7 @@ function handleKey(event: KeyboardEvent) {
   if (target?.closest('input, select, textarea, button, [contenteditable="true"]')) return;
   if (event.key === ' ' || event.key.toLowerCase() === 'm') {
     event.preventDefault();
-    toggleMic();
+    void tuner.toggle();
   }
   if (event.key.toLowerCase() === 'r' || event.key.toLowerCase() === 'p') {
     tuner.toggleReferenceTone();
@@ -57,7 +55,7 @@ function handleKey(event: KeyboardEvent) {
 }
 
 watch(() => tuner.layoutMode.value, (layout) => {
-  if (layout === 'stage') activeView.value = 'tuner';
+  if (layout === 'stage') selectView('tuner');
 });
 
 onMounted(() => window.addEventListener('keydown', handleKey));
@@ -108,7 +106,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
         role="tab"
         :aria-selected="activeView === view"
         :class="{ active: activeView === view }"
-        @click="activeView = view"
+        @click="selectView(view)"
       >
         {{ t(`nav.${view}`) }}
       </button>

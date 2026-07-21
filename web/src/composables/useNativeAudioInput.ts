@@ -12,11 +12,15 @@ import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   cloneNativeAudioConfiguration,
   createNativeAudioConfiguration,
+  NATIVE_AUDIO_ERROR_EVENT,
+  NATIVE_AUDIO_FRAME_EVENT,
+  normalizeNativeAudioError,
   normalizeNativeFrame,
   withNativeAudioRange,
   withNativeFrameContext,
   withNativePipelineConfig,
   type NativeAudioConfiguration,
+  type NativeAudioErrorPayload,
   type NativeAudioFramePayload,
 } from '../platform/nativeAudioContract';
 
@@ -39,7 +43,8 @@ export function useNativeAudioInput(
   let invokeFn: NativeInvoke | null = null;
   let listenFn: NativeListen | null = null;
   let availabilitySync: Promise<boolean> | null = null;
-  let unlisten: (() => void) | null = null;
+  let unlistenError: (() => void) | null = null;
+  let unlistenFrame: (() => void) | null = null;
   let configuration: NativeAudioConfiguration = createNativeAudioConfiguration();
   let configurationSync: Promise<void> | null = null;
   let configurationRevision = 0;
@@ -92,7 +97,13 @@ export function useNativeAudioInput(
     }
 
     try {
-      unlisten = await listenFn<NativeAudioFramePayload>('native-audio-frame', (event) => {
+      unlistenError = await listenFn<NativeAudioErrorPayload>(NATIVE_AUDIO_ERROR_EVENT, (event) => {
+        error.value = normalizeNativeAudioError(event.payload);
+        frame.value = null;
+        isListening.value = false;
+        cleanupListeners();
+      });
+      unlistenFrame = await listenFn<NativeAudioFramePayload>(NATIVE_AUDIO_FRAME_EVENT, (event) => {
         frame.value = normalizeNativeFrame(event.payload);
       });
       const startRevision = configurationRevision;
@@ -104,15 +115,21 @@ export function useNativeAudioInput(
       if (configurationRevision !== startRevision) await syncConfiguration();
       return true;
     } catch (nativeError) {
-      cleanupListener();
-      error.value = nativeError instanceof Error ? nativeError.message : String(nativeError);
+      if (isListening.value && invokeFn) {
+        await invokeFn('stop_native_audio').catch(() => {});
+      }
+      cleanupListeners();
+      isListening.value = false;
+      frame.value = null;
+      if (!error.value) {
+        error.value = nativeError instanceof Error ? nativeError.message : String(nativeError);
+      }
       return false;
     }
   }
 
   async function stop() {
-    await configurationSync;
-    error.value = null;
+    await configurationSync?.catch(() => {});
     try {
       if (invokeFn) {
         await invokeFn('stop_native_audio');
@@ -122,7 +139,7 @@ export function useNativeAudioInput(
       error.value = nativeError.message;
       throw nativeError;
     } finally {
-      cleanupListener();
+      cleanupListeners();
       isListening.value = false;
       frame.value = null;
     }
@@ -170,9 +187,11 @@ export function useNativeAudioInput(
         try {
           await invoke('configure_native_audio', { config: snapshot });
           syncedConfigurationRevision = revision;
-        } catch {
+        } catch (cause) {
           failed = true;
-          return;
+          const nativeError = cause instanceof Error ? cause : new Error(String(cause));
+          error.value = nativeError.message;
+          throw nativeError;
         }
       }
     })().finally(() => {
@@ -186,9 +205,11 @@ export function useNativeAudioInput(
     return configurationSync;
   }
 
-  function cleanupListener() {
-    unlisten?.();
-    unlisten = null;
+  function cleanupListeners() {
+    unlistenError?.();
+    unlistenFrame?.();
+    unlistenError = null;
+    unlistenFrame = null;
   }
 
   function clearError() {
@@ -203,6 +224,7 @@ export function useNativeAudioInput(
   return {
     available,
     clearError,
+    detectorBackend: 'native',
     error,
     frame,
     id: 'native',

@@ -1,15 +1,10 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
+import { FallbackPitchProcessor } from '../application/services/fallbackPitchProcessor';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
-import {
-  ConfidenceEvidenceEstimator,
-  detectCompetingTarget,
-  strongestCandidateFrequency,
-} from '../domain/confidenceEvidence';
 import { cloneFrameContext } from '../domain/frameContext';
 import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
-  pipelineConfigFingerprint,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
 import type { AudioFrame, AudioFrameTimebase } from '../ports/audioInput';
@@ -18,6 +13,10 @@ import type {
   DetectionFrameSemantics,
   PitchDetectorBackend,
 } from '../types/detectorBackend';
+import type {
+  PitchWorkerRequest,
+  PitchWorkerResponse,
+} from '../workers/pitchWorkerProtocol';
 import {
   DEFAULT_PITCH_DETECTION_RANGE,
   analyzePitchFrame,
@@ -26,12 +25,10 @@ import {
   normalizeLevel,
   type PitchDetectionRange,
   type PitchAnalysis,
-  type PitchGuidance,
   type SignalStats,
 } from '../utils/pitch';
-import { StreamingPitchTracker } from '../utils/pitchTracking';
-import { PipelineSpectralAnalyzer } from '../utils/pipelineSpectralAnalyzer';
 const PITCH_DETECT_INTERVAL_MS = 33;
+const PITCH_WORKER_TIMEOUT_MS = 1_500;
 
 // How many consecutive too-quiet rAF ticks to ride out before clearing the
 // readout. A decaying string hovers around the gate thresholds, and clearing
@@ -56,12 +53,10 @@ export function usePitchLoop(
   const smoothedFrequency = currentFrequency;
 
   let contextRevision = 0;
-  let fallbackPitchGuidance = frameContext
-    ? pitchGuidanceFromContext(frameContext.value)
-    : undefined;
   let rafId: number | null = null;
   let lastPitchDetectAt = 0;
   let pitchWorker: Worker | null = null;
+  let workerDisabled = false;
   let pendingPitchRequestId: number | null = null;
   let pendingPitchStartedAt: number | null = null;
   let pipelineRevision = 0;
@@ -70,28 +65,27 @@ export function usePitchLoop(
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
   let quietTicks = 0;
-  const fallbackTracker = new StreamingPitchTracker();
-  const spectralAnalyzer = new PipelineSpectralAnalyzer();
-  const fallbackConfidence = new ConfidenceEvidenceEstimator();
-  fallbackTracker.setPipelineConfig(pipelineConfig.value);
-  fallbackTracker.setDetectionRange(detectionRange.value);
+  const fallbackProcessor = new FallbackPitchProcessor();
+  fallbackProcessor.setPipelineConfig(pipelineConfig.value);
+  fallbackProcessor.setDetectionRange(detectionRange.value);
+  fallbackProcessor.setContext(frameContext?.value);
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
 
   function ensurePitchWorker() {
-    if (typeof Worker === 'undefined') return null;
+    if (workerDisabled || typeof Worker === 'undefined') return null;
     if (pitchWorker) return pitchWorker;
 
-    pitchWorker = new Worker(new URL('../workers/pitchWorker.ts', import.meta.url), { type: 'module' });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('../workers/pitchWorker.ts', import.meta.url), { type: 'module' });
+    } catch {
+      workerDisabled = true;
+      return null;
+    }
+    pitchWorker = worker;
     sentContextRevision = -1;
     sentPipelineRevision = -1;
-    pitchWorker.onmessage = (event: MessageEvent<{
-      backend: PitchDetectorBackend;
-      buffer: ArrayBuffer;
-      frame: DetectionFrame;
-      id: number;
-      semantics: DetectionFrameSemantics;
-      timebase: AudioFrameTimebase | null;
-    }>) => {
+    worker.onmessage = (event: MessageEvent<PitchWorkerResponse>) => {
       workerTransferBuffer = event.data.buffer;
       if (event.data.id !== pendingPitchRequestId) return;
       pendingPitchRequestId = null;
@@ -103,7 +97,7 @@ export function usePitchLoop(
       detectorBackend.value = event.data.backend;
       frameSemantics.value = event.data.semantics;
       frameTimebase.value = event.data.timebase;
-      fallbackTracker.reset();
+      fallbackProcessor.reset();
       detectionFrame.value = {
         ...event.data.frame,
         pipeline: {
@@ -113,21 +107,29 @@ export function usePitchLoop(
       };
       volume.value = event.data.frame.level;
     };
-    pitchWorker.onerror = () => {
-      pendingPitchRequestId = null;
-      pendingPitchStartedAt = null;
-      detectorBackend.value = 'typescript';
-      frameSemantics.value = 'unresolved';
+    const handleWorkerFailure = () => {
+      if (pitchWorker !== worker) return;
+      disablePitchWorker();
       detectionFrame.value = createUnresolvedDetectionFrame({ level: volume.value });
-      fallbackTracker.reset();
-      pitchRequestId += 1;
-      pitchWorker?.terminate();
-      pitchWorker = null;
-      sentContextRevision = -1;
-      sentPipelineRevision = -1;
-      workerTransferBuffer = null;
+      fallbackProcessor.reset();
     };
-    return pitchWorker;
+    worker.onerror = handleWorkerFailure;
+    worker.onmessageerror = handleWorkerFailure;
+    return worker;
+  }
+
+  function disablePitchWorker() {
+    workerDisabled = true;
+    pitchWorker?.terminate();
+    pitchWorker = null;
+    pendingPitchRequestId = null;
+    pendingPitchStartedAt = null;
+    sentContextRevision = -1;
+    sentPipelineRevision = -1;
+    workerTransferBuffer = null;
+    detectorBackend.value = 'typescript';
+    frameSemantics.value = 'unresolved';
+    pitchRequestId += 1;
   }
 
   function disposePitchWorker() {
@@ -149,15 +151,19 @@ export function usePitchLoop(
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
     quietTicks = 0;
-    fallbackTracker.reset();
-    fallbackConfidence.reset();
+    fallbackProcessor.reset();
     resetWorkerProcessor();
   }
 
   function resetWorkerProcessor() {
     sentContextRevision = -1;
     sentPipelineRevision = -1;
-    pitchWorker?.postMessage({ type: 'reset' });
+    if (!pitchWorker) return;
+    try {
+      pitchWorker.postMessage({ type: 'reset' } satisfies PitchWorkerRequest);
+    } catch {
+      disablePitchWorker();
+    }
   }
 
   function applyFallbackAnalysis(
@@ -166,60 +172,15 @@ export function usePitchLoop(
     audioFrame?: AudioFrame,
     startedAt = performance.now(),
   ) {
-    if (frameContext) fallbackTracker.setContext(frameContext.value);
-    const tracked = fallbackTracker.update(analysis?.estimate ?? null, stats);
-    const trackerTelemetry = fallbackTracker.telemetry();
-    const fixedGateOpen = analysis?.fixedGateOpen ?? false;
-    const decision = !fixedGateOpen && !tracked
-      ? 'fixed-gate-rejected'
-      : trackerTelemetry.decision;
-    const confidenceEvidence = fallbackConfidence.observe({
-      decision,
-      noiseFloor: trackerTelemetry.noiseFloor,
-      outputConfidence: tracked?.confidence ?? 0,
-      rawFrequency: trackerTelemetry.selected?.frequency ?? null,
-      rms: stats.rms,
-      secondary: analysis?.secondary ?? null,
-      yin: analysis?.yin ?? null,
+    const nextFrame = fallbackProcessor.process({
+      analysis,
+      buffer: audioFrame?.buffer,
+      range: detectionRange.value,
+      sampleRate: audioFrame?.sampleRate ?? 0,
+      startedAt,
+      stats,
     });
-    const nextFrame = createUnresolvedDetectionFrame({
-      confidence: tracked ? confidenceEvidence.calibrated : 0,
-      freq: tracked?.frequency ?? null,
-      rawFreq: trackerTelemetry.selected?.frequency ?? null,
-      level: normalizeLevel(stats.rms),
-      pipeline: {
-        adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
-        arbitration: analysis?.arbitration ?? 'none',
-        confidence: confidenceEvidence,
-        configFingerprint: pipelineConfigFingerprint(pipelineConfig.value),
-        decision,
-        fixedGateOpen,
-        gateThreshold: trackerTelemetry.gateThreshold,
-        held: decision === 'held',
-        interference: detectCompetingTarget(
-          strongestCandidateFrequency(analysis?.yin, analysis?.secondary),
-          fallbackPitchGuidance?.selectedFrequency,
-          fallbackPitchGuidance?.targetFrequencies ?? [],
-        ),
-        noiseFloor: trackerTelemetry.noiseFloor,
-        sampleRate: audioFrame?.sampleRate ?? 0,
-        secondary: analysis?.secondary ?? null,
-        selected: trackerTelemetry.selected,
-        spectral: pipelineConfig.value.octaveEnabled && audioFrame
-          ? spectralAnalyzer.analyze(
-            audioFrame.buffer,
-            audioFrame.sampleRate,
-            analysis?.estimate?.frequency,
-            detectionRange.value,
-          )
-          : null,
-        tracked: pipelineConfig.value.trackingEnabled && decision === 'published',
-        windowSamples: audioFrame?.buffer.length ?? 0,
-        yin: analysis?.yin ?? null,
-      },
-      rms: stats.rms,
-    });
-    nextFrame.pipeline.processingMs = Math.max(0, performance.now() - startedAt);
+    frameSemantics.value = 'unresolved';
     frameTimebase.value = audioFrame?.timebase ?? null;
     detectionFrame.value = nextFrame;
   }
@@ -266,11 +227,18 @@ export function usePitchLoop(
   }
 
   function requestPitchDetection(frame: AudioFrame, stats: SignalStats) {
-    const worker = ensurePitchWorker();
     const range = {
       minFrequency: detectionRange.value.minFrequency,
       maxFrequency: detectionRange.value.maxFrequency,
     };
+    if (pendingPitchRequestId != null) {
+      const pendingFor = pendingPitchStartedAt == null
+        ? 0
+        : performance.now() - pendingPitchStartedAt;
+      if (pendingFor < PITCH_WORKER_TIMEOUT_MS) return;
+      disablePitchWorker();
+    }
+    const worker = ensurePitchWorker();
     if (!worker) {
       const startedAt = performance.now();
       detectorBackend.value = 'typescript';
@@ -280,14 +248,12 @@ export function usePitchLoop(
           frame.sampleRate,
           stats,
           range,
-          fallbackPitchGuidance,
+          fallbackProcessor.pitchGuidance,
           pipelineConfig.value,
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
       return;
     }
-    if (pendingPitchRequestId != null) return;
-
     pitchRequestId += 1;
     pendingPitchRequestId = pitchRequestId;
     pendingPitchStartedAt = performance.now();
@@ -316,38 +282,22 @@ export function usePitchLoop(
         },
         timebase: frame.timebase,
         wasmModuleUrl,
-      }, [buffer]);
+      } satisfies PitchWorkerRequest, [buffer]);
       if (shouldSendContext) sentContextRevision = contextRevision;
       if (shouldSendPipeline) sentPipelineRevision = pipelineRevision;
     } catch {
-      pendingPitchRequestId = null;
-      pendingPitchStartedAt = null;
-      detectorBackend.value = 'typescript';
-      frameSemantics.value = 'unresolved';
-      worker.onerror = null;
-      worker.terminate();
-      pitchWorker = null;
-      sentContextRevision = -1;
-      sentPipelineRevision = -1;
-      workerTransferBuffer = null;
+      disablePitchWorker();
       const startedAt = performance.now();
       const analysis = analyzePitchFrame(
           frame.buffer,
           frame.sampleRate,
           stats,
           range,
-          fallbackPitchGuidance,
+          fallbackProcessor.pitchGuidance,
           pipelineConfig.value,
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
     }
-  }
-
-  function pitchGuidanceFromContext(context: FrameContext): PitchGuidance {
-    return {
-      selectedFrequency: context.selectedTarget?.frequency,
-      targetFrequencies: context.tuningTargets.map((target) => target.frequency),
-    };
   }
 
   function start() {
@@ -369,18 +319,18 @@ export function usePitchLoop(
     disposePitchWorker();
   });
   watch(detectionRange, (range) => {
-    fallbackTracker.setDetectionRange(range);
+    fallbackProcessor.setDetectionRange(range);
     reset();
   }, { deep: true });
   if (frameContext) {
     watch(frameContext, (context) => {
-      fallbackPitchGuidance = pitchGuidanceFromContext(context);
+      fallbackProcessor.setContext(context);
       contextRevision += 1;
       reset();
     }, { deep: true });
   }
   watch(pipelineConfig, (config) => {
-    fallbackTracker.setPipelineConfig(config);
+    fallbackProcessor.setPipelineConfig(config);
     pipelineRevision += 1;
     reset();
   }, { deep: true });

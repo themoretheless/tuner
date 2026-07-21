@@ -90,8 +90,9 @@ function readLocal(key: string): string | undefined {
 function writeLocal(key: string, value: string) {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    // Private browsing and quota failures should not break live tuning.
+  } catch (cause) {
+    const detail = cause instanceof Error ? `: ${cause.message}` : '';
+    throw new Error(`Could not persist tuner settings${detail}`);
   }
 }
 
@@ -187,7 +188,7 @@ export async function savePersistedSettings(settings: PersistedSettings) {
   const profile = createUserProfile(settings);
   if (isTauri) {
     const s = await getStore();
-    if (!s) return;
+    if (!s) throw new Error('Tauri settings store unavailable');
     await s.set(PROFILE_KEY, profile);
     await s.save();
     return;

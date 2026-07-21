@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   PitchCoreAdapter,
+  type FallbackPitchDetector,
   type PitchCoreModuleLoader,
 } from '../src/workers/pitchCoreAdapter';
 import type { FrameContext } from '../src/types/frames';
@@ -183,7 +184,7 @@ describe('PitchCoreAdapter', () => {
     const loadModule: PitchCoreModuleLoader = vi.fn(async () => {
       throw new Error('missing module');
     });
-    const fallback = vi.fn(() => ({ confidence: 0.92, frequency: 440 }));
+    const fallback = vi.fn<FallbackPitchDetector>(() => ({ confidence: 0.92, frequency: 440 }));
     const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
 
     await adapter.process(BUFFER, 48_000, STATS, RANGE, CONTEXT);

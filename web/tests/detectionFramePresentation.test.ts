@@ -70,7 +70,9 @@ describe('detection frame presentation', () => {
   });
 
   it('uses the newest source frame when several arrive before repaint', () => {
-    let repaint: FrameRequestCallback | null = null;
+    let repaint: FrameRequestCallback = () => {
+      throw new Error('requestAnimationFrame callback was not registered');
+    };
     vi.spyOn(performance, 'now').mockReturnValue(0);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       repaint = callback;
@@ -85,8 +87,7 @@ describe('detection frame presentation', () => {
     source.value = frame(82.8, 8);
 
     expect(presented?.value.freq).toBe(82.4);
-    expect(repaint).not.toBeNull();
-    (repaint as FrameRequestCallback)(PRESENTATION_TRANSITION_MS);
+    repaint(PRESENTATION_TRANSITION_MS);
     expect(presented?.value.freq).toBeCloseTo(82.8, 6);
     expect(presented?.value.cents).toBe(8);
     scope.stop();

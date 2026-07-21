@@ -36,5 +36,6 @@ export function createPipelinePort(
     setBlock: pipeline.setBlock,
     start: listening.start,
     stop: listening.stop,
+    toggle: listening.toggle,
   });
 }
