@@ -29,7 +29,7 @@ export function usePracticeController(dependencies: PracticeControllerDependenci
   const summary = computed(() => summarizePractice(dependencies.history.value));
 
   function markEarTraining(isCorrect: boolean) {
-    earTraining.mark(isCorrect);
+    if (!earTraining.mark(isCorrect)) return;
     const target = earTraining.target.value;
     const nextEntry: PracticeHistoryEntry = {
       at: dependencies.now?.() ?? Date.now(),

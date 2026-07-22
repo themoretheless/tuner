@@ -118,3 +118,19 @@ test('turns octave measurements into a concrete intonation adjustment', async ({
   const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(documentWidth).toBe(viewportWidth);
 });
+
+test('keeps metadata, diagnostics and ear-training state coherent', async ({ page }) => {
+  await page.goto('/?fixture=E2');
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
+  await page.getByRole('button', { name: 'RU / EN' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+  await expect(page.locator('canvas')).toHaveCount(0);
+  const correct = page.locator('[data-ear-action="correct"]');
+  await expect(correct).toBeDisabled();
+  await page.locator('[data-ear-action="next"]').click();
+  await expect(correct).toBeEnabled();
+  await correct.click();
+  await expect(correct).toBeDisabled();
+});

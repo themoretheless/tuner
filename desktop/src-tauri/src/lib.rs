@@ -4,7 +4,6 @@ mod native_audio;
 pub fn run() {
     tauri::Builder::default()
         .manage(native_audio::NativeAudioState::default())
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             native_audio::native_audio_available,

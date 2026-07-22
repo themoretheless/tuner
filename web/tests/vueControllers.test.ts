@@ -31,6 +31,7 @@ describe('Vue application adapters', () => {
       subdivision: ref(1),
     }));
 
+    controller?.nextChallenge();
     controller?.markEarTraining(true);
     expect(history.value).toEqual([{ at: 123, correct: true, note: 'E2' }]);
     expect(controller?.summary.value.totalAttempts).toBe(1);

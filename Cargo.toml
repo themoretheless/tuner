@@ -8,12 +8,15 @@ members = [
     "test-support",
 ]
 
+[workspace.package]
+version = "0.1.13"
+edition = "2021"
+rust-version = "1.96"
+license = "MIT"
+repository = "https://github.com/themoretheless/tuner"
+
 # Common profile settings for the workspace (native + future wasm)
 [profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
-
-[workspace.dependencies]
-# Shared dependency versions can go here later
-# e.g. wasm-bindgen = "0.2"

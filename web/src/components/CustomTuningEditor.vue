@@ -53,6 +53,11 @@ function save() {
   })
 }
 
+function deleteCurrent() {
+  if (!isCustom.value || !props.current.id) return
+  if (window.confirm(t('confirm.delete.tuning'))) emit('delete', props.current.id)
+}
+
 function updateOpenState(event: Event) {
   isOpen.value = (event.currentTarget as HTMLDetailsElement).open
 }
@@ -112,7 +117,7 @@ watch(() => [props.current.id, props.strings.map((string) => `${string.name}${st
         <button
           v-if="isCustom"
           class="btn btn-ghost flex-1 text-red-300 border-red-900/60"
-          @click="emit('delete', current.id)"
+          @click="deleteCurrent"
         >
           {{ t('custom.delete') }}
         </button>

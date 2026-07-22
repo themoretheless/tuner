@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Tuning } from '../utils/notes'
+import { createTuningTransferDocument, parseTuningTransfer } from '../utils/tuningTransfer'
 import { useL10n } from '../stores/l10n'
 
 const props = defineProps<{
@@ -14,13 +15,10 @@ const emit = defineEmits<{
 const { t } = useL10n()
 const fileInput = ref<HTMLInputElement | null>(null)
 const status = ref('')
+const MAX_IMPORT_BYTES = 1_000_000
 
 function exportTunings() {
-  const payload = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    tunings: props.tunings,
-  }
+  const payload = createTuningTransferDocument(props.tunings)
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -37,11 +35,14 @@ async function importFile(event: Event) {
   if (!file) return
 
   try {
-    const parsed = JSON.parse(await file.text()) as { tunings?: Tuning[] } | Tuning[]
-    const tunings = Array.isArray(parsed) ? parsed : parsed.tunings
-    if (!Array.isArray(tunings)) throw new Error('Invalid tuning file')
-    emit('import', tunings)
-    status.value = `${tunings.length} ${t('custom.imported')}`
+    if (file.size > MAX_IMPORT_BYTES) throw new Error('Tuning file is too large')
+    const document = JSON.parse(await file.text()) as unknown
+    const validated = parseTuningTransfer(document, 'guitar')
+    if (validated.rejected > 0 && validated.tunings.length === 0) {
+      throw new Error('Tuning file contains no valid tunings')
+    }
+    emit('import', validated.tunings)
+    status.value = `${validated.tunings.length} ${t('custom.imported')}`
   } catch {
     status.value = t('custom.import.failed')
   } finally {

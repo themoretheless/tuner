@@ -1,17 +1,14 @@
 {
   "name": "guitar-tuner-desktop",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.13",
   "type": "module",
   "scripts": {
-    "tauri": "../web/node_modules/.bin/tauri",
-    "dev": "../web/node_modules/.bin/tauri dev",
-    "build": "cd ../web && npm run build:tauri && cd ../desktop && ../web/node_modules/.bin/tauri build",
-    "build:debug": "cd ../web && npm run build:tauri && cd ../desktop && ../web/node_modules/.bin/tauri build --debug",
-    "icon": "../web/node_modules/.bin/tauri icon"
-  },
-  "dependencies": {
-    "@tauri-apps/plugin-store": "^2.4.3"
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:debug": "tauri build --debug",
+    "icon": "tauri icon"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
