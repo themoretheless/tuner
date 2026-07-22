@@ -1,16 +1,16 @@
 {
   "name": "Guitar Tuner",
   "short_name": "Tuner",
-  "description": "Accurate guitar tuner. Works offline.",
-  "id": "/tuner/",
-  "start_url": "/tuner/",
-  "scope": "/tuner/",
+  "description": "Accurate browser and desktop guitar tuner.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0a0c10",
   "theme_color": "#22c55e",
   "icons": [
     {
-      "src": "/tuner/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
     }

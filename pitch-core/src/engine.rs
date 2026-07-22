@@ -1,11 +1,14 @@
 use crate::{
-    detect_pitch_native, find_closest_string, frequency_to_note, get_cents, get_tunings,
-    is_likely_power_chord_native, signal, DetectionFrame, Smoother, Tuning,
-    GUITAR_STRINGS_STANDARD,
+    detect_pitch_in_range, find_closest_string, frequency_to_note, get_cents, get_tunings,
+    is_likely_power_chord_native, signal, DetectionFrame, Smoother, Tuning, DEFAULT_MAX_FREQUENCY,
+    DEFAULT_MIN_FREQUENCY, GUITAR_STRINGS_STANDARD,
 };
 
 const DEFAULT_SPECTRUM_FFT_SIZE: usize = 2048;
 const DEFAULT_SPECTRUM_BINS: usize = 512;
+const DEFAULT_A4: f32 = 440.0;
+const MIN_A4: f32 = 400.0;
+const MAX_A4: f32 = 480.0;
 
 #[derive(Clone, Debug)]
 pub struct EngineConfig {
@@ -13,15 +16,19 @@ pub struct EngineConfig {
     pub tuning: Option<Tuning>,
     pub spectrum_fft_size: usize,
     pub spectrum_bins: usize,
+    pub min_frequency: f32,
+    pub max_frequency: f32,
 }
 
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
-            a4: 440.0,
+            a4: DEFAULT_A4,
             tuning: None,
             spectrum_fft_size: DEFAULT_SPECTRUM_FFT_SIZE,
             spectrum_bins: DEFAULT_SPECTRUM_BINS,
+            min_frequency: DEFAULT_MIN_FREQUENCY,
+            max_frequency: DEFAULT_MAX_FREQUENCY,
         }
     }
 }
@@ -34,12 +41,14 @@ pub struct TunerEngine {
     spectrum_buffer: Vec<rustfft::num_complex::Complex<f32>>,
     spectrum_fft_size: usize,
     spectrum_bins: usize,
+    min_frequency: f32,
+    max_frequency: f32,
 }
 
 impl TunerEngine {
     pub fn new(a4: f32) -> Self {
         Self::with_config(EngineConfig {
-            a4,
+            a4: sanitize_a4(a4),
             ..EngineConfig::default()
         })
     }
@@ -50,10 +59,22 @@ impl TunerEngine {
             tuning,
             spectrum_fft_size,
             spectrum_bins,
+            min_frequency,
+            max_frequency,
         } = config;
+        let a4 = sanitize_a4(a4);
         let tunings = get_tunings();
         let spectrum_fft_size = spectrum_fft_size.max(64);
         let spectrum_bins = spectrum_bins.clamp(1, spectrum_fft_size / 2);
+        let (min_frequency, max_frequency) = if min_frequency.is_finite()
+            && max_frequency.is_finite()
+            && min_frequency > 0.0
+            && max_frequency > min_frequency
+        {
+            (min_frequency, max_frequency)
+        } else {
+            (DEFAULT_MIN_FREQUENCY, DEFAULT_MAX_FREQUENCY)
+        };
         let mut planner = rustfft::FftPlanner::<f32>::new();
         let fft = planner.plan_fft_forward(spectrum_fft_size);
         Self {
@@ -69,10 +90,13 @@ impl TunerEngine {
             spectrum_buffer: vec![rustfft::num_complex::Complex::new(0.0, 0.0); spectrum_fft_size],
             spectrum_fft_size,
             spectrum_bins,
+            min_frequency,
+            max_frequency,
         }
     }
 
     pub fn set_a4(&mut self, a4: f32) {
+        let a4 = sanitize_a4(a4);
         if (self.a4 - a4).abs() > 0.01 {
             self.a4 = a4;
             self.smoother.reset();
@@ -87,7 +111,9 @@ impl TunerEngine {
     pub fn process(&mut self, buffer: &[f32], sample_rate: f32) -> DetectionFrame {
         let rms = signal::compute_rms_volume(buffer);
         let level = signal::normalize_level_impl(rms);
-        let (raw_freq, confidence) = detect_pitch_native(buffer, sample_rate).unwrap_or((0.0, 0.0));
+        let (raw_freq, confidence) =
+            detect_pitch_in_range(buffer, sample_rate, self.min_frequency, self.max_frequency)
+                .unwrap_or((0.0, 0.0));
         let raw_opt = if raw_freq > 0.0 { Some(raw_freq) } else { None };
 
         // Smooth the detected pitch to de-jitter the readout. When detection
@@ -148,10 +174,10 @@ impl TunerEngine {
             return spectrum;
         }
 
-        let n = self.spectrum_fft_size as f32;
         for (i, &sample) in buffer.iter().take(self.spectrum_fft_size).enumerate() {
             // Hann window to reduce spectral leakage (sharper bars, less smearing).
-            let w = 0.5 * (1.0 - (2.0 * i as f32 / (n - 1.0) - 1.0).cos());
+            let w = hann_weight(i, self.spectrum_fft_size);
+            let sample = if sample.is_finite() { sample } else { 0.0 };
             self.spectrum_buffer[i] = rustfft::num_complex::Complex::new(sample * w, 0.0);
         }
         self.fft.process(&mut self.spectrum_buffer);
@@ -160,10 +186,57 @@ impl TunerEngine {
             let im = self.spectrum_buffer[i].im;
             *bin = (re * re + im * im).sqrt();
         }
-        let max_mag = spectrum.iter().cloned().fold(0.0, f32::max).max(1e-6);
+        let max_mag = spectrum.iter().copied().fold(0.0, f32::max).max(1e-6);
         for m in &mut spectrum {
             *m /= max_mag;
         }
         spectrum
+    }
+}
+
+fn sanitize_a4(a4: f32) -> f32 {
+    if a4.is_finite() && (MIN_A4..=MAX_A4).contains(&a4) {
+        a4
+    } else {
+        DEFAULT_A4
+    }
+}
+
+fn hann_weight(index: usize, len: usize) -> f32 {
+    if len <= 1 {
+        return 1.0;
+    }
+    let phase = 2.0 * std::f32::consts::PI * index as f32 / (len - 1) as f32;
+    0.5 * (1.0 - phase.cos())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{hann_weight, sanitize_a4, EngineConfig, TunerEngine, DEFAULT_A4};
+
+    #[test]
+    fn hann_window_has_zero_endpoints_and_unit_center() {
+        let len = 129;
+        assert!(hann_weight(0, len).abs() < f32::EPSILON);
+        assert!((hann_weight(len / 2, len) - 1.0).abs() < 1e-6);
+        assert!(hann_weight(len - 1, len).abs() < 1e-6);
+    }
+
+    #[test]
+    fn invalid_a4_values_fall_back_to_standard_pitch() {
+        assert_eq!(sanitize_a4(f32::NAN), DEFAULT_A4);
+        assert_eq!(sanitize_a4(f32::INFINITY), DEFAULT_A4);
+        assert_eq!(sanitize_a4(-440.0), DEFAULT_A4);
+        assert_eq!(sanitize_a4(442.0), 442.0);
+
+        let mut engine = TunerEngine::with_config(EngineConfig {
+            a4: f32::NAN,
+            ..EngineConfig::default()
+        });
+        assert_eq!(engine.a4, DEFAULT_A4);
+        engine.set_a4(-1.0);
+        assert_eq!(engine.a4, DEFAULT_A4);
+        engine.set_a4(442.0);
+        assert_eq!(engine.a4, 442.0);
     }
 }

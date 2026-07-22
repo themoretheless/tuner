@@ -22,7 +22,7 @@ const emit = defineEmits<{
   (e: 'delete', id: string): void
 }>()
 
-const { t } = useL10n()
+const { catalogName, t } = useL10n()
 const draftName = ref('')
 const draftOffsets = ref<number[]>([])
 const isOpen = ref(false)
@@ -43,7 +43,7 @@ const comparisonRows = computed(() => NOTE_NAMES.map((name) => ({
 
 function resetDraft() {
   const selected = selectedTemperament.value
-  draftName.value = selected ? `${selected.name} ${t('custom.copy')}` : t('temperament.custom')
+  draftName.value = selected ? `${catalogName('temperament', selected.id, selected.name)} ${t('custom.copy')}` : t('temperament.custom')
   draftOffsets.value = normalizeTemperamentOffsets(selected?.offsets)
 }
 
@@ -52,6 +52,10 @@ function save() {
     name: draftName.value,
     offsets: normalizeTemperamentOffsets(draftOffsets.value),
   })
+}
+
+function deleteCurrent() {
+  if (window.confirm(t('confirm.delete.temperament'))) emit('delete', props.temperament)
 }
 
 function updateOpenState(event: Event) {
@@ -129,7 +133,7 @@ watch(() => [props.temperament, props.temperaments.length], resetDraft, { immedi
             v-if="isCustom"
             type="button"
             class="btn btn-ghost flex-1 text-red-300 border-red-900/60"
-            @click="emit('delete', temperament)"
+            @click="deleteCurrent"
           >
             {{ t('custom.delete') }}
           </button>

@@ -5,6 +5,7 @@ import {
   SWEETENING_PROFILES,
   TEMPERAMENTS,
   normalizeTemperamentOffsets,
+  noteWithA4,
   type InstrumentId,
   type InstrumentPreset,
   type Note,
@@ -42,8 +43,8 @@ const selectedInputDeviceId = ref('');
 const chromatic = ref(false);
 const inTuneTolerance = ref(5);
 const showSpectrogram = ref(false);
-const showWaveform = ref(true);
-const showSpectrum = ref(true);
+const showWaveform = ref(false);
+const showSpectrum = ref(false);
 const stringOffsets = ref<number[]>([]);
 const sweeteningProfile = ref<SweeteningProfileId>('none');
 const temperament = ref<TemperamentId>('equal');
@@ -51,10 +52,12 @@ const temperamentRoot = ref<NoteName>('A');
 const themeMode = ref<ThemeMode>('dark');
 const transpose = ref(0);
 const loaded = ref(false);
+const isLoading = ref(false);
+const loadError = ref<string | null>(null);
+const saveError = ref<string | null>(null);
 
 let loadPromise: Promise<void> | null = null;
 let watchStarted = false;
-let isLoading = false;
 let saveTimer: number | null = null;
 const settingsScope = effectScope(true);
 
@@ -107,17 +110,16 @@ function normalizeNoteName(value: unknown, fallback: NoteName = 'A'): NoteName {
   return NOTE_NAMES.includes(value as NoteName) ? value as NoteName : fallback;
 }
 
-function normalizeNote(value: unknown): Note | null {
+function normalizeBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+export function normalizePersistedNote(value: unknown): Note | null {
   if (!value || typeof value !== 'object') return null;
   const item = value as Partial<Note>;
   if (!NOTE_NAMES.includes(item.name as NoteName)) return null;
   const octave = normalizeInteger(item.octave, 0, 8, 4);
-  const frequency = Number(item.frequency);
-  return {
-    name: item.name as NoteName,
-    octave,
-    frequency: Number.isFinite(frequency) && frequency > 0 ? frequency : 0,
-  };
+  return noteWithA4({ name: item.name as NoteName, octave }, 440);
 }
 
 function normalizeTunings(value: unknown): Tuning[] {
@@ -133,7 +135,7 @@ function normalizeTunings(value: unknown): Tuning[] {
       ...tuning,
       id: tuning.id.trim(),
       name: tuning.name.trim() || 'Custom tuning',
-      strings: tuning.strings.map(normalizeNote).filter((note): note is Note => !!note),
+      strings: tuning.strings.map(normalizePersistedNote).filter((note): note is Note => !!note),
       instrument: typeof tuning.instrument === 'string' ? tuning.instrument : undefined,
       kind: 'custom' as const,
     }))
@@ -196,8 +198,9 @@ function normalizePracticeHistory(value: unknown): PracticeHistoryEntry[] {
 async function load() {
   if (loadPromise) return loadPromise;
 
-  loadPromise = (async () => {
-    isLoading = true;
+  const attempt = (async () => {
+    isLoading.value = true;
+    loadError.value = null;
     try {
       const saved = await loadPersistedSettings();
       customInstruments.value = normalizeInstruments(saved.customInstruments);
@@ -211,71 +214,95 @@ async function load() {
       if (saved.activeInstrument) activeInstrument.value = normalizeInstrument(saved.activeInstrument, instrumentOptions);
       if (saved.audioBackend) audioBackend.value = normalizeAudioBackend(saved.audioBackend);
       if (saved.capo != null) capo.value = normalizeInteger(saved.capo, 0, 12, 0);
-      if (saved.chromatic != null) chromatic.value = Boolean(saved.chromatic);
+      if (saved.chromatic != null) chromatic.value = normalizeBoolean(saved.chromatic, false);
       if (saved.displayMode) displayMode.value = normalizeDisplayMode(saved.displayMode);
       if (saved.inTuneTolerance != null) inTuneTolerance.value = normalizeInteger(saved.inTuneTolerance, 1, 25, 5);
       if (saved.lastTuningId) lastTuningId.value = saved.lastTuningId;
       if (saved.layoutMode) layoutMode.value = normalizeLayoutMode(saved.layoutMode);
-      if (saved.leftHanded != null) leftHanded.value = Boolean(saved.leftHanded);
+      if (saved.leftHanded != null) leftHanded.value = normalizeBoolean(saved.leftHanded, false);
       if (saved.metronomeBeats != null) metronomeBeats.value = normalizeInteger(saved.metronomeBeats, 1, 12, 4);
       if (saved.metronomeBpm != null) metronomeBpm.value = normalizeInteger(saved.metronomeBpm, 30, 240, 96);
       if (saved.metronomeSubdivision != null) metronomeSubdivision.value = normalizeInteger(saved.metronomeSubdivision, 1, 8, 1);
       practiceHistory.value = normalizePracticeHistory(saved.practiceHistory);
       if (saved.selectedInputDeviceId != null) selectedInputDeviceId.value = String(saved.selectedInputDeviceId);
-      if (saved.showSpectrogram != null) showSpectrogram.value = saved.showSpectrogram;
-      if (saved.showWaveform != null) showWaveform.value = saved.showWaveform;
-      if (saved.showSpectrum != null) showSpectrum.value = saved.showSpectrum;
+      if (saved.showSpectrogram != null) showSpectrogram.value = normalizeBoolean(saved.showSpectrogram, false);
+      if (saved.showWaveform != null) showWaveform.value = normalizeBoolean(saved.showWaveform, false);
+      if (saved.showSpectrum != null) showSpectrum.value = normalizeBoolean(saved.showSpectrum, false);
       stringOffsets.value = normalizeOffsets(saved.stringOffsets);
       if (saved.sweeteningProfile) sweeteningProfile.value = normalizeSweeteningProfile(saved.sweeteningProfile);
       if (saved.temperament) temperament.value = normalizeTemperament(saved.temperament, temperamentOptions);
       if (saved.temperamentRoot) temperamentRoot.value = normalizeNoteName(saved.temperamentRoot);
       if (saved.themeMode) themeMode.value = normalizeThemeMode(saved.themeMode);
       if (saved.transpose != null) transpose.value = normalizeInteger(saved.transpose, -12, 12, 0);
-    } finally {
-      isLoading = false;
       loaded.value = true;
+    } catch (settingsError: unknown) {
+      // Keep safe defaults usable, but do not overwrite the unread store until
+      // the user/application retries successfully.
+      loadError.value = settingsError instanceof Error
+        ? settingsError.message
+        : 'Unable to load settings';
+      loaded.value = true;
+    } finally {
+      isLoading.value = false;
     }
   })();
 
-  return loadPromise;
+  loadPromise = attempt;
+  await attempt;
+  if (loadPromise === attempt && loadError.value) {
+    loadPromise = null;
+  }
+}
+
+function retryLoad() {
+  if (isLoading.value && loadPromise) return loadPromise;
+  loadPromise = null;
+  return load();
 }
 
 async function save() {
-  if (!loaded.value || isLoading) return;
+  if (!loaded.value || isLoading.value || loadError.value) return;
 
-  await savePersistedSettings({
-    a4: a4.value,
-    activeInstrument: activeInstrument.value,
-    audioBackend: audioBackend.value,
-    capo: capo.value,
-    chromatic: chromatic.value,
-    customInstruments: customInstruments.value,
-    customTemperaments: customTemperaments.value,
-    customTunings: customTunings.value,
-    displayMode: displayMode.value,
-    inTuneTolerance: inTuneTolerance.value,
-    lastTuningId: lastTuningId.value,
-    layoutMode: layoutMode.value,
-    leftHanded: leftHanded.value,
-    metronomeBeats: metronomeBeats.value,
-    metronomeBpm: metronomeBpm.value,
-    metronomeSubdivision: metronomeSubdivision.value,
-    practiceHistory: practiceHistory.value,
-    selectedInputDeviceId: selectedInputDeviceId.value,
-    showSpectrogram: showSpectrogram.value,
-    showSpectrum: showSpectrum.value,
-    showWaveform: showWaveform.value,
-    stringOffsets: stringOffsets.value,
-    sweeteningProfile: sweeteningProfile.value,
-    temperament: temperament.value,
-    temperamentRoot: temperamentRoot.value,
-    themeMode: themeMode.value,
-    transpose: transpose.value,
-  });
+  saveError.value = null;
+  try {
+    await savePersistedSettings({
+      a4: a4.value,
+      activeInstrument: activeInstrument.value,
+      audioBackend: audioBackend.value,
+      capo: capo.value,
+      chromatic: chromatic.value,
+      customInstruments: customInstruments.value,
+      customTemperaments: customTemperaments.value,
+      customTunings: customTunings.value,
+      displayMode: displayMode.value,
+      inTuneTolerance: inTuneTolerance.value,
+      lastTuningId: lastTuningId.value,
+      layoutMode: layoutMode.value,
+      leftHanded: leftHanded.value,
+      metronomeBeats: metronomeBeats.value,
+      metronomeBpm: metronomeBpm.value,
+      metronomeSubdivision: metronomeSubdivision.value,
+      practiceHistory: practiceHistory.value,
+      selectedInputDeviceId: selectedInputDeviceId.value,
+      showSpectrogram: showSpectrogram.value,
+      showSpectrum: showSpectrum.value,
+      showWaveform: showWaveform.value,
+      stringOffsets: stringOffsets.value,
+      sweeteningProfile: sweeteningProfile.value,
+      temperament: temperament.value,
+      temperamentRoot: temperamentRoot.value,
+      themeMode: themeMode.value,
+      transpose: transpose.value,
+    });
+  } catch (settingsError: unknown) {
+    saveError.value = settingsError instanceof Error
+      ? settingsError.message
+      : 'Unable to save settings';
+  }
 }
 
 function scheduleSave() {
-  if (!loaded.value || isLoading) return;
+  if (!loaded.value || isLoading.value || loadError.value) return;
   if (saveTimer != null) {
     window.clearTimeout(saveTimer);
   }
@@ -356,7 +383,11 @@ export function useSettings() {
     themeMode,
     transpose,
     loaded,
+    isLoading,
+    loadError,
+    saveError,
     load,
+    retryLoad,
     save,
   };
 }

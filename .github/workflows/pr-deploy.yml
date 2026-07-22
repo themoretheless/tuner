@@ -1,4 +1,4 @@
-name: PR Deploy
+name: PR Preview
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -7,65 +7,80 @@ on:
   issue_comment:
     types: [created]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-  pull-requests: write
+# PR code is built with read-only access and is never deployed over the
+# production Pages site. The resulting Pages archive is an isolated workflow
+# artifact that maintainers can inspect or serve locally.
+permissions: {}
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pr-preview-${{ github.event.issue.number }}
+  cancel-in-progress: true
 
 jobs:
   prepare:
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '/deploy')
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.body == '/deploy' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
     outputs:
-      branch: ${{ steps.pr.outputs.branch }}
+      sha: ${{ steps.pr.outputs.sha }}
     steps:
-      - uses: actions/checkout@v6
-
-      - name: React to comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions -f content=rocket
-
-      - name: Get PR branch
+      - name: Resolve and authorize PR head
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        shell: bash
         run: |
-          BRANCH=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} --jq '.head.ref')
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          gh pr comment ${{ github.event.issue.number }} -b "🚀 Deploying branch \`$BRANCH\`..."
+          PR_JSON=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")
+          HEAD_REPO=$(jq -r '.head.repo.full_name // ""' <<<"$PR_JSON")
+          HEAD_SHA=$(jq -r '.head.sha // ""' <<<"$PR_JSON")
+
+          if [ "$HEAD_REPO" != "$GH_REPO" ]; then
+            echo "::error::Preview builds are limited to branches in ${GH_REPO}."
+            exit 1
+          fi
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::GitHub returned an invalid PR head SHA."
+            exit 1
+          fi
+
+          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          gh api "repos/${GH_REPO}/issues/comments/${{ github.event.comment.id }}/reactions" -f content=rocket
+          gh pr comment "$PR_NUMBER" --body "Building an isolated preview artifact for commit \`${HEAD_SHA:0:12}\`. Production Pages will not be changed."
 
   build:
     needs: prepare
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-web.yml
     with:
-      ref: ${{ needs.prepare.outputs.branch }}
+      ref: ${{ needs.prepare.outputs.sha }}
 
-  deploy:
+  report:
     needs: [prepare, build]
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      issues: write
     steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-      - uses: actions/checkout@v6
-
-      - name: Read version
-        id: version
-        run: echo "value=$(jq -r .version version.json)" >> $GITHUB_OUTPUT
-
       - name: Comment result
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.deployment.outputs.page_url }}
-          VERSION: ${{ steps.version.outputs.value }}
-        run: gh pr comment ${{ github.event.issue.number }} -b "✅ Deployed v$VERSION $URL"
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          if [ "$BUILD_RESULT" = "success" ]; then
+            MESSAGE="Preview checks passed. Download the isolated \`github-pages\` artifact from ${RUN_URL}. Production Pages was not changed."
+          else
+            MESSAGE="Preview build failed. See ${RUN_URL}."
+          fi
+          gh pr comment "$PR_NUMBER" --body "$MESSAGE"

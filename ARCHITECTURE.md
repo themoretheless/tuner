@@ -1,6 +1,6 @@
 # Guitar Tuner - Architecture & Deep Refactoring Plan
 
-**Date:** 2026-06  
+**Date:** 2026-07-22
 **Perspective:** Designing from scratch with heavy focus on **modularity**, **code decomposition**, and **loose coupling**.
 
 ## Current State Assessment (Honest Critique)
@@ -378,7 +378,7 @@ The following categorized list (200 items) was created to be implementation-conc
 66. Add fixture-based snapshot tests (insta) for Detection on known WAV snippets (embed small assets or synthetic).
 67. Unify TS and Rust tuning tables via codegen or a single source of truth (JSON5 + build script).
 68. Add "no network" CI test that asserts zero external fetches in built artifacts.
-69. Pin wasm-pack, rustc, node versions via rust-toolchain.toml + .nvmrc + CI matrix.
+69. **Done 2026-07-22:** pin wasm-pack 0.15.0, Rust 1.96.0 and Node 22 via build scripts, `rust-toolchain.toml`, `.nvmrc` and CI.
 70. Create packages/ layout sketch even if not full monorepo yet (pitch-core, shared-types, web-shell, native-shell).
 71. Document every public fn in pitch-core with rustdoc examples.
 72. Add CONTRIBUTING.md with "how to add a new detector" and "how to add a tuning preset".
@@ -399,7 +399,7 @@ The following categorized list (200 items) was created to be implementation-conc
 85. Use wasm-bindgen-rayon or simple threading if available for heavy analysis.
 86. Version the WASM interface (detect_pitch_wasm_v1) so future changes don't break.
 87. Serve pre-compressed .wasm .js .br via Vite plugin for Pages.
-88. Add proper CSP for Tauri webview + web build (report-only first).
+88. **Partially done 2026-07-22:** production/dev Tauri CSPs are separated and capabilities/entitlements are narrowed; browser CSP reporting still remains.
 89. Fix remaining hardcoded English strings in web UI.
 90. Add proper error boundary + friendly message when mic API unavailable (http vs https).
 91. Persist user-chosen input device across reloads with deviceId + label validation.
@@ -513,7 +513,7 @@ The following categorized list (200 items) was created to be implementation-conc
 189. Add "privacy" badge + CI-enforced "zero network in release build" proof.
 190. Tauri: code-sign + notarize pipeline (macOS) and EV cert for Windows.
 191. Add reproducible desktop builds (same hash for same source).
-192. GitHub release: attach both egui and Tauri bundles + checksums.
+192. **Partially done 2026-07-22:** GitHub release is fully gated and attaches web, egui and Tauri outputs; checksums/signing remain.
 193. Documentation: architecture decision records (ADR) for key choices (YIN vs MPM, WASM vs native).
 194. Onboarding README section with screenshots for each platform.
 195. Add "contributing tunings" guide + test that all listed tunings have correct math.

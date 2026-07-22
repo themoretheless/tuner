@@ -23,7 +23,7 @@ const emit = defineEmits<{
   (e: 'transpose-change', value: number): void
 }>()
 
-const { t } = useL10n()
+const { catalogName, t } = useL10n()
 </script>
 
 <template>
@@ -36,7 +36,7 @@ const { t } = useL10n()
         @change="emit('instrument-change', ($event.target as HTMLSelectElement).value as InstrumentId)"
       >
         <option v-for="instrument in instruments" :key="instrument.id" :value="instrument.id">
-          {{ instrument.name }}
+          {{ catalogName('instrument', instrument.id, instrument.name) }}
         </option>
       </select>
     </label>
@@ -49,7 +49,7 @@ const { t } = useL10n()
         @change="emit('temperament-change', ($event.target as HTMLSelectElement).value as TemperamentId)"
       >
         <option v-for="item in temperaments" :key="item.id" :value="item.id">
-          {{ item.name }}
+          {{ catalogName('temperament', item.id, item.name) }}
         </option>
       </select>
     </label>

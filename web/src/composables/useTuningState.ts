@@ -27,6 +27,7 @@ import {
   type Tuning,
 } from '../utils/notes';
 import { useSettings } from './useSettings';
+import { createTuningTransferDocument, parseTuningTransfer } from '../utils/tuningTransfer';
 
 const IN_TUNE_THRESHOLD = 5;
 const OUT_OF_TUNE_THRESHOLD = 7;
@@ -350,22 +351,12 @@ export function useTuningState(
     return settings.customTunings.value;
   }
 
-  function importCustomTunings(tunings: Tuning[]) {
-    const normalized = tunings
-      .filter((tuning) => tuning && typeof tuning.name === 'string' && Array.isArray(tuning.strings))
-      .map((tuning, index) => {
-        const strings = tuning.strings
-          .filter((string) => NOTE_NAMES.includes(string.name) && Number.isFinite(Number(string.octave)))
-          .map((string) => noteWithA4(string, 440));
-        return {
-          id: tuning.id || `custom-import-${Date.now().toString(36)}-${index}`,
-          name: tuning.name.trim() || `Imported ${index + 1}`,
-          strings,
-          instrument: tuning.instrument || activeInstrument.value,
-          kind: 'custom' as const,
-        };
-      })
-      .filter((tuning) => tuning.strings.length > 0);
+  function exportCustomTuningDocument() {
+    return createTuningTransferDocument(settings.customTunings.value);
+  }
+
+  function importCustomTunings(input: unknown) {
+    const { tunings: normalized } = parseTuningTransfer(input, activeInstrument.value);
 
     if (!normalized.length) return 0;
 
@@ -433,6 +424,7 @@ export function useTuningState(
     detectedNote,
     detectionRange,
     exportCustomTunings,
+    exportCustomTuningDocument,
     formatFreq,
     getNoteDisplay,
     getRandomPracticeNote,

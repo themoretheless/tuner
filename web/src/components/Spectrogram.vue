@@ -2,11 +2,14 @@
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
+import { useL10n } from '../stores/l10n'
+import { canvasPalette } from './canvasTheme'
 
 const props = defineProps<{
   frame: SpectrumFrame | null
   isListening: boolean
 }>()
+const { t } = useL10n()
 
 const { canvas } = useCanvasRenderer({
   cssHeight: 120,
@@ -16,44 +19,31 @@ const { canvas } = useCanvasRenderer({
 })
 void canvas
 
-const history: Uint8Array[] = []
-const MAX_HISTORY = 150 // time steps
-let historyCount = 0
+let raster: HTMLCanvasElement | null = null
+let rasterContext: CanvasRenderingContext2D | null = null
 let lastSequence = 0
-let writeIndex = 0
 
 function clearCanvas(frame: CanvasFrame) {
-  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillStyle = canvasPalette(frame).background
   frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
 function resetHistory() {
-  history.length = 0
-  historyCount = 0
+  raster = null
+  rasterContext = null
   lastSequence = 0
-  writeIndex = 0
 }
 
-function ensureHistoryBuffers(binCount: number) {
-  if (history.length && history[0].length === binCount) return
-  resetHistory()
-  for (let i = 0; i < MAX_HISTORY; i++) {
-    history.push(new Uint8Array(binCount))
-  }
-}
-
-function addFrame(frame: SpectrumFrame) {
-  if (frame.sequence === lastSequence) return
-  ensureHistoryBuffers(frame.bins.length)
-  history[writeIndex].set(frame.bins)
-  writeIndex = (writeIndex + 1) % MAX_HISTORY
-  historyCount = Math.min(MAX_HISTORY, historyCount + 1)
-  lastSequence = frame.sequence
-}
-
-function getHistoryFrame(index: number) {
-  const start = historyCount === MAX_HISTORY ? writeIndex : 0
-  return history[(start + index) % MAX_HISTORY]
+function ensureRaster(w: number, h: number, background: string) {
+  if (raster && raster.width === w && raster.height === h && rasterContext) return rasterContext
+  raster = document.createElement('canvas')
+  raster.width = w
+  raster.height = h
+  rasterContext = raster.getContext('2d', { alpha: false })
+  if (!rasterContext) return null
+  rasterContext.fillStyle = background
+  rasterContext.fillRect(0, 0, w, h)
+  return rasterContext
 }
 
 function drawFrame(frame: CanvasFrame) {
@@ -64,42 +54,32 @@ function drawFrame(frame: CanvasFrame) {
   }
 
   const { ctx, w, h } = frame
-  const binCount = props.frame.bins.length
-  addFrame(props.frame)
-
-  ctx.fillStyle = '#11151b'
+  const palette = canvasPalette(frame)
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
+  const rasterCtx = ensureRaster(w, h, palette.background)
+  if (!rasterCtx || !raster) return
 
-  if (historyCount < 2) {
-    return
-  }
+  if (props.frame.sequence !== lastSequence) {
+    rasterCtx.globalAlpha = 1
+    rasterCtx.drawImage(raster, 1, 0, Math.max(1, w - 1), h, 0, 0, Math.max(1, w - 1), h)
+    rasterCtx.fillStyle = palette.background
+    rasterCtx.fillRect(w - 2, 0, 2, h)
 
-  const timeSteps = historyCount
-  const timeStepW = w / timeSteps
-  const freqBins = Math.min(128, binCount) // limit for perf
-
-  for (let t = 0; t < timeSteps; t++) {
-    const data = getHistoryFrame(t)
-    const x = t * timeStepW
+    const data = props.frame.bins
+    const freqBins = Math.min(96, data.length)
+    const cellHeight = h / Math.max(1, freqBins)
     for (let f = 0; f < freqBins; f++) {
       const val = data[f] / 255
-      const y = h - ((f / freqBins) * h)
-      const barH = (h / freqBins)
-
-      // Color: black -> green -> yellow -> red based on intensity
-      let r = 0, g = 0, b = 0
-      if (val > 0.7) {
-        r = 255; g = 255 * (1 - (val - 0.7) / 0.3); b = 0
-      } else if (val > 0.3) {
-        r = 0; g = 255; b = 0
-      } else {
-        r = 0; g = val * 255 * 0.8; b = 0
-      }
-
-      ctx.fillStyle = `rgb(${r}, ${g}, ${b})`
-      ctx.fillRect(x, y, timeStepW + 0.5, barH + 0.5)
+      rasterCtx.globalAlpha = Math.max(0.08, val)
+      rasterCtx.fillStyle = val > 0.72 ? palette.warning : palette.accent
+      rasterCtx.fillRect(w - 2, h - ((f + 1) * cellHeight), 2, cellHeight + 0.5)
     }
+    rasterCtx.globalAlpha = 1
+    lastSequence = props.frame.sequence
   }
+
+  ctx.drawImage(raster, 0, 0, w, h)
 }
 </script>
 
@@ -108,6 +88,8 @@ function drawFrame(frame: CanvasFrame) {
     <canvas
       ref="canvas"
       class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      role="img"
+      :aria-label="t('visual.spectrogram.label')"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

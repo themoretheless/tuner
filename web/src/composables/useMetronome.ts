@@ -22,6 +22,9 @@ export function useMetronome(
     if (!audioContext) {
       audioContext = createAudioContext();
     }
+    if (audioContext.state === 'suspended') {
+      void audioContext.resume().catch(() => {});
+    }
     return audioContext;
   }
 
@@ -77,7 +80,6 @@ export function useMetronome(
 
   function setBpm(nextBpm: number) {
     bpm.value = clampBpm(nextBpm);
-    restartIfRunning();
   }
 
   function setBeats(nextBeats: number) {
@@ -88,7 +90,6 @@ export function useMetronome(
   function setSubdivision(nextSubdivision: number) {
     subdivision.value = clampSubdivision(nextSubdivision);
     subdivisionStep.value = 0;
-    restartIfRunning();
   }
 
   function tapTempo() {

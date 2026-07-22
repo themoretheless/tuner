@@ -2,12 +2,12 @@
 
 **Кросс-платформенный гитарный тюнер**
 
-- **Оффлайн десктопные приложения**:
+- **Десктопные приложения, не требующие сети после установки**:
   - Tauri версия (Vue frontend + Rust backend)
   - egui версия (pure native Rust + cpal, no webview)
 - **Онлайн сайт**: любой современный браузер (Vue 3)
 
-Точный, быстрый и полностью работает без интернета в десктопной версии.
+Основной сценарий тюнера в десктопных версиях работает локально и не требует сети после установки. Для первоначальной сборки нужны интернет и загрузка зависимостей; браузерная версия пока не имеет Service Worker и не заявляется как оффлайн-PWA.
 
 ## Что сделано (summary)
 
@@ -45,13 +45,14 @@
 - Большой индикатор ноты + шкала центов с гистерезисом
 - Клавиатурные сокращения
 - Референсный тон
-- Полностью оффлайн в десктопной версии
+- Локальная обработка микрофона и работа десктопных версий без сети после установки
 - Кросс-платформенность: Windows, macOS, Linux + браузер
 
-CI и деплой страницы (GitHub Pages для онлайн-версии) настроены как в cut-log:
+CI и деплой страницы (GitHub Pages для онлайн-версии) настроены так:
 - build-web.yml, build-tauri.yml, build-egui.yml, deploy.yml, pr-deploy.yml, release.yml
 - Страница: https://themoretheless.github.io/tuner/ (включи GitHub Pages с source "GitHub Actions")
-- Для десктоп-релизов бинари собираются в release с матрицей (Win/Mac/Linux) и добавляются в GitHub Release
+- Production Pages и GitHub Release создаются только после core, web/E2E, Tauri и egui gates; десктопные пакеты собираются матрицей Win/Mac/Linux
+- Команда `/deploy` в PR доступна только trusted collaborators для same-repository веток и создаёт изолированный artifact; production Pages она не меняет
 - Страница двуязычная (RU/EN) с переключателем, как в cut-log
 
 Base в web/vite.config.ts = '/tuner/' (repo name is lowercase "tuner").
@@ -81,7 +82,7 @@ Tuner/
 
 ```bash
 cd web
-npm install
+npm ci
 npm run dev
 ```
 
@@ -94,21 +95,26 @@ npm run dev
 | **Windows**   | ✅         | .exe (NSIS)                      |
 | **macOS**     | ✅         | .app + .dmg (Intel + Apple Silicon) |
 | **Linux**     | ✅         | .deb + .AppImage                 |
-| Браузер       | ✅         | PWA / обычный сайт               |
+| Браузер       | ✅         | Сайт + install manifest; без offline cache |
 
 ### Быстрый запуск в разработке (все платформы)
 
 ```bash
-cd desktop
-npm install
-npm run tauri dev
+npm ci --prefix web
+npm ci --prefix desktop
+npm --prefix desktop run dev
 ```
 
 ### Необходимые инструменты для сборки
 
 **Все платформы:**
-- [Rust](https://rustup.rs/) (stable)
-- Node.js ≥ 18 + npm
+- [Rust](https://rustup.rs/) 1.96.0 (закреплён в `rust-toolchain.toml`)
+- Node.js 22 + npm (закреплён в `.nvmrc`)
+- `wasm-pack` 0.15.0; локальная сборка намеренно завершится ошибкой, если закреплённый инструмент не установлен
+
+```bash
+cargo install wasm-pack --version 0.15.0 --locked
+```
 
 **macOS:**
 - Xcode Command Line Tools (`xcode-select --install`)
@@ -118,49 +124,50 @@ npm run tauri dev
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libudev-dev pkg-config
 ```
 
 ### Десктопные приложения
 
-Есть две версии оффлайн десктопа:
+Есть две локальные десктопные версии:
 
 ### 1. Tauri (Vue + Rust)
 Использует веб-фронтенд из `web/`, упакованный в нативное приложение.
 
 ```bash
-cd desktop
-npm run tauri build
+npm ci --prefix web
+npm ci --prefix desktop
+npm --prefix desktop run build
 ```
 
-Бинарники в `desktop/src-tauri/target/release/bundle/`
+Пакеты находятся в корневом `target/release/bundle/`. При сборке с явным `--target` путь имеет вид `target/<target-triple>/release/bundle/`.
 
 ### 2. egui (pure native Rust)
 Лёгкая версия без WebView, полностью на Rust + egui.
 
 ```bash
-cd egui
-cargo build --release
+cargo build --locked --release -p guitar-tuner-egui
 ```
 
-Бинарник в `egui/target/release/guitar-tuner-egui`
+Бинарник находится в `target/release/guitar-tuner-egui` (на Windows — с расширением `.exe`).
 
 ## Сборка веб-версии
 
 ```bash
-cd web
-npm run build
+npm ci --prefix web
+npm --prefix web run build
 ```
+
+Готовая статика находится в `web/dist/`. Это сетевой сайт: `manifest.webmanifest` позволяет установку, но оффлайн-кэш пока не реализован.
 
 #### macOS
 
 ```bash
-cd desktop
-npm run tauri build
+npm --prefix desktop run build
 ```
 
 Результаты:
-- `.app` + `.dmg` в `src-tauri/target/release/bundle/macos/` и `dmg/`
+- `.app` + `.dmg` в `target/release/bundle/macos/` и `target/release/bundle/dmg/`
 
 **Важно для macOS:**
 - Для подписывания и нотаризации (рекомендуется для распространения) настрой `signingIdentity` в `tauri.conf.json`
@@ -169,12 +176,11 @@ npm run tauri build
 #### Windows
 
 ```bash
-cd desktop
-npm run tauri build
+npm --prefix desktop run build
 ```
 
 Результаты:
-- Установщик NSIS (`.exe`) в `src-tauri/target/release/bundle/nsis/`
+- Установщик NSIS (`.exe`) в `target/release/bundle/nsis/`
 
 **Дополнительно:**
 - Для MSI установщика можно изменить `targets` в конфиге
@@ -183,13 +189,14 @@ npm run tauri build
 #### Linux
 
 ```bash
-cd desktop
-npm run tauri build
+npm --prefix desktop run build
 ```
 
 Результаты:
 - `.deb` (Debian/Ubuntu)
 - `.AppImage` (универсальный)
+
+Оба пакета находятся под `target/release/bundle/` (`deb/` и `appimage/`).
 
 **Для Fedora/openSUSE** можно включить `rpm` в `targets`.
 
@@ -203,7 +210,7 @@ npm run tauri build
 
 ```bash
 cd desktop
-npx tauri icon ./icon.png
+npm run icon -- ./icon.png
 ```
 
 Это создаст все нужные размеры и форматы (`icns`, `ico`, png для разных платформ).
@@ -212,7 +219,7 @@ npx tauri icon ./icon.png
 
 | Платформа | Установщик       | Особенности                     | Микрофон          |
 |-----------|------------------|---------------------------------|-------------------|
-| Windows   | NSIS (.exe)      | Per-machine / per-user          | Работает сразу    |
+| Windows   | NSIS (.exe)      | Для текущего пользователя       | Работает сразу    |
 | macOS     | .app + .dmg      | Подпись + нотаризация           | Нужно разрешение  |
 | Linux     | .deb / .AppImage | Зависимости (обычно минимальны) | Работает сразу    |
 
@@ -245,12 +252,16 @@ M0 safety net закрыт для текущего refactor gate: web core tests
 
 Нативный egui запуск: `cargo run -p guitar-tuner-egui`.
 
+### Запуск из Zed
+
+Проект содержит локальные задачи в `.zed/tasks.json` для запуска web, Tauri desktop и egui native. Открой палитру задач Zed (`Cmd+Shift+R` на macOS или `Ctrl+Shift+R` на Linux/Windows) и выбери нужную задачу `Run: ...`.
+
 ## Следующие улучшения (рекомендуемые)
 
 - AudioWorklet для обработки звука вне основного потока
 - Дополнительные строи + кастомный редактор
 - Полноценный Service Worker для offline PWA
-- Качественные иконки для desktop: `cd desktop && npx tauri icon path/to/512.png`
+- Качественные иконки для desktop: `cd desktop && npm run icon -- path/to/512.png`
 - Укрепить Tauri native audio backend: общий detector, stream recovery, device selection, realtime-safe processing
 
 ---

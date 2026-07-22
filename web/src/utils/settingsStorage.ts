@@ -14,6 +14,8 @@ export type LayoutMode = 'default' | 'stage' | 'compact';
 export type ThemeMode = 'dark' | 'light' | 'colorblind';
 export type AudioBackend = 'web' | 'native';
 
+export const SETTINGS_SCHEMA_VERSION = 2;
+
 export interface PracticeHistoryEntry {
   at: number;
   correct: boolean;
@@ -50,13 +52,22 @@ export interface PersistedSettings {
   transpose: number;
 }
 
-const isTauri = typeof globalThis !== 'undefined' &&
-  Boolean((globalThis as typeof globalThis & { isTauri?: boolean }).isTauri);
+type TauriGlobal = typeof globalThis & {
+  __TAURI__?: unknown;
+  __TAURI_INTERNALS__?: unknown;
+  isTauri?: boolean;
+};
+
+export function isTauriRuntime() {
+  if (typeof globalThis === 'undefined') return false;
+  const runtime = globalThis as TauriGlobal;
+  return Boolean(runtime.__TAURI_INTERNALS__ || runtime.__TAURI__ || runtime.isTauri === true);
+}
 
 let store: Store | null = null;
 
 async function getStore() {
-  if (!isTauri) return null;
+  if (!isTauriRuntime()) return null;
   if (!store) {
     store = await Store.load('settings.dat');
   }
@@ -90,10 +101,11 @@ function writeLocal(key: string, value: string) {
 }
 
 export async function loadPersistedSettings(): Promise<Partial<PersistedSettings>> {
-  if (isTauri) {
+  if (isTauriRuntime()) {
     const s = await getStore();
     if (!s) return {};
-    return {
+    const schemaVersion = await s.get<number>('schemaVersion') ?? 0;
+    return migratePersistedSettings({
       a4: await s.get<number>('a4') ?? undefined,
       activeInstrument: await s.get<InstrumentId>('activeInstrument') ?? undefined,
       audioBackend: await s.get<AudioBackend>('audioBackend') ?? undefined,
@@ -121,7 +133,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
       temperamentRoot: await s.get<NoteName>('temperamentRoot') ?? undefined,
       themeMode: await s.get<ThemeMode>('themeMode') ?? undefined,
       transpose: await s.get<number>('transpose') ?? undefined,
-    };
+    }, schemaVersion);
   }
 
   const savedA4 = readLocal('a4');
@@ -131,7 +143,8 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
   const savedShowSpectrum = readLocal('showSpectrum');
   const savedShowWaveform = readLocal('showWaveform');
 
-  return {
+  const schemaVersion = Number(readLocal('schemaVersion')) || 0;
+  return migratePersistedSettings({
     a4: savedA4 ? Number(savedA4) : undefined,
     activeInstrument: readLocal('activeInstrument') as InstrumentId | undefined,
     audioBackend: readLocal('audioBackend') as AudioBackend | undefined,
@@ -167,11 +180,11 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
     temperamentRoot: readLocal('temperamentRoot') as NoteName | undefined,
     themeMode: readLocal('themeMode') as ThemeMode | undefined,
     transpose: readLocal('transpose') ? Number(readLocal('transpose')) : undefined,
-  };
+  }, schemaVersion);
 }
 
 export async function savePersistedSettings(settings: PersistedSettings) {
-  if (isTauri) {
+  if (isTauriRuntime()) {
     const s = await getStore();
     if (!s) return;
     await s.set('a4', settings.a4);
@@ -201,6 +214,7 @@ export async function savePersistedSettings(settings: PersistedSettings) {
     await s.set('temperamentRoot', settings.temperamentRoot);
     await s.set('themeMode', settings.themeMode);
     await s.set('transpose', settings.transpose);
+    await s.set('schemaVersion', SETTINGS_SCHEMA_VERSION);
     await s.save();
     return;
   }
@@ -232,4 +246,46 @@ export async function savePersistedSettings(settings: PersistedSettings) {
   writeLocal('temperamentRoot', settings.temperamentRoot);
   writeLocal('themeMode', settings.themeMode);
   writeLocal('transpose', settings.transpose.toString());
+  writeLocal('schemaVersion', SETTINGS_SCHEMA_VERSION.toString());
+}
+
+const BOOLEAN_SETTING_KEYS = [
+  'chromatic',
+  'leftHanded',
+  'showSpectrogram',
+  'showSpectrum',
+  'showWaveform',
+] as const satisfies readonly (keyof PersistedSettings)[];
+
+/**
+ * Keeps old unversioned installs readable while rejecting truthy strings and
+ * other malformed values from current stores. Version 1 stored booleans as
+ * strings in some desktop builds and used `inputDeviceId` for the selected
+ * device key.
+ */
+export function migratePersistedSettings(
+  input: Record<string, unknown>,
+  schemaVersion = 0,
+): Partial<PersistedSettings> {
+  const migrated: Record<string, unknown> = { ...input };
+
+  if (
+    schemaVersion < 2 &&
+    migrated.selectedInputDeviceId == null &&
+    typeof migrated.inputDeviceId === 'string'
+  ) {
+    migrated.selectedInputDeviceId = migrated.inputDeviceId;
+  }
+
+  for (const key of BOOLEAN_SETTING_KEYS) {
+    const value = migrated[key];
+    if (typeof value === 'boolean') continue;
+    if (schemaVersion < 2 && (value === 'true' || value === 'false')) {
+      migrated[key] = value === 'true';
+    } else {
+      delete migrated[key];
+    }
+  }
+
+  return migrated as Partial<PersistedSettings>;
 }

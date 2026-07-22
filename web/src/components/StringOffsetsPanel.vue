@@ -18,7 +18,7 @@ const emit = defineEmits<{
   (e: 'profile-change', profile: SweeteningProfileId): void
 }>()
 
-const { t } = useL10n()
+const { catalogName, t } = useL10n()
 </script>
 
 <template>
@@ -36,7 +36,7 @@ const { t } = useL10n()
           @change="emit('profile-change', ($event.target as HTMLSelectElement).value as SweeteningProfileId)"
         >
           <option v-for="item in SWEETENING_PROFILES" :key="item.id" :value="item.id">
-            {{ item.name }}
+            {{ catalogName('sweetening', item.id, item.name) }}
           </option>
         </select>
       </label>

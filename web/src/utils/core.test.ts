@@ -16,7 +16,9 @@ import {
   FrequencySmoother,
   computeSignalStats,
   detectPitch,
+  detectPitchWithConfidence,
   normalizePitchDetectionRange,
+  normalizeLevel,
 } from './pitch';
 
 function sineBuffer(frequency: number, sampleRate = 44100, size = 4096, gain = 0.4): Float32Array {
@@ -133,6 +135,21 @@ describe('pitch utilities', () => {
     );
   });
 
+  it('rejects short, non-finite, and invalid-rate pitch input', () => {
+    const short = sineBuffer(110, sampleRate, 32);
+    expect(detectPitch(short, sampleRate)).toBeNull();
+
+    const invalid = sineBuffer(110, sampleRate);
+    invalid[100] = Number.NaN;
+    expect(computeSignalStats(invalid)).toEqual({ rms: 0, maxAbs: 0 });
+    expect(detectPitch(invalid, sampleRate, { rms: 0.2, maxAbs: 0.4 })).toBeNull();
+    expect(detectPitch(sineBuffer(110), Number.NaN)).toBeNull();
+    expect(detectPitch(sineBuffer(110), Number.POSITIVE_INFINITY)).toBeNull();
+    expect(normalizeLevel(Number.NaN)).toBe(0);
+    expect(normalizeLevel(Number.POSITIVE_INFINITY)).toBe(0);
+    expect(normalizeLevel(-0.1)).toBe(0);
+  });
+
   it('smooths and resets frequency estimates', () => {
     const smoother = new FrequencySmoother();
     expect(smoother.add(null)).toBeNull();
@@ -140,5 +157,20 @@ describe('pitch utilities', () => {
     expect(smoother.add(112)).toBeGreaterThan(110);
     smoother.reset();
     expect(smoother.add(null)).toBeNull();
+  });
+
+  it('reports YIN confidence and switches only after a confirmed large jump', () => {
+    const buffer = sineBuffer(220, sampleRate);
+    const detection = detectPitchWithConfidence(buffer, sampleRate, computeSignalStats(buffer), {
+      minFrequency: 100,
+      maxFrequency: 400,
+    });
+    expect(detection?.frequency).toBeCloseTo(220, 0);
+    expect(detection?.confidence).toBeGreaterThan(0.9);
+
+    const smoother = new FrequencySmoother();
+    expect(smoother.add(110)).toBe(110);
+    expect(smoother.add(220)).toBe(110);
+    expect(smoother.add(220)).toBe(220);
   });
 });

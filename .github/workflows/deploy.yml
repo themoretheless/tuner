@@ -5,69 +5,83 @@ env:
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to deploy (latest release when empty)"
+        required: false
+        type: string
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
-  group: pages
+  group: pages-production
   cancel-in-progress: false
 
 jobs:
-  # Try to deploy from release artifact (instant, no rebuild)
-  deploy-from-release:
+  release-site:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
     outputs:
-      found: ${{ steps.download.outputs.found }}
+      found: ${{ steps.resolve.outputs.found }}
+      ref: ${{ steps.resolve.outputs.ref }}
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Try download release artifact
-        id: download
+      - name: Resolve release archive
+        id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          echo "Looking for artifact in release $TAG"
-          if gh release download "$TAG" -p "artifact.tar" 2>/dev/null; then
-            echo "found=true" >> $GITHUB_OUTPUT
-            mkdir -p _site
-            tar xf artifact.tar -C _site
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-            echo "No release artifact, will build from source"
+          TAG="$REQUESTED_TAG"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          elif ! gh release view "$TAG" >/dev/null; then
+            echo "::error::Release $TAG does not exist."
+            exit 1
           fi
 
-      - name: Upload pages artifact
-        if: steps.download.outputs.found == 'true'
+          echo "ref=${TAG:-${GITHUB_SHA}}" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAG" ] && gh release download "$TAG" --pattern "guitar-tuner-web-${TAG}.tar"; then
+            mkdir -p _site
+            tar -xf "guitar-tuner-web-${TAG}.tar" -C _site
+            test -s _site/index.html
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No compatible web archive found; source will be built instead."
+          fi
+
+      - name: Upload release site
+        if: steps.resolve.outputs.found == 'true'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site
 
-      - name: Deploy
-        if: steps.download.outputs.found == 'true'
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-  # Fallback: build from source (for branches without release)
   build:
-    needs: deploy-from-release
-    if: needs.deploy-from-release.outputs.found != 'true'
+    needs: release-site
+    if: needs.release-site.outputs.found != 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-web.yml
+    with:
+      ref: ${{ needs.release-site.outputs.ref }}
 
-  deploy-from-build:
-    needs: [deploy-from-release, build]
-    if: needs.deploy-from-release.outputs.found != 'true'
+  deploy:
+    needs: [release-site, build]
+    if: >-
+      always() &&
+      (needs.release-site.result == 'success' || needs.build.result == 'success') &&
+      (needs.release-site.outputs.found == 'true' || needs.build.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy
+      - name: Deploy production Pages
         id: deployment
         uses: actions/deploy-pages@v5

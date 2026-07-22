@@ -1,6 +1,6 @@
 # Recommendations & Open Problems Backlog
 
-**Current state audit (synced 2026-07-01)**
+**Current state audit (synced 2026-07-22)**
 
 This is the canonical **current open-problems extract** for the worktree. It keeps the stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md). The latest direct code audit lives in [TOP-200-current.md](TOP-200-current.md) and contains **187 grounded findings**.
 
@@ -144,8 +144,8 @@ Notation used across docs:
     **Recommendation:** Add scripted stability tests around lifecycle and audio mocks.
 
 ### Product, UX, Build & Documentation
-39. **P1: Web PWA is manifest-only.** README says PWA, but there is no full Service Worker/offline cache strategy.
-    **Recommendation:** Implement real offline PWA or document it honestly as install metadata only.
+39. **P1: Web PWA is manifest-only.** README now describes it honestly as an install manifest without offline cache, but there is still no Service Worker/cache strategy.
+    **Recommendation:** Implement and test a real offline PWA before advertising offline browser support.
 
 40. **P1: Full profile import/export is missing.** Custom tuning transfer exists, but user instruments, temperaments, settings, metronome and practice history do not have one versioned backup.
     **Recommendation:** Add profile schema, migrations and full roundtrip tests.
@@ -153,11 +153,11 @@ Notation used across docs:
 41. **P1: Accessibility is incomplete.** Some live readout is improved, but canvases, color-only states, keyboard flow, focus rings and screen-reader text are not systematically verified.
     **Recommendation:** Add an accessibility checklist and test stage/compact/colorblind modes.
 
-42. **P2: WASM packaging is ad hoc.** `build:wasm` can try to install `wasm-pack` during the build and writes into `web/public/wasm`.
-    **Recommendation:** Pin tool versions and make WASM artifacts reproducible/versioned.
+42. **P2: WASM output ownership remains ad hoc.** `wasm-pack` 0.15.0 is now pinned/provisioned and builds fail fast, but generated output is still written directly into `web/public/wasm`.
+    **Recommendation:** Produce a versioned CI artifact or a dedicated generated package and define its cleanup/ownership policy.
 
-43. **P2: Release hardening is incomplete.** Code-signing, notarization, CSP, checksums and audit gates are listed as plans rather than enforced release steps.
-    **Recommendation:** Add release gates incrementally.
+43. **P2: Release hardening is incomplete.** Core/web/E2E/desktop builds now fully gate Pages and releases, versions/toolchains are pinned, and Tauri CSP/capabilities are narrower. Code-signing, notarization, checksums, dependency review and audit gates are still missing.
+    **Recommendation:** Add signing/notarization, checksums and supply-chain gates incrementally.
 
 44. **P2: Observability is weak.** There is no health strip for WASM status, audio backend status, device failure, clipping, hum or DC bias.
     **Recommendation:** Add a "Test my mic" / diagnostics panel.
@@ -339,6 +339,8 @@ Notation used across docs:
 - Added Playwright synthetic UI E2E for `?fixture=E2` and fixed worker payload cloning by sending plain detection range/stats objects.
 - Made Tauri native audio emit a frame-shaped payload and made the web native adapter normalize it into `DetectionFrame`.
 - Split `pitch-core` into `frames`, `signal`, `smoother`, `engine` and `dsp` modules, plus `EngineConfig`.
+- Hardened CI/release plumbing: trusted same-repository PR previews are artifact-only, production release waits for all core/web/E2E/Tauri/egui gates, workspace artifact paths are correct, and release creation no longer pushes a tag before assets are verified.
+- Synchronized release version `0.1.13`, pinned Rust 1.96.0/Node 22/wasm-pack 0.15.0, removed nested workspace lockfiles and duplicate manifest dependencies, and narrowed Tauri CSP/capabilities/entitlements.
 Fully fixed items should be removed from future audits; partially fixed items above now call out their remaining scope so stable `R#` references stay usable.
 
 ## Summary

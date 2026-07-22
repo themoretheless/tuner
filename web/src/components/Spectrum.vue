@@ -2,12 +2,15 @@
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
+import { useL10n } from '../stores/l10n'
+import { canvasPalette } from './canvasTheme'
 
 const props = defineProps<{
   frame: SpectrumFrame | null
   isListening: boolean
   currentFreq?: number | null
 }>()
+const { t } = useL10n()
 
 const { canvas } = useCanvasRenderer({
   cssHeight: 130,
@@ -18,7 +21,7 @@ const { canvas } = useCanvasRenderer({
 void canvas
 
 function clearCanvas(frame: CanvasFrame) {
-  frame.ctx.fillStyle = '#11151b'
+  frame.ctx.fillStyle = canvasPalette(frame).background
   frame.ctx.fillRect(0, 0, frame.w, frame.h)
 }
 
@@ -32,7 +35,8 @@ function drawFrame(frame: CanvasFrame) {
   const data = props.frame.bins
   const binCount = data.length
 
-  ctx.fillStyle = '#11151b'
+  const palette = canvasPalette(frame)
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
 
   const sr = props.frame.sampleRate || 48000
@@ -48,6 +52,12 @@ function drawFrame(frame: CanvasFrame) {
 
   // Per-frame max normalize (keeps quiet signals visible)
   let maxV = 0
+  const gradient = ctx.createLinearGradient(0, 0, 0, h)
+  gradient.addColorStop(0, palette.accentBright)
+  gradient.addColorStop(0.65, palette.accent)
+  gradient.addColorStop(1, palette.accentDark)
+  ctx.fillStyle = gradient
+
   for (let i = 0; i < displayBins; i++) {
     const t = i / Math.max(1, displayBins - 1)
     const freq = MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, t)
@@ -76,18 +86,12 @@ function drawFrame(frame: CanvasFrame) {
     const x1 = Math.floor(x)
     const bw = Math.max(1, Math.floor(barWidth - 0.85))
 
-    // Nice vertical gradient (brighter on top)
-    const grad = ctx.createLinearGradient(0, h - barH, 0, h)
-    grad.addColorStop(0, '#4ade80')
-    grad.addColorStop(0.65, '#22c55e')
-    grad.addColorStop(1, '#166534')
-    ctx.fillStyle = grad
     ctx.fillRect(x1, h - barH, bw, barH)
   }
 
   // Highlight harmonics at correct log positions (crisp lines)
   if (props.currentFreq && props.currentFreq > 40) {
-    ctx.strokeStyle = '#f59e0b'
+    ctx.strokeStyle = palette.warning
     ctx.lineWidth = 1
     for (let harm = 2; harm <= 5; harm++) {
       const harmFreq = props.currentFreq * harm
@@ -111,6 +115,8 @@ function drawFrame(frame: CanvasFrame) {
     <canvas
       ref="canvas"
       class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      role="img"
+      :aria-label="t('visual.spectrum.label')"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

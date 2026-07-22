@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import type { Note } from '../utils/notes'
+import { useL10n } from '../stores/l10n'
 
 defineProps<{
   stringsWithCents: Array<Note & { cents: number | null }>
 }>()
+
+const { t } = useL10n()
 </script>
 
 <template>
   <div class="w-full text-xs text-slate-400 mt-2">
-    <div class="mb-1">Per string:</div>
+    <div class="mb-1">{{ t('per.string') }}</div>
     <div class="flex gap-2 flex-wrap">
       <div
         v-for="(s, i) in stringsWithCents"

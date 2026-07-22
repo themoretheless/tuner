@@ -3,18 +3,28 @@ use eframe::egui;
 #[cfg(not(target_arch = "wasm32"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 #[cfg(not(target_arch = "wasm32"))]
-use cpal::{Stream, StreamConfig};
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream, StreamConfig};
 
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread,
+    time::{Duration, Instant},
+};
 
 use pitch_core::{get_tunings, TunerEngine, TunerUpdate, Tuning};
 
 // Consistent sample rate for audio processing and viz calculations.
 // Matches the wasm feed path (48000) and preferred in web.
 const PREFERRED_SAMPLE_RATE: f32 = 48000.0;
+#[cfg(not(target_arch = "wasm32"))]
+const PITCH_WINDOW_SIZE: usize = 4096;
+#[cfg(not(target_arch = "wasm32"))]
+const INPUT_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 
 #[cfg(target_arch = "wasm32")]
 static WEB_ENGINE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<TunerEngine>>> =
@@ -29,6 +39,7 @@ static WEB_STATE: std::sync::OnceLock<std::sync::Arc<std::sync::Mutex<State>>> =
 
 #[derive(Clone, Default)]
 struct State {
+    sequence: u64,
     freq: Option<f32>,
     note: Option<String>,
     cents: f32,
@@ -37,6 +48,7 @@ struct State {
     confidence: f32,
     is_power: bool,
     waveform: Vec<f32>,
+    audio_error: Option<String>,
 }
 
 /// Extracted from god App to handle all audio input/output concerns.
@@ -50,6 +62,68 @@ struct AudioManager {
     inp: Option<Stream>,
     #[cfg(not(target_arch = "wasm32"))]
     out: Option<Stream>,
+    #[cfg(not(target_arch = "wasm32"))]
+    worker_stop: Option<mpsc::Sender<()>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    worker: Option<thread::JoinHandle<()>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    input_running: Arc<AtomicBool>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct LatestAudioWindow {
+    samples: Vec<f32>,
+    sample_rate: f32,
+    generation: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LatestAudioWindow {
+    fn new(size: usize) -> Self {
+        Self {
+            samples: Vec::with_capacity(size),
+            sample_rate: 0.0,
+            generation: 0,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct MonoRingBuffer {
+    samples: Vec<f32>,
+    write_index: usize,
+    full: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl MonoRingBuffer {
+    fn new(size: usize) -> Self {
+        Self {
+            samples: vec![0.0; size],
+            write_index: 0,
+            full: false,
+        }
+    }
+
+    fn push(&mut self, sample: f32) {
+        self.samples[self.write_index] = sample;
+        self.write_index += 1;
+        if self.write_index == self.samples.len() {
+            self.write_index = 0;
+            self.full = true;
+        }
+    }
+
+    fn copy_latest_into(&self, output: &mut Vec<f32>) -> bool {
+        if !self.full {
+            return false;
+        }
+        output.clear();
+        output.reserve(self.samples.len());
+        output.extend_from_slice(&self.samples[self.write_index..]);
+        output.extend_from_slice(&self.samples[..self.write_index]);
+        true
+    }
 }
 
 impl AudioManager {
@@ -67,8 +141,331 @@ impl AudioManager {
         // Devices listed via JS if needed; stub for now
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    fn stop_input(&mut self) {
+        drop(self.inp.take());
+        self.input_running.store(false, Ordering::Release);
+        if let Some(stop) = self.worker_stop.take() {
+            let _ = stop.send(());
+        }
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
+
     // start_mic / toggle logic will be called from App with engine/st refs
     // wasm feed is on App or here
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn build_input_stream_for_format(
+    device: &cpal::Device,
+    config: &StreamConfig,
+    sample_format: SampleFormat,
+    sample_rate: f32,
+    latest_window: Arc<Mutex<LatestAudioWindow>>,
+    runtime_error_tx: mpsc::Sender<String>,
+    running: Arc<AtomicBool>,
+) -> Result<Stream, String> {
+    match sample_format {
+        SampleFormat::I8 => build_typed_input_stream::<i8>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::I16 => build_typed_input_stream::<i16>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::I32 => build_typed_input_stream::<i32>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::I64 => build_typed_input_stream::<i64>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::U8 => build_typed_input_stream::<u8>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::U16 => build_typed_input_stream::<u16>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::U32 => build_typed_input_stream::<u32>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::U64 => build_typed_input_stream::<u64>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::F32 => build_typed_input_stream::<f32>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        SampleFormat::F64 => build_typed_input_stream::<f64>(
+            device,
+            config,
+            sample_rate,
+            latest_window,
+            runtime_error_tx,
+            running,
+        ),
+        format => Err(format!("Unsupported input sample format: {format}")),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn build_typed_input_stream<T>(
+    device: &cpal::Device,
+    config: &StreamConfig,
+    sample_rate: f32,
+    latest_window: Arc<Mutex<LatestAudioWindow>>,
+    runtime_error_tx: mpsc::Sender<String>,
+    running: Arc<AtomicBool>,
+) -> Result<Stream, String>
+where
+    T: Sample + SizedSample + Copy,
+    f32: FromSample<T>,
+{
+    let channels = usize::from(config.channels);
+    if channels == 0 {
+        return Err("Input device reported zero channels".to_string());
+    }
+
+    let mut ring = MonoRingBuffer::new(PITCH_WINDOW_SIZE);
+    let mut last_publish = Instant::now() - INPUT_FRAME_INTERVAL;
+    device
+        .build_input_stream(
+            config,
+            move |data: &[T], _| {
+                for frame in data.chunks_exact(channels) {
+                    ring.push(downmix_frame(frame));
+                }
+                if !ring.full || last_publish.elapsed() < INPUT_FRAME_INTERVAL {
+                    return;
+                }
+
+                // The callback only downmixes and replaces one bounded slot.
+                // It never waits for the worker that runs YIN and the FFT.
+                if let Ok(mut latest) = latest_window.try_lock() {
+                    if ring.copy_latest_into(&mut latest.samples) {
+                        latest.sample_rate = sample_rate;
+                        latest.generation = latest.generation.wrapping_add(1);
+                        last_publish = Instant::now();
+                    }
+                }
+            },
+            move |error| {
+                running.store(false, Ordering::Release);
+                let _ = runtime_error_tx.send(format!("Audio input failed: {error}"));
+            },
+            None,
+        )
+        .map_err(|error| format!("Could not create input stream: {error}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn downmix_frame<T>(frame: &[T]) -> f32
+where
+    T: Sample + Copy,
+    f32: FromSample<T>,
+{
+    if frame.is_empty() {
+        return 0.0;
+    }
+    let sum = frame
+        .iter()
+        .map(|sample| {
+            let sample = f32::from_sample(*sample);
+            if sample.is_finite() {
+                sample
+            } else {
+                0.0
+            }
+        })
+        .sum::<f32>();
+    sum / frame.len() as f32
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_input_worker(
+    latest_window: Arc<Mutex<LatestAudioWindow>>,
+    runtime_error_rx: mpsc::Receiver<String>,
+    stop_rx: mpsc::Receiver<()>,
+    engine: Arc<Mutex<TunerEngine>>,
+    state: Arc<Mutex<State>>,
+    context: egui::Context,
+    running: Arc<AtomicBool>,
+) {
+    let mut generation = 0;
+    let mut samples = Vec::with_capacity(PITCH_WINDOW_SIZE);
+    loop {
+        match stop_rx.recv_timeout(Duration::from_millis(8)) {
+            Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+
+        if let Ok(error) = runtime_error_rx.try_recv() {
+            if let Ok(mut state) = state.lock() {
+                state.audio_error = Some(error);
+            }
+            running.store(false, Ordering::Release);
+            context.request_repaint();
+            break;
+        }
+
+        let sample_rate = latest_window.lock().ok().and_then(|latest| {
+            if latest.generation == generation {
+                return None;
+            }
+            samples.clear();
+            samples.extend_from_slice(&latest.samples);
+            generation = latest.generation;
+            Some(latest.sample_rate)
+        });
+        let Some(sample_rate) = sample_rate else {
+            continue;
+        };
+
+        let update = engine
+            .lock()
+            .map(|mut engine| engine.process(&samples, sample_rate))
+            .unwrap_or_else(|_| TunerUpdate::default());
+
+        if let Ok(mut state) = state.lock() {
+            state.sequence = state.sequence.wrapping_add(1);
+            state.freq = update.freq;
+            state.cents = update.cents;
+            state.confidence = update.confidence;
+            state.is_power = update.is_power;
+            state.level = update.level;
+            state.note = Some(update.note);
+            state.waveform.clear();
+            state.waveform.extend_from_slice(&samples);
+            if !update.spectrum.is_empty() {
+                state.spectrum = update.spectrum;
+            }
+        }
+        context.request_repaint();
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn create_output_tone(frequency: f32) -> Result<Stream, String> {
+    if !frequency.is_finite() || frequency <= 0.0 {
+        return Err("Reference frequency must be positive".to_string());
+    }
+    let device = cpal::default_host()
+        .default_output_device()
+        .ok_or_else(|| "No output device available".to_string())?;
+    let supported_config = device
+        .default_output_config()
+        .map_err(|error| format!("Could not read output config: {error}"))?;
+    let sample_format = supported_config.sample_format();
+    let config: StreamConfig = supported_config.into();
+    let stream = match sample_format {
+        SampleFormat::I8 => build_typed_output_stream::<i8>(&device, &config, frequency),
+        SampleFormat::I16 => build_typed_output_stream::<i16>(&device, &config, frequency),
+        SampleFormat::I32 => build_typed_output_stream::<i32>(&device, &config, frequency),
+        SampleFormat::I64 => build_typed_output_stream::<i64>(&device, &config, frequency),
+        SampleFormat::U8 => build_typed_output_stream::<u8>(&device, &config, frequency),
+        SampleFormat::U16 => build_typed_output_stream::<u16>(&device, &config, frequency),
+        SampleFormat::U32 => build_typed_output_stream::<u32>(&device, &config, frequency),
+        SampleFormat::U64 => build_typed_output_stream::<u64>(&device, &config, frequency),
+        SampleFormat::F32 => build_typed_output_stream::<f32>(&device, &config, frequency),
+        SampleFormat::F64 => build_typed_output_stream::<f64>(&device, &config, frequency),
+        format => Err(format!("Unsupported output sample format: {format}")),
+    }?;
+    stream
+        .play()
+        .map_err(|error| format!("Could not start output stream: {error}"))?;
+    Ok(stream)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn build_typed_output_stream<T>(
+    device: &cpal::Device,
+    config: &StreamConfig,
+    frequency: f32,
+) -> Result<Stream, String>
+where
+    T: Sample + SizedSample + FromSample<f32>,
+{
+    let channels = usize::from(config.channels);
+    if channels == 0 {
+        return Err("Output device reported zero channels".to_string());
+    }
+    let sample_rate = config.sample_rate.0 as f32;
+    let mut phase = 0.0;
+    device
+        .build_output_stream(
+            config,
+            move |data: &mut [T], _| {
+                fill_tone_buffer(data, channels, frequency, sample_rate, &mut phase);
+            },
+            |error| eprintln!("audio output error: {error}"),
+            None,
+        )
+        .map_err(|error| format!("Could not create output stream: {error}"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn fill_tone_buffer<T>(
+    output: &mut [T],
+    channels: usize,
+    frequency: f32,
+    sample_rate: f32,
+    phase: &mut f32,
+) where
+    T: Sample + FromSample<f32>,
+{
+    let phase_step = frequency / sample_rate;
+    for frame in output.chunks_mut(channels.max(1)) {
+        let value = (2.0 * std::f32::consts::PI * *phase).sin() * 0.18;
+        let value = T::from_sample(value);
+        for sample in frame {
+            *sample = value;
+        }
+        *phase = (*phase + phase_step).fract();
+    }
 }
 
 struct App {
@@ -89,6 +486,7 @@ struct App {
 /// Extracted viz data manager to further de-god the App.
 #[derive(Default)]
 struct VizManager {
+    last_sequence: u64,
     cents_history: Vec<f32>,
     spectrogram_history: std::collections::VecDeque<Vec<f32>>,
     show_spectrogram: bool,
@@ -98,6 +496,24 @@ impl VizManager {
     fn clear(&mut self) {
         self.cents_history.clear();
         self.spectrogram_history.clear();
+    }
+
+    fn record_frame(&mut self, state: &State) {
+        if state.sequence == self.last_sequence {
+            return;
+        }
+        self.last_sequence = state.sequence;
+        self.cents_history.push(state.cents);
+        if self.cents_history.len() > 300 {
+            self.cents_history.remove(0);
+        }
+
+        if !state.spectrum.is_empty() {
+            self.spectrogram_history.push_back(state.spectrum.clone());
+            if self.spectrogram_history.len() > 150 {
+                self.spectrogram_history.pop_front();
+            }
+        }
     }
 }
 
@@ -120,22 +536,25 @@ impl Default for App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint();
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
         ctx.set_visuals(egui::Visuals::dark());
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.listen && !self.audio.input_running.load(Ordering::Acquire) {
+            self.audio.stop_input();
+            self.listen = false;
+            if let Ok(mut engine) = self.engine.lock() {
+                engine.reset();
+            }
+        }
+
+        if !self.tunings.is_empty() {
+            self.t_idx = self.t_idx.min(self.tunings.len() - 1);
+        }
 
         let s = self.st.lock().unwrap().clone();
 
-        self.viz.cents_history.push(s.cents);
-        if self.viz.cents_history.len() > 300 {
-            self.viz.cents_history.remove(0);
-        }
-
-        if !s.spectrum.is_empty() {
-            self.viz.spectrogram_history.push_back(s.spectrum.clone());
-            if self.viz.spectrogram_history.len() > 150 {
-                self.viz.spectrogram_history.pop_front();
-            }
-        }
+        self.viz.record_frame(&s);
 
         // Keyboard shortcuts
         if ctx.input(|i| i.key_pressed(egui::Key::Space) || i.key_pressed(egui::Key::M)) {
@@ -157,6 +576,9 @@ impl eframe::App for App {
                     s.cents,
                     s.confidence * 100.0
                 ));
+                if let Some(error) = &s.audio_error {
+                    ui.label(egui::RichText::new(error).color(egui::Color32::LIGHT_RED));
+                }
                 if s.is_power {
                     ui.label(egui::RichText::new("power chord").small());
                 }
@@ -239,22 +661,27 @@ impl eframe::App for App {
                         }
                     });
 
+                let mut tuning_changed = false;
                 ui.collapsing("Edit current tuning", |ui| {
                     let tuning = &mut self.tunings[self.t_idx];
                     for s in &mut tuning.strings {
                         ui.horizontal(|ui| {
                             ui.label(format!("{} {}", s.name, s.octave));
                             if ui
-                                .add(egui::Slider::new(&mut s.frequency, 40.0..=400.0).text("Hz"))
+                                .add(egui::Slider::new(&mut s.frequency, 20.0..=1200.0).text("Hz"))
                                 .changed()
                             {
-                                if let Ok(mut e) = self.engine.lock() {
-                                    e.reset();
-                                }
+                                tuning_changed = true;
                             }
                         });
                     }
                 });
+                if tuning_changed {
+                    let tuning = self.tunings[self.t_idx].clone();
+                    if let Ok(mut engine) = self.engine.lock() {
+                        engine.set_tuning(tuning);
+                    }
+                }
 
                 if ui
                     .button(if self.ref_on {
@@ -473,7 +900,7 @@ impl App {
     #[cfg(not(target_arch = "wasm32"))]
     fn toggle_mic(&mut self, ctx: &egui::Context) {
         if self.listen {
-            self.audio.inp = None;
+            self.audio.stop_input();
             self.listen = false;
             if let Ok(mut e) = self.engine.lock() {
                 e.reset();
@@ -488,7 +915,7 @@ impl App {
 
         let st = self.st.clone();
         let ctx2 = ctx.clone();
-        let engine_for_cb = self.engine.clone();
+        let engine_for_worker = self.engine.clone();
         let h = cpal::default_host();
 
         let selected = self.audio.selected_input_device.as_ref().and_then(|name| {
@@ -499,75 +926,69 @@ impl App {
         let d = match selected.or_else(|| h.default_input_device()) {
             Some(d) => d,
             None => {
-                eprintln!("[mic] no input device available");
+                self.set_audio_error("No input device available".to_string());
                 self.listen = false;
                 return;
             }
         };
 
-        let cf: StreamConfig = match d.default_input_config() {
-            Ok(c) => c.into(),
+        let supported_config = match d.default_input_config() {
+            Ok(config) => config,
             Err(e) => {
-                eprintln!("[mic] no input config: {}", e);
+                self.set_audio_error(format!("Could not read input config: {e}"));
                 self.listen = false;
                 return;
             }
         };
+        let sample_format = supported_config.sample_format();
+        let cf: StreamConfig = supported_config.into();
         let sr = cf.sample_rate.0 as f32;
-        let mut b: Vec<f32> = vec![];
-        let stream = match d.build_input_stream(
+        let latest_window = Arc::new(Mutex::new(LatestAudioWindow::new(PITCH_WINDOW_SIZE)));
+        let (runtime_error_tx, runtime_error_rx) = mpsc::channel::<String>();
+        let running = self.audio.input_running.clone();
+        let stream = match build_input_stream_for_format(
+            &d,
             &cf,
-            move |d: &[f32], _| {
-                b.extend_from_slice(d);
-                if b.len() > 4096 {
-                    b.drain(..b.len() - 2048);
-                }
-                if b.len() >= 2048 {
-                    let window = &b[b.len() - 2048..];
-
-                    // Drive through shared engine
-                    let update = {
-                        if let Ok(mut eng) = engine_for_cb.lock() {
-                            eng.process(window, sr)
-                        } else {
-                            TunerUpdate::default()
-                        }
-                    };
-
-                    // Single lock + single repaint per frame (was 3x lock, 3x repaint).
-                    // Reuse the waveform Vec capacity instead of reallocating each callback.
-                    if let Ok(mut g) = st.lock() {
-                        g.freq = update.freq;
-                        g.cents = update.cents;
-                        g.confidence = update.confidence;
-                        g.is_power = update.is_power;
-                        g.level = update.level;
-                        g.note = Some(update.note);
-                        g.waveform.clear();
-                        g.waveform.extend_from_slice(window);
-                        if !update.spectrum.is_empty() {
-                            g.spectrum = update.spectrum;
-                        }
-                    }
-                    ctx2.request_repaint();
-                }
-            },
-            |e| eprintln!("{}", e),
-            None,
+            sample_format,
+            sr,
+            latest_window.clone(),
+            runtime_error_tx,
+            running.clone(),
         ) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("[mic] build input stream failed: {}", e);
+                self.set_audio_error(e);
                 self.listen = false;
                 return;
             }
         };
+
+        let (worker_stop, worker_stop_rx) = mpsc::channel::<()>();
+        let worker = thread::spawn(move || {
+            run_input_worker(
+                latest_window,
+                runtime_error_rx,
+                worker_stop_rx,
+                engine_for_worker,
+                st,
+                ctx2,
+                running,
+            );
+        });
+
+        self.set_audio_error_clear();
+        self.audio.input_running.store(true, Ordering::Release);
         if let Err(e) = stream.play() {
-            eprintln!("[mic] stream play failed: {}", e);
+            self.audio.input_running.store(false, Ordering::Release);
+            let _ = worker_stop.send(());
+            let _ = worker.join();
+            self.set_audio_error(format!("Could not start input stream: {e}"));
             self.listen = false;
             return;
         }
         self.audio.inp = Some(stream);
+        self.audio.worker_stop = Some(worker_stop);
+        self.audio.worker = Some(worker);
         self.listen = true;
     }
 
@@ -578,103 +999,81 @@ impl App {
             self.ref_on = false;
             return;
         }
-        let f = self.tunings[self.t_idx].strings[0].frequency;
-        let h = cpal::default_host();
-        let d = match h.default_output_device() {
-            Some(d) => d,
-            None => {
-                eprintln!("[ref] no output device");
-                return;
-            }
-        };
-        let cf: StreamConfig = match d.default_output_config() {
-            Ok(c) => c.into(),
-            Err(e) => {
-                eprintln!("[ref] no output config: {}", e);
-                return;
-            }
-        };
-        let sr = cf.sample_rate.0 as f32;
-        let mut ph = 0.0f32;
-        let s = match d.build_output_stream(
-            &cf,
-            move |data: &mut [f32], _| {
-                for s in data {
-                    *s = (2.0 * std::f32::consts::PI * f * ph / sr).sin() * 0.18;
-                    ph = (ph + 1.0) % sr;
-                }
-            },
-            |e| eprintln!("{}", e),
-            None,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[ref] build output stream failed: {}", e);
-                return;
-            }
-        };
-        if let Err(e) = s.play() {
-            eprintln!("[ref] play failed: {}", e);
+        let Some(frequency) = self
+            .tunings
+            .get(self.t_idx)
+            .and_then(|tuning| tuning.strings.first())
+            .map(|string| string.frequency)
+        else {
+            self.set_audio_error("Current tuning has no strings".to_string());
             return;
-        }
-        self.audio.out = Some(s);
+        };
+        self.audio.out = None;
+        let stream = match create_output_tone(frequency) {
+            Ok(stream) => stream,
+            Err(error) => {
+                self.set_audio_error(error);
+                return;
+            }
+        };
+        self.audio.out = Some(stream);
         self.ref_on = true;
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn play_random_string(&mut self) {
-        let strings = &self.tunings[self.t_idx].strings;
+        let Some(strings) = self.tunings.get(self.t_idx).map(|tuning| &tuning.strings) else {
+            return;
+        };
+        if strings.is_empty() {
+            self.set_audio_error("Current tuning has no strings".to_string());
+            return;
+        }
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let idx = (nanos % strings.len() as u128) as usize;
         let f = strings[idx].frequency;
-        // stop previous
         self.audio.out = None;
-        let h = cpal::default_host();
-        let d = match h.default_output_device() {
-            Some(d) => d,
-            None => {
-                eprintln!("[random] no output device");
+        self.ref_on = false;
+        let stream = match create_output_tone(f) {
+            Ok(stream) => stream,
+            Err(error) => {
+                self.set_audio_error(error);
                 return;
             }
         };
-        let cf: StreamConfig = match d.default_output_config() {
-            Ok(c) => c.into(),
-            Err(e) => {
-                eprintln!("[random] no output config: {}", e);
-                return;
-            }
-        };
-        let sr = cf.sample_rate.0 as f32;
-        let mut ph = 0.0f32;
-        let s = match d.build_output_stream(
-            &cf,
-            move |data: &mut [f32], _| {
-                for s in data {
-                    *s = (2.0 * std::f32::consts::PI * f * ph / sr).sin() * 0.18;
-                    ph = (ph + 1.0) % sr;
-                }
-            },
-            |e| eprintln!("{}", e),
-            None,
-        ) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("[random] build output stream failed: {}", e);
-                return;
-            }
-        };
-        if let Err(e) = s.play() {
-            eprintln!("[random] play failed: {}", e);
+        self.audio.out = Some(stream);
+    }
+
+    fn synchronize_engine_settings(&mut self) {
+        if !self.a4.is_finite() || !(420.0..=460.0).contains(&self.a4) {
+            self.a4 = 440.0;
+        }
+        if self.tunings.is_empty() {
+            self.t_idx = 0;
             return;
         }
-        // Keep the stream alive in self.audio.out so the tone actually sounds;
-        // it stops when the next tone replaces it or when `out` is cleared.
-        // (Previously an immediate out.take() dropped the stream the same frame,
-        // so the ear-training tone never played.)
-        self.audio.out = Some(s);
+        self.t_idx = self.t_idx.min(self.tunings.len() - 1);
+        if let Ok(mut engine) = self.engine.lock() {
+            engine.set_a4(self.a4);
+            engine.set_tuning(self.tunings[self.t_idx].clone());
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn set_audio_error(&self, error: String) {
+        if let Ok(mut state) = self.st.lock() {
+            state.audio_error = Some(error);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn set_audio_error_clear(&self) {
+        if let Ok(mut state) = self.st.lock() {
+            state.audio_error = None;
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -685,6 +1084,89 @@ impl App {
     #[cfg(target_arch = "wasm32")]
     fn play_random_string(&mut self) {
         // TODO: web audio version
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    fn sine_buffer(frequency: f32, sample_rate: f32, len: usize) -> Vec<f32> {
+        (0..len)
+            .map(|index| {
+                (2.0 * std::f32::consts::PI * frequency * index as f32 / sample_rate).sin()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn downmixes_each_interleaved_frame() {
+        assert!((downmix_frame(&[1.0_f32, 0.0]) - 0.5).abs() < f32::EPSILON);
+        assert!(downmix_frame(&[-0.25_f32, 0.25]).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn output_phase_advances_once_per_multichannel_frame() {
+        let mut output = [0.0_f32; 8];
+        let mut phase = 0.0;
+        fill_tone_buffer(&mut output, 2, 12000.0, 48000.0, &mut phase);
+        for frame in output.chunks_exact(2) {
+            assert!((frame[0] - frame[1]).abs() < f32::EPSILON);
+        }
+        assert!((output[2] - 0.18).abs() < 1e-6);
+        assert!(output[4].abs() < 1e-6);
+        assert!((output[6] + 0.18).abs() < 1e-6);
+        assert!(phase.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn restored_settings_are_clamped_and_applied_to_engine() {
+        let mut app = App {
+            t_idx: usize::MAX,
+            a4: 442.0,
+            ..App::default()
+        };
+        app.synchronize_engine_settings();
+        assert_eq!(app.t_idx, app.tunings.len() - 1);
+
+        app.t_idx = 1;
+        app.synchronize_engine_settings();
+        let tuning = app.tunings[app.t_idx].clone();
+        let target = tuning.strings[0].frequency * (app.a4 / 440.0);
+        let frame = app
+            .engine
+            .lock()
+            .unwrap()
+            .process(&sine_buffer(target, 48000.0, 4096), 48000.0);
+        assert_eq!(
+            frame.target.as_ref().map(|note| note.name),
+            Some(tuning.strings[0].name)
+        );
+        assert!(frame.cents.abs() < 3.0, "cents was {}", frame.cents);
+
+        app.a4 = f32::NAN;
+        app.synchronize_engine_settings();
+        assert_eq!(app.a4, 440.0);
+    }
+
+    #[test]
+    fn visualization_history_records_each_audio_frame_once() {
+        let mut viz = VizManager::default();
+        let mut state = State {
+            sequence: 1,
+            cents: 3.0,
+            spectrum: vec![0.5],
+            ..State::default()
+        };
+        viz.record_frame(&state);
+        viz.record_frame(&state);
+        assert_eq!(viz.cents_history, vec![3.0]);
+        assert_eq!(viz.spectrogram_history.len(), 1);
+
+        state.sequence = 2;
+        state.cents = 4.0;
+        viz.record_frame(&state);
+        assert_eq!(viz.cents_history, vec![3.0, 4.0]);
     }
 }
 
@@ -712,6 +1194,7 @@ pub fn feed_audio_samples(samples: &[f32]) {
 
     if let Some(st) = WEB_STATE.get() {
         if let Ok(mut g) = st.lock() {
+            g.sequence = g.sequence.wrapping_add(1);
             g.freq = update.freq;
             g.note = Some(update.note.clone());
             g.cents = update.cents;
@@ -760,6 +1243,7 @@ fn main() -> eframe::Result<()> {
                     app.viz.show_spectrogram = s == "true";
                 }
             }
+            app.synchronize_engine_settings();
             app.audio.refresh();
             Box::new(app)
         }),
@@ -791,6 +1275,7 @@ pub fn start() {
                     if let Some(eng) = WEB_ENGINE.get() {
                         app.engine = eng.clone();
                     }
+                    app.synchronize_engine_settings();
                     Box::new(app)
                 }),
             )

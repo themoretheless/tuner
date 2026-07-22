@@ -5,6 +5,7 @@ import { useL10n } from '../stores/l10n'
 defineProps<{
   accuracy: number
   attempts: number
+  canMark?: boolean
   correct: number
   getNoteDisplay: (note: Note) => string
   revealed: boolean
@@ -44,13 +45,13 @@ const { t } = useL10n()
       <button type="button" data-ear-action="play" class="btn btn-ghost" :disabled="!target" @click="emit('play')">
         {{ t('ear.play') }}
       </button>
-      <button type="button" data-ear-action="reveal" class="btn btn-ghost" @click="emit('reveal')">
+      <button type="button" data-ear-action="reveal" class="btn btn-ghost" :disabled="!target" @click="emit('reveal')">
         {{ t('ear.reveal') }}
       </button>
-      <button type="button" data-ear-action="correct" class="btn btn-ghost text-emerald-300" @click="emit('mark', true)">
+      <button type="button" data-ear-action="correct" class="btn btn-ghost text-emerald-300" :disabled="!canMark" @click="emit('mark', true)">
         {{ t('ear.correct') }}
       </button>
-      <button type="button" data-ear-action="miss" class="btn btn-ghost text-amber-300" @click="emit('mark', false)">
+      <button type="button" data-ear-action="miss" class="btn btn-ghost text-amber-300" :disabled="!canMark" @click="emit('mark', false)">
         {{ t('ear.miss') }}
       </button>
     </div>

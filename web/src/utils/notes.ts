@@ -562,6 +562,9 @@ export function getNoteDisplay(note: Note): string {
   return `${note.name}${note.octave}`;
 }
 
-export function formatFreq(f: number): string {
-  return f.toFixed(1);
+export function formatFreq(f: number, locale?: string): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(f);
 }

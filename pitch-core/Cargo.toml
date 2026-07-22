@@ -1,7 +1,11 @@
 [package]
 name = "pitch-core"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+description = "Shared pitch detection engine for Guitar Tuner"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -9,7 +13,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 wasm-bindgen = { version = "0.2", optional = true }
 rustfft = "6.1"
-num-complex = "0.4"
 
 [features]
 default = []

@@ -1,5 +1,5 @@
-const GUITAR_MIN_FREQ: f32 = 30.0;
-const GUITAR_MAX_FREQ: f32 = 400.0;
+pub const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
+pub const DEFAULT_MAX_FREQUENCY: f32 = 1200.0;
 const YIN_THRESHOLD: f32 = 0.12;
 
 #[cfg(feature = "wasm")]
@@ -21,15 +21,49 @@ impl PitchDetection {
     }
 }
 
-pub(crate) fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
+fn validate_detection_input(
+    buffer: &[f32],
+    sample_rate: f32,
+    min_frequency: f32,
+    max_frequency: f32,
+) -> Option<(f32, f32)> {
+    if buffer.len() < 128
+        || !sample_rate.is_finite()
+        || sample_rate <= 0.0
+        || !min_frequency.is_finite()
+        || !max_frequency.is_finite()
+        || min_frequency <= 0.0
+        || max_frequency <= min_frequency
+        || buffer.iter().any(|sample| !sample.is_finite())
+    {
+        return None;
+    }
+
+    let max_frequency = max_frequency.min(sample_rate * 0.45);
+    (max_frequency > min_frequency).then_some((min_frequency, max_frequency))
+}
+
+pub(crate) fn detect_pitch_yin_in_range_internal(
+    buffer: &[f32],
+    sample_rate: f32,
+    min_frequency: f32,
+    max_frequency: f32,
+) -> Option<(f32, f32)> {
+    let (min_frequency, max_frequency) =
+        validate_detection_input(buffer, sample_rate, min_frequency, max_frequency)?;
     let size = buffer.len();
     let half = size / 2;
     if half < 64 {
         return None;
     }
 
-    let min_tau = (sample_rate / GUITAR_MAX_FREQ).floor() as usize;
-    let max_tau = std::cmp::min(half, (sample_rate / GUITAR_MIN_FREQ).floor() as usize);
+    let min_tau = ((sample_rate / max_frequency).floor() as usize).max(2);
+    // The upper bound is exclusive below, so retain one lag past the nominal
+    // minimum frequency when the window is long enough.
+    let max_tau = std::cmp::min(half, (sample_rate / min_frequency).ceil() as usize + 1);
+    if max_tau <= min_tau + 2 {
+        return None;
+    }
 
     // Gate on energy
     let mut sum_sq = 0.0;
@@ -131,16 +165,26 @@ pub(crate) fn detect_pitch_yin_internal(buffer: &[f32], sample_rate: f32) -> Opt
     }
 
     let freq = sample_rate / better_tau;
-    if !(GUITAR_MIN_FREQ..=GUITAR_MAX_FREQ).contains(&freq) {
+    if !freq.is_finite() || !(min_frequency..=max_frequency).contains(&freq) {
         return None;
     }
 
     Some((freq, confidence))
 }
 
-pub(crate) fn detect_pitch_mpm_internal(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
+pub(crate) fn detect_pitch_mpm_in_range_internal(
+    buffer: &[f32],
+    sample_rate: f32,
+    min_frequency: f32,
+    max_frequency: f32,
+) -> Option<(f32, f32)> {
+    let (min_frequency, max_frequency) =
+        validate_detection_input(buffer, sample_rate, min_frequency, max_frequency)?;
     let n = buffer.len();
     let max_tau = n / 2;
+    if max_tau < 4 {
+        return None;
+    }
     let mut nsdf = vec![0.0f32; max_tau];
 
     for tau in 0..max_tau {
@@ -162,7 +206,12 @@ pub(crate) fn detect_pitch_mpm_internal(buffer: &[f32], sample_rate: f32) -> Opt
     // Find first significant peak
     let mut max_val = -1.0;
     let mut peak = None;
-    for tau in 2..(max_tau - 1) {
+    let min_tau = ((sample_rate / max_frequency).floor() as usize).clamp(2, max_tau - 2);
+    let range_max_tau = ((sample_rate / min_frequency).ceil() as usize + 1).min(max_tau - 1);
+    if range_max_tau <= min_tau + 1 {
+        return None;
+    }
+    for tau in min_tau..range_max_tau {
         if nsdf[tau] > nsdf[tau - 1] && nsdf[tau] > nsdf[tau + 1] && nsdf[tau] > max_val {
             max_val = nsdf[tau];
             peak = Some(tau);
@@ -193,17 +242,20 @@ pub(crate) fn detect_pitch_mpm_internal(buffer: &[f32], sample_rate: f32) -> Opt
     }
 
     let freq = sample_rate / better;
-    if !(GUITAR_MIN_FREQ..=GUITAR_MAX_FREQ).contains(&freq) {
+    if !freq.is_finite() || !(min_frequency..=max_frequency).contains(&freq) {
         return None;
     }
 
     Some((freq, max_val.clamp(0.0, 1.0)))
 }
 
-pub fn detect_pitch(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
-    if buffer.is_empty() {
-        return None;
-    }
+pub fn detect_pitch_in_range(
+    buffer: &[f32],
+    sample_rate: f32,
+    min_frequency: f32,
+    max_frequency: f32,
+) -> Option<(f32, f32)> {
+    validate_detection_input(buffer, sample_rate, min_frequency, max_frequency)?;
 
     // Remove DC offset (mic/ADC bias) before detection. A constant offset
     // inflates the YIN difference function and biases the MPM denominator,
@@ -216,28 +268,53 @@ pub fn detect_pitch(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
     };
 
     // Prefer YIN
-    if let Some(result) = detect_pitch_yin_internal(&cleaned, sample_rate) {
+    if let Some(result) =
+        detect_pitch_yin_in_range_internal(&cleaned, sample_rate, min_frequency, max_frequency)
+    {
         return Some(result);
     }
 
     // Then MPM
-    if let Some(result) = detect_pitch_mpm_internal(&cleaned, sample_rate) {
+    if let Some(result) =
+        detect_pitch_mpm_in_range_internal(&cleaned, sample_rate, min_frequency, max_frequency)
+    {
         return Some(result);
     }
 
     None
 }
 
+pub fn detect_pitch(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32)> {
+    detect_pitch_in_range(
+        buffer,
+        sample_rate,
+        DEFAULT_MIN_FREQUENCY,
+        DEFAULT_MAX_FREQUENCY,
+    )
+}
+
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn detect_pitch_yin(buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
-    detect_pitch_yin_internal(buffer, sample_rate).map(|(f, c)| PitchDetection::new(f, c))
+    detect_pitch_yin_in_range_internal(
+        buffer,
+        sample_rate,
+        DEFAULT_MIN_FREQUENCY,
+        DEFAULT_MAX_FREQUENCY,
+    )
+    .map(|(f, c)| PitchDetection::new(f, c))
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub fn detect_pitch_mpm(buffer: &[f32], sample_rate: f32) -> Option<PitchDetection> {
-    detect_pitch_mpm_internal(buffer, sample_rate).map(|(f, c)| PitchDetection::new(f, c))
+    detect_pitch_mpm_in_range_internal(
+        buffer,
+        sample_rate,
+        DEFAULT_MIN_FREQUENCY,
+        DEFAULT_MAX_FREQUENCY,
+    )
+    .map(|(f, c)| PitchDetection::new(f, c))
 }
 
 #[cfg(feature = "wasm")]
@@ -251,7 +328,12 @@ pub fn detect_pitch_native(buffer: &[f32], sample_rate: f32) -> Option<(f32, f32
 }
 
 fn is_likely_power_chord_impl(buffer: &[f32], sample_rate: f32, fundamental: f32) -> bool {
-    if fundamental < 40.0 {
+    if buffer.is_empty()
+        || !sample_rate.is_finite()
+        || sample_rate <= 0.0
+        || !fundamental.is_finite()
+        || fundamental < 40.0
+    {
         return false;
     }
     let f5 = fundamental * 1.4983;

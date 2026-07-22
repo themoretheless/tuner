@@ -21,6 +21,10 @@ function save() {
   draftName.value = ''
 }
 
+function deleteProfile(id: string) {
+  if (window.confirm(t('confirm.delete.profile'))) emit('delete', id)
+}
+
 function updateOpenState(event: Event) {
   isOpen.value = (event.currentTarget as HTMLDetailsElement).open
 }
@@ -54,7 +58,7 @@ function updateOpenState(event: Event) {
           <button
             type="button"
             class="text-xs text-red-300 hover:text-red-200"
-            @click="emit('delete', instrument.id)"
+            @click="deleteProfile(instrument.id)"
           >
             {{ t('custom.delete') }}
           </button>

@@ -10,6 +10,9 @@ coverage/
 dist/
 build/
 target/
+/desktop/src-tauri/Cargo.lock
+/egui/Cargo.lock
+/pitch-core/Cargo.lock
 
 # Misc
 .DS_Store
@@ -29,7 +32,6 @@ target/
 *.sw?
 
 # Tauri specific
-desktop/src-tauri/target/
 desktop/src-tauri/gen/
 *.exe
 *.dmg

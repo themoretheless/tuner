@@ -10,6 +10,7 @@ export interface AudioFrame {
 
 export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096) {
   const isListening = ref(false);
+  const isStarting = ref(false);
   const error = ref<string | null>(null);
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
@@ -19,6 +20,10 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
   let stream: MediaStream | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let timeDomainBuffer: Float32Array<ArrayBuffer> | null = null;
+  let activeTrackEndedHandler: (() => void) | null = null;
+  let generation = 0;
+  let startPromise: Promise<void> | null = null;
+  let startPromiseGeneration = -1;
 
   async function refreshInputDevices() {
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -41,79 +46,133 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
   async function start() {
     error.value = null;
     if (isListening.value) return;
+    if (startPromise && startPromiseGeneration === generation) return startPromise;
 
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          ...(selectedInputDeviceId.value ? { deviceId: { exact: selectedInputDeviceId.value } } : {}),
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-        },
-      });
+    const token = generation;
+    const precedingStart = startPromise;
+    isStarting.value = true;
 
-      // If the mic track ends involuntarily (unplugged / OS revoked), stop
-      // cleanly instead of leaving isListening true and reading stale zeros.
-      stream.getAudioTracks().forEach((track) => {
-        track.addEventListener('ended', handleTrackEnded);
-      });
-
-      audioContext = createAudioContext();
-      // Browsers can hand back a suspended context (autoplay policy / iOS);
-      // resume it now and keep it resumed, otherwise the analyser silently
-      // reads zeros and detection produces nothing.
-      if (audioContext.state === 'suspended') {
-        await audioContext.resume().catch(() => {});
+    const operation = (async () => {
+      if (precedingStart) {
+        await precedingStart.catch(() => {});
       }
-      audioContext.onstatechange = () => {
-        if (audioContext?.state === 'suspended' && isListening.value) {
-          void audioContext.resume().catch(() => {});
+      if (token !== generation || isListening.value) return;
+
+      let nextStream: MediaStream | null = null;
+      let nextAudioContext: AudioContext | null = null;
+      let nextSource: MediaStreamAudioSourceNode | null = null;
+
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Microphone access is not supported by this browser');
         }
-      };
-      sampleRate.value = audioContext.sampleRate;
-      const nextAnalyser = audioContext.createAnalyser();
-      nextAnalyser.fftSize = fftSize;
-      nextAnalyser.smoothingTimeConstant = 0.55;
 
-      source = audioContext.createMediaStreamSource(stream);
-      source.connect(nextAnalyser);
-      analyser.value = nextAnalyser;
-      isListening.value = true;
-      void refreshInputDevices();
-    } catch (e: unknown) {
-      error.value = errorMessage(e, 'Microphone access denied or unavailable');
-      cleanup();
+        nextStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...(selectedInputDeviceId.value ? { deviceId: { exact: selectedInputDeviceId.value } } : {}),
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 1,
+          },
+        });
+        if (token !== generation) return;
+
+        nextAudioContext = createAudioContext();
+        if (nextAudioContext.state === 'suspended') {
+          await nextAudioContext.resume();
+        }
+        if (token !== generation) return;
+
+        const nextAnalyser = nextAudioContext.createAnalyser();
+        nextAnalyser.fftSize = fftSize;
+        nextAnalyser.smoothingTimeConstant = 0.55;
+        nextSource = nextAudioContext.createMediaStreamSource(nextStream);
+        nextSource.connect(nextAnalyser);
+        if (token !== generation) return;
+
+        const committedStream = nextStream;
+        const committedContext = nextAudioContext;
+        activeTrackEndedHandler = () => {
+          if (token !== generation || stream !== committedStream) return;
+          error.value = 'Microphone disconnected';
+          stop();
+        };
+        committedStream.getAudioTracks().forEach((track) => {
+          track.addEventListener('ended', activeTrackEndedHandler!);
+        });
+
+        committedContext.onstatechange = () => {
+          if (
+            token === generation &&
+            audioContext === committedContext &&
+            committedContext.state === 'suspended' &&
+            isListening.value
+          ) {
+            void committedContext.resume().catch(() => {});
+          }
+        };
+
+        stream = committedStream;
+        audioContext = committedContext;
+        source = nextSource;
+        analyser.value = nextAnalyser;
+        sampleRate.value = committedContext.sampleRate;
+        isListening.value = true;
+
+        nextStream = null;
+        nextAudioContext = null;
+        nextSource = null;
+        void refreshInputDevices();
+      } catch (startError: unknown) {
+        if (token === generation) {
+          error.value = errorMessage(startError, 'Microphone access denied or unavailable');
+        }
+      } finally {
+        disposeAudioResources(nextStream, nextAudioContext, nextSource);
+      }
+    })();
+
+    startPromise = operation;
+    startPromiseGeneration = token;
+    try {
+      await operation;
+    } finally {
+      if (startPromise === operation) {
+        startPromise = null;
+        startPromiseGeneration = -1;
+      }
+      if (token === generation) {
+        isStarting.value = false;
+      }
     }
-  }
-
-  function handleTrackEnded() {
-    error.value = 'Microphone disconnected';
-    stop();
   }
 
   function cleanup() {
-    if (source) {
-      source.disconnect();
-      source = null;
+    const currentStream = stream;
+    const currentContext = audioContext;
+    const currentSource = source;
+    if (currentStream && activeTrackEndedHandler) {
+      currentStream.getAudioTracks().forEach((track) => {
+        track.removeEventListener('ended', activeTrackEndedHandler!);
+      });
     }
+    activeTrackEndedHandler = null;
+    stream = null;
+    audioContext = null;
+    source = null;
+    isListening.value = false;
+
     analyser.value = null;
-    if (audioContext) {
-      audioContext.onstatechange = null;
-      audioContext.close().catch(() => {});
-      audioContext = null;
-    }
     sampleRate.value = DEFAULT_SAMPLE_RATE;
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      stream = null;
-    }
     timeDomainBuffer = null;
+    disposeAudioResources(currentStream, currentContext, currentSource);
   }
 
   function stop() {
+    generation += 1;
+    isStarting.value = false;
     cleanup();
-    isListening.value = false;
   }
 
   function clearError() {
@@ -122,7 +181,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
 
   async function setInputDevice(deviceId: string) {
     selectedInputDeviceId.value = deviceId;
-    if (!isListening.value) return;
+    if (!isListening.value && !isStarting.value) return;
     stop();
     await start();
   }
@@ -158,6 +217,7 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     error,
     inputDevices,
     isListening,
+    isStarting,
     readFrame,
     refreshInputDevices,
     sampleRate,
@@ -166,4 +226,29 @@ export function useAudioInput(selectedInputDeviceId: Ref<string>, fftSize = 4096
     start,
     stop,
   };
+}
+
+function disposeAudioResources(
+  stream: MediaStream | null,
+  audioContext: AudioContext | null,
+  source: MediaStreamAudioSourceNode | null,
+) {
+  if (source) {
+    try {
+      source.disconnect();
+    } catch {
+      // The source may already have been disconnected by the browser.
+    }
+  }
+  if (audioContext) {
+    audioContext.onstatechange = null;
+    void audioContext.close().catch(() => {});
+  }
+  stream?.getTracks().forEach((track) => {
+    try {
+      track.stop();
+    } catch {
+      // Continue releasing the remaining tracks.
+    }
+  });
 }

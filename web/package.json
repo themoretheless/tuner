@@ -1,28 +1,26 @@
 {
   "name": "guitar-tuner-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.13",
   "type": "module",
   "scripts": {
     "dev": "npm run build:wasm && vite",
     "build": "npm run build:wasm && vue-tsc -b && vite build",
     "build:tauri": "npm run build:wasm && vue-tsc -b && vite build --base ./",
-    "build:wasm": "cd ../pitch-core && (wasm-pack build --target web --out-dir ../web/public/wasm --features wasm || (cargo install wasm-pack && wasm-pack build --target web --out-dir ../web/public/wasm --features wasm)) || echo 'WASM build skipped or failed'",
+    "build:wasm": "node -e \"const cp=require('node:child_process');const actual=cp.execFileSync('wasm-pack',['--version'],{encoding:'utf8'}).trim();if(actual!=='wasm-pack 0.15.0')throw new Error('Expected wasm-pack 0.15.0, got '+actual)\" && cd ../pitch-core && wasm-pack build --target web --out-dir ../web/public/wasm -- --locked --features wasm",
     "test": "vitest run src tests",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "test:core:legacy": "node ./scripts/test-core.mjs",
     "preview": "vite preview",
-    "tauri:dev": "cd ../desktop && npm run tauri dev",
-    "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
+    "tauri:dev": "npm --prefix ../desktop run dev",
+    "tauri:build": "npm --prefix ../desktop run build"
   },
   "dependencies": {
     "@tauri-apps/plugin-store": "^2.4.3",
     "vue": "^3.5.34"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
-    "@tauri-apps/cli": "^2.11.2",
     "@playwright/test": "^1.61.1",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",

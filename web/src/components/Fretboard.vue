@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Note } from '../utils/notes'
+import { useL10n } from '../stores/l10n'
 
 const props = defineProps<{
   strings: Note[]
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 }>()
 
 const NUM_FRETS = 12
+const { t } = useL10n()
 
 const highlightedFrets = computed(() => {
   return props.strings.map((s) => {
@@ -26,8 +28,8 @@ const highlightedFrets = computed(() => {
 
 <template>
   <div class="w-full bg-[#1f2937] rounded-lg p-2 text-xs">
-    <div class="mb-1 text-slate-400">Guitar Fretboard (target highlight)</div>
-    <svg width="100%" height="90" viewBox="0 0 520 90" class="mx-auto" preserveAspectRatio="xMidYMid meet">
+    <div class="mb-1 text-slate-400">{{ t('fretboard.label') }}</div>
+    <svg width="100%" height="90" viewBox="0 0 520 90" class="mx-auto" preserveAspectRatio="xMidYMid meet" role="img" :aria-label="t('fretboard.label')">
       <!-- Neck background -->
       <rect x="0" y="10" width="520" height="70" fill="#3f2a1f" rx="4" />
 

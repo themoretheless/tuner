@@ -11,5 +11,20 @@ export function createAudioContext() {
 }
 
 export function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  if (typeof DOMException === 'undefined' || !(error instanceof DOMException)) return fallback;
+  switch (error.name) {
+    case 'NotAllowedError':
+      return 'Microphone permission denied';
+    case 'NotFoundError':
+      return 'No microphone found';
+    case 'NotReadableError':
+    case 'AbortError':
+      return 'Microphone is busy or unavailable';
+    case 'OverconstrainedError':
+      return 'Selected microphone is unavailable';
+    case 'SecurityError':
+      return 'Microphone access requires a secure context';
+    default:
+      return fallback;
+  }
 }

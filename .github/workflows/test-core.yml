@@ -11,6 +11,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,9 +21,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
@@ -34,16 +38,16 @@ jobs:
         run: cargo fmt --check -p pitch-core
 
       - name: Lint pitch-core
-        run: cargo clippy -p pitch-core --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked -p pitch-core --all-targets --all-features -- -D warnings
         env:
           CARGO_INCREMENTAL: 0
 
       - name: Test pitch-core
-        run: cargo test -p pitch-core
+        run: cargo test --locked -p pitch-core
         env:
           CARGO_INCREMENTAL: 0
 
       - name: Check pitch-core wasm feature
-        run: cargo check -p pitch-core --target wasm32-unknown-unknown --features wasm
+        run: cargo check --locked -p pitch-core --target wasm32-unknown-unknown --features wasm
         env:
           CARGO_INCREMENTAL: 0

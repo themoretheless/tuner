@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
+import { useL10n } from '../stores/l10n'
+import { canvasPalette } from './canvasTheme'
 
 const props = defineProps<{
   history: number[]
   isListening: boolean
 }>()
+const { t } = useL10n()
 
 const { canvas } = useCanvasRenderer({
   cssHeight: 60,
@@ -19,7 +22,8 @@ void canvas
 function draw(frame: CanvasFrame) {
   const { ctx, w, h } = frame
 
-  ctx.fillStyle = '#11151b'
+  const palette = canvasPalette(frame)
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, w, h)
 
   if (!props.isListening) return
@@ -28,7 +32,7 @@ function draw(frame: CanvasFrame) {
   if (history.length < 2) return
 
   // Draw center line (0 cents)
-  ctx.strokeStyle = '#475569'
+  ctx.strokeStyle = palette.grid
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(0, h / 2)
@@ -36,7 +40,7 @@ function draw(frame: CanvasFrame) {
   ctx.stroke()
 
   // Draw history line
-  ctx.strokeStyle = '#22c55e'
+  ctx.strokeStyle = palette.accent
   ctx.lineWidth = 2
   ctx.beginPath()
 
@@ -55,7 +59,7 @@ function draw(frame: CanvasFrame) {
   ctx.stroke()
 
   // Draw bounds
-  ctx.strokeStyle = '#ef4444'
+  ctx.strokeStyle = palette.danger
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(0, h / 2 - (50/50)*(h/2))
@@ -71,6 +75,8 @@ function draw(frame: CanvasFrame) {
     <canvas
       ref="canvas"
       class="rounded-lg bg-[#11151b] border border-slate-800 block w-full"
+      role="img"
+      :aria-label="t('visual.history.label')"
       :class="{ 'opacity-40': !isListening }"
     />
   </div>

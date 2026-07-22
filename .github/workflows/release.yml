@@ -14,108 +14,164 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
-  group: pages
+  group: pages-production
   cancel-in-progress: false
 
 jobs:
-  build-web:
-    uses: ./.github/workflows/build-web.yml
+  test-core:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test-core.yml
 
-  build-tauri:
-    needs: build-web
-    uses: ./.github/workflows/build-tauri.yml
-
-  build-egui:
-    needs: build-web
-    uses: ./.github/workflows/build-egui.yml
-
-  pages-deploy:
-    needs: build-web
+  metadata:
+    needs: test-core
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-  release:
-    needs: [build-web, build-tauri, build-egui]
-    if: always()  # run even if some desktop builds fail
-
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Get version
+      - name: Resolve release version
         id: version
+        env:
+          PRERELEASE: ${{ inputs.prerelease || 'false' }}
+        shell: bash
         run: |
           VERSION=$(node -p 'require("./version.json").version')
-          IS_PRE=${{ inputs.prerelease || 'false' }}
-          if [ "$IS_PRE" = "true" ]; then
-            TAG="v${VERSION}-rc.$(date +%Y%m%d%H%M%S)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version.json must contain a stable semantic version."
+            exit 1
+          fi
+
+          if [ "$PRERELEASE" = "true" ]; then
+            TAG="v${VERSION}-rc.${GITHUB_RUN_NUMBER}"
           else
             TAG="v${VERSION}"
           fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "is_pre=$IS_PRE" >> $GITHUB_OUTPUT
 
-          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Version v${VERSION} already released, skipping"
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            TAG_COMMIT=$(git rev-parse "${TAG}^{commit}")
+            if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+              echo "::error::$TAG already points to $TAG_COMMIT, not $GITHUB_SHA. Bump version.json before releasing this commit."
+              exit 1
+            fi
+            echo "$TAG already targets this commit; the release/assets will be reconciled idempotently."
           fi
 
-      - name: Download web artifact
-        if: steps.version.outputs.skip != 'true'
+  build-web:
+    needs: test-core
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-web.yml
+
+  build-tauri:
+    needs: test-core
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-tauri.yml
+
+  build-egui:
+    needs: test-core
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-egui.yml
+
+  verify-release:
+    needs: [metadata, build-web, build-tauri, build-egui]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download web archive
         uses: actions/download-artifact@v8
         with:
           name: github-pages
           path: _site
 
-      - name: Package web for release
-        if: steps.version.outputs.skip != 'true'
-        run: tar -cf artifact.tar -C _site .
-
-      - name: Download Tauri artifacts
-        if: steps.version.outputs.skip != 'true' && needs.build-tauri.result == 'success'
+      - name: Download Tauri packages
         uses: actions/download-artifact@v8
         with:
-          path: tauri-artifacts
+          pattern: tauri-*
+          path: release-assets
           merge-multiple: true
 
-      - name: Download egui artifacts
-        if: steps.version.outputs.skip != 'true' && needs.build-egui.result == 'success'
+      - name: Download egui binaries
         uses: actions/download-artifact@v8
         with:
-          path: egui-artifacts
+          pattern: egui-*
+          path: release-assets
           merge-multiple: true
 
-      - name: Create tag
-        if: steps.version.outputs.skip != 'true'
+      - name: Verify complete release payload
+        env:
+          TAG: ${{ needs.metadata.outputs.tag }}
+        shell: bash
         run: |
-          git tag ${{ steps.version.outputs.tag }}
-          git push origin ${{ steps.version.outputs.tag }}
+          mv _site/artifact.tar "release-assets/guitar-tuner-web-${TAG}.tar"
+          test -s "release-assets/guitar-tuner-web-${TAG}.tar"
+          ASSET_COUNT=$(find release-assets -type f | wc -l | tr -d ' ')
+          if [ "$ASSET_COUNT" -lt 10 ]; then
+            echo "::error::Expected at least 10 release assets, found $ASSET_COUNT."
+            find release-assets -type f -print
+            exit 1
+          fi
+          find release-assets -type f -print
 
-      - name: Create GitHub Release
-        if: steps.version.outputs.skip != 'true'
+      - name: Upload verified release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-payload
+          path: release-assets/
+          if-no-files-found: error
+          retention-days: 7
+
+  pages-deploy:
+    needs: [metadata, build-web, build-tauri, build-egui, verify-release]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy production Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
+  release:
+    needs: [metadata, verify-release, pages-deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release payload
+        uses: actions/download-artifact@v8
+        with:
+          name: release-payload
+          path: release-assets
+
+      # softprops creates the tag only after every build, test and payload check
+      # above succeeds; there is no separately pushed, orphanable tag step.
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Release ${{ steps.version.outputs.tag }}
-          prerelease: ${{ steps.version.outputs.is_pre == 'true' }}
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Release ${{ needs.metadata.outputs.tag }}
+          prerelease: ${{ needs.metadata.outputs.is_prerelease == 'true' }}
           generate_release_notes: true
-          files: |
-            artifact.tar
-            tauri-artifacts/**/*
-            egui-artifacts/**/*
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          files: release-assets/**/*

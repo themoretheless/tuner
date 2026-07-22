@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { useTuner } from './composables/useTuner'
 import { useL10n } from './stores/l10n'
 import MicButton from './components/MicButton.vue'
@@ -34,10 +34,52 @@ const appClasses = computed(() => [
   `layout-${tuner.layoutMode}`,
   { 'layout-left-handed': tuner.leftHanded },
 ])
+const appErrorKind = computed<'session' | 'load' | 'save' | null>(() => {
+  if (tuner.error) return 'session'
+  if (tuner.settingsLoadError) return 'load'
+  if (tuner.settingsSaveError) return 'save'
+  return null
+})
+const appError = computed(() => (
+  tuner.error || tuner.settingsLoadError || tuner.settingsSaveError
+))
+const sessionStatus = computed(() => {
+  if (!tuner.settingsLoaded) return t('loading.settings')
+  if (appError.value) return t('failed')
+  if (tuner.isStarting) return t('requesting')
+  return tuner.isListening ? t('listening') : t('ready')
+})
 
 function toggleMic() {
+  if (tuner.isStarting || !tuner.settingsLoaded) return
+  if (tuner.isListening) {
+    tuner.stop()
+    return
+  }
+  if (tuner.referencePlaying) tuner.toggleReferenceTone()
+  if (tuner.metronomeRunning) tuner.toggleMetronome()
+  void tuner.start()
+}
+
+function toggleReference() {
+  if (tuner.isStarting) return
   if (tuner.isListening) tuner.stop()
-  else tuner.start()
+  if (tuner.metronomeRunning) tuner.toggleMetronome()
+  tuner.toggleReferenceTone()
+}
+
+function playEarTraining() {
+  if (tuner.isListening) tuner.stop()
+  if (tuner.metronomeRunning) tuner.toggleMetronome()
+  tuner.playEarTraining()
+}
+
+function toggleMetronome() {
+  if (!tuner.metronomeRunning) {
+    if (tuner.isListening) tuner.stop()
+    if (tuner.referencePlaying) tuner.toggleReferenceTone()
+  }
+  tuner.toggleMetronome()
 }
 
 function handleKey(e: KeyboardEvent) {
@@ -49,7 +91,7 @@ function handleKey(e: KeyboardEvent) {
     toggleMic()
   }
   if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'p') {
-    tuner.toggleReferenceTone()
+    toggleReference()
   }
   // 1-9 for strings
   const num = Number.parseInt(e.key, 10)
@@ -62,21 +104,28 @@ onMounted(() => {
   window.addEventListener('keydown', handleKey)
 })
 
+watch(() => tuner.themeMode, (theme) => {
+  if (typeof document === 'undefined') return
+  const color = theme === 'light' ? '#f6f7f9' : '#0a0c10'
+  document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark'
+  document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute('content', color)
+}, { immediate: true })
+
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKey)
 })
 </script>
 
 <template>
-  <div class="app-root min-h-screen flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200" :class="appClasses">
+  <div class="app-root min-h-[100svh] flex flex-col items-center px-4 py-8 bg-[#0a0c10] text-slate-200" :class="appClasses">
     <!-- Header -->
-    <div class="app-width w-full flex items-center justify-between mb-6">
-      <div>
+    <div class="app-header app-width w-full flex items-center justify-between mb-6">
+      <div class="app-header-title">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-[#052e16]">
             <span class="text-2xl">♪</span>
           </div>
-          <div>
+          <div class="min-w-0">
             <h1 class="text-3xl font-semibold">{{ t('app.title') }}</h1>
             <p class="text-xs text-slate-500 -mt-0.5">{{ t('subtitle') }}</p>
           </div>
@@ -84,12 +133,12 @@ onUnmounted(() => {
       </div>
 
       <div class="flex items-center gap-2 text-xs">
-        <button class="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-400" @click="toggleLang" title="RU / EN">
+        <button class="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-400" @click="toggleLang" title="RU / EN" :aria-label="'RU / EN'">
           {{ lang === 'ru' ? 'RU' : 'EN' }}
         </button>
         <div data-testid="session-status" class="px-2.5 py-1 rounded-full bg-[#11151b] border border-slate-800 text-slate-400 flex items-center gap-1.5">
-          <div class="w-1.5 h-1.5 rounded-full" :class="tuner.isListening ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'"></div>
-          <span>{{ tuner.isListening ? t('listening') : t('ready') }}</span>
+          <div class="w-1.5 h-1.5 rounded-full" :class="appError ? 'bg-red-400' : tuner.isStarting ? 'bg-amber-400 animate-pulse' : tuner.isListening ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'"></div>
+          <span>{{ sessionStatus }}</span>
         </div>
         <div class="text-[10px] px-2 py-1 rounded bg-slate-800/60 text-slate-500 hidden sm:block">Vue + Tauri</div>
       </div>
@@ -98,23 +147,66 @@ onUnmounted(() => {
     <div class="app-width w-full space-y-6">
       <!-- Main Card -->
       <div class="main-card card p-8 flex flex-col items-center gap-6">
-        <MicButton :is-listening="tuner.isListening" @toggle="toggleMic" />
+        <MicButton :is-listening="tuner.isListening" :is-starting="tuner.isStarting" :is-ready="tuner.settingsLoaded" @toggle="toggleMic" />
 
         <LevelMeter :level="tuner.volume" :active="tuner.isListening" />
 
+        <div v-if="appError" role="alert" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-lg border border-red-900">
+          {{ appError }}
+          <button v-if="appErrorKind === 'load'" @click="tuner.retrySettingsLoad()" class="ml-2 underline">{{ t('settings.retry') }}</button>
+          <button v-else-if="appErrorKind === 'save'" @click="tuner.retrySettingsSave()" class="ml-2 underline">{{ t('settings.retry') }}</button>
+          <button v-else @click="tuner.clearError()" class="ml-2 underline">{{ t('dismiss') }}</button>
+        </div>
+
+        <NoteDisplay
+          :confidence="tuner.detectionFrame.confidence"
+          :display="tuner.currentNoteDisplay"
+          :is-power-chord="tuner.detectionFrame.isPower"
+          :is-detected="!!tuner.detectedNote"
+          :target-name="tuner.getNoteDisplay(tuner.targetNote)"
+          :target-freq="tuner.targetNote.frequency"
+          :format-freq="tuner.formatFreq"
+        />
+
+        <CentsGauge
+          :cents="tuner.cents"
+          :mode="tuner.displayMode"
+          :is-in-tune="tuner.isInTune"
+          :is-detected="!!tuner.detectedNote"
+        />
+
+        <DisplayModeSelector
+          :mode="tuner.displayMode"
+          @change="tuner.setDisplayMode"
+        />
+
+        <CentsHistoryGraph :points="tuner.centsHistory" />
+
+        <FreqReadout
+          :detected="tuner.smoothedFrequency"
+          :target="tuner.targetNote.frequency"
+          :format-freq="tuner.formatFreq"
+        />
+
+        <details class="w-full border-t border-slate-800 pt-4">
+          <summary class="cursor-pointer select-none text-sm text-slate-300 hover:text-slate-100">
+            {{ t('diagnostics') }}
+          </summary>
+          <div class="mt-4 flex w-full flex-col items-center gap-4">
+
         <Waveform
-          v-if="tuner.showWaveform && !tuner.usingNativeAudio"
+          v-if="tuner.isListening && tuner.showWaveform && !tuner.usingNativeAudio"
           :frame="tuner.waveformFrame"
           :is-listening="tuner.isListening"
         />
         <Spectrum
-          v-if="tuner.showSpectrum && !tuner.usingNativeAudio"
+          v-if="tuner.isListening && tuner.showSpectrum && !tuner.usingNativeAudio"
           :frame="tuner.spectrumFrame"
           :is-listening="tuner.isListening"
           :current-freq="tuner.smoothedFrequency"
         />
         <Spectrogram
-          v-if="tuner.showSpectrogram && !tuner.usingNativeAudio"
+          v-if="tuner.isListening && tuner.showSpectrogram && !tuner.usingNativeAudio"
           :frame="tuner.spectrumFrame"
           :is-listening="tuner.isListening"
         />
@@ -165,34 +257,8 @@ onUnmounted(() => {
             @select="tuner.setInputDevice"
           />
         </div>
-
-        <!-- Error -->
-        <div v-if="tuner.error" class="text-red-400 text-sm bg-red-950/40 px-4 py-2 rounded-lg border border-red-900">
-          {{ tuner.error }}
-          <button @click="tuner.clearError()" class="ml-2 underline">{{ t('dismiss') }}</button>
-        </div>
-
-        <NoteDisplay
-          :confidence="tuner.detectionFrame.confidence"
-          :display="tuner.currentNoteDisplay"
-          :is-power-chord="tuner.detectionFrame.isPower"
-          :is-detected="!!tuner.detectedNote"
-          :target-name="tuner.getNoteDisplay(tuner.targetNote)"
-          :target-freq="tuner.targetNote.frequency"
-          :format-freq="tuner.formatFreq"
-        />
-
-        <CentsGauge
-          :cents="tuner.cents"
-          :mode="tuner.displayMode"
-          :is-in-tune="tuner.isInTune"
-          :is-detected="!!tuner.detectedNote"
-        />
-
-        <DisplayModeSelector
-          :mode="tuner.displayMode"
-          @change="tuner.setDisplayMode"
-        />
+          </div>
+        </details>
 
         <DisplayPreferences
           :layout-mode="tuner.layoutMode"
@@ -204,13 +270,6 @@ onUnmounted(() => {
           @theme-change="tuner.setThemeMode"
         />
 
-        <CentsHistoryGraph :points="tuner.centsHistory" />
-
-        <FreqReadout
-          :detected="tuner.smoothedFrequency"
-          :target="tuner.targetNote.frequency"
-          :format-freq="tuner.formatFreq"
-        />
       </div>
 
       <div class="card p-6 space-y-4">
@@ -288,15 +347,18 @@ onUnmounted(() => {
 
       <TunerControls
         :is-listening="tuner.isListening"
+        :is-starting="tuner.isStarting"
         :reference-playing="tuner.referencePlaying"
-        :can-play-ref="true"
+        :can-play-ref="!tuner.isStarting"
+        :show-mic="false"
         @toggle-mic="toggleMic"
-        @toggle-ref="tuner.toggleReferenceTone"
+        @toggle-ref="toggleReference"
       />
 
       <EarTrainingPanel
         :accuracy="tuner.earTrainingAccuracy"
         :attempts="tuner.earTrainingAttempts"
+        :can-mark="tuner.earTrainingCanMark"
         :correct="tuner.earTrainingCorrect"
         :get-note-display="tuner.getNoteDisplay"
         :revealed="tuner.earTrainingRevealed"
@@ -304,7 +366,7 @@ onUnmounted(() => {
         :target="tuner.earTrainingTarget"
         @mark="tuner.markEarTraining"
         @next="tuner.nextEarTraining"
-        @play="tuner.playEarTraining"
+        @play="playEarTraining"
         @reset="tuner.resetEarTraining"
         @reveal="tuner.revealEarTraining"
       />
@@ -327,7 +389,7 @@ onUnmounted(() => {
         @bpm-change="tuner.setMetronomeBpm"
         @subdivision-change="tuner.setMetronomeSubdivision"
         @tap="tuner.tapMetronome"
-        @toggle="tuner.toggleMetronome"
+        @toggle="toggleMetronome"
       />
 
       <div class="text-center text-[11px] text-slate-500 max-w-sm mx-auto">

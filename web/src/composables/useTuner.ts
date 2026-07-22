@@ -56,17 +56,48 @@ export function useTuner() {
   }, { immediate: true });
 
   async function start() {
+    referenceTone.stopAllTones();
+    metronome.stop();
     centsHistory.clear();
     await session.start(tuning.detectionRange.value);
   }
 
   function stop() {
     session.stop();
-    referenceTone.stopReferenceTone();
+    referenceTone.stopAllTones();
+    metronome.stop();
   }
 
   function playRandomString() {
+    session.stop();
+    metronome.stop();
     earTraining.nextChallenge();
+  }
+
+  function playEarTraining() {
+    session.stop();
+    metronome.stop();
+    earTraining.playTarget();
+  }
+
+  function nextEarTraining() {
+    playRandomString();
+  }
+
+  function toggleReferenceTone() {
+    if (!referenceTone.referencePlaying.value) {
+      session.stop();
+      metronome.stop();
+    }
+    referenceTone.toggleReferenceTone();
+  }
+
+  function toggleMetronome() {
+    if (!metronome.isRunning.value) {
+      session.stop();
+      referenceTone.stopAllTones();
+    }
+    metronome.toggle();
   }
 
   function setDisplayMode(mode: DisplayMode) {
@@ -89,7 +120,7 @@ export function useTuner() {
 
   function setAudioBackend(backend: AudioBackend) {
     if (backend !== 'web' && backend !== 'native') return;
-    const shouldRestart = session.isListening.value;
+    const shouldRestart = session.isListening.value || session.isStarting.value;
     if (shouldRestart) stop();
     settings.audioBackend.value = backend;
     if (shouldRestart) void start();
@@ -109,7 +140,7 @@ export function useTuner() {
   }
 
   function markEarTraining(isCorrect: boolean) {
-    earTraining.mark(isCorrect);
+    if (!earTraining.mark(isCorrect)) return false;
     const target = earTraining.target.value;
     const nextEntry: PracticeHistoryEntry = {
       at: Date.now(),
@@ -120,6 +151,7 @@ export function useTuner() {
       ...settings.practiceHistory.value.slice(-499),
       nextEntry,
     ];
+    return true;
   }
 
   function clearPracticeHistory() {
@@ -136,11 +168,16 @@ export function useTuner() {
   return {
     // state
     isListening: session.isListening,
+    isStarting: session.isStarting,
     currentFrequency: session.currentFrequency,
     detectionFrame,
     smoothedFrequency: computed(() => detectionFrame.value.freq),
     volume: computed(() => detectionFrame.value.level),
     error: session.error,
+    settingsLoaded: settings.loaded,
+    settingsLoading: settings.isLoading,
+    settingsLoadError: settings.loadError,
+    settingsSaveError: settings.saveError,
     audioBackend: settings.audioBackend,
     inputDevices: session.inputDevices,
     selectedString: tuning.selectedString,
@@ -165,7 +202,9 @@ export function useTuner() {
     themeMode: settings.themeMode,
     centsHistory: centsHistory.history,
     earTrainingAccuracy: earTraining.accuracy,
+    earTrainingAnswered: earTraining.answered,
     earTrainingAttempts: earTraining.attempts,
+    earTrainingCanMark: earTraining.canMark,
     earTrainingCorrect: earTraining.correct,
     earTrainingRevealed: earTraining.revealed,
     earTrainingStreak: earTraining.streak,
@@ -205,8 +244,10 @@ export function useTuner() {
     start,
     stop,
     toggleString: tuning.toggleString,
-    toggleReferenceTone: referenceTone.toggleReferenceTone,
+    toggleReferenceTone,
     clearError,
+    retrySettingsLoad: settings.retryLoad,
+    retrySettingsSave: settings.save,
     clearCentsHistory: centsHistory.clear,
     refreshInputDevices: session.refreshInputDevices,
     setA4: tuning.setA4,
@@ -236,16 +277,17 @@ export function useTuner() {
     deleteCustomTuning: tuning.deleteCustomTuning,
     deleteInstrumentProfile: tuning.deleteInstrumentProfile,
     exportCustomTunings: tuning.exportCustomTunings,
+    exportCustomTuningDocument: tuning.exportCustomTuningDocument,
     exportPracticeStats,
     importCustomTunings: tuning.importCustomTunings,
     clearPracticeHistory,
     markEarTraining,
-    nextEarTraining: earTraining.nextChallenge,
-    playEarTraining: earTraining.playTarget,
+    nextEarTraining,
+    playEarTraining,
     resetEarTraining: earTraining.reset,
     revealEarTraining: earTraining.reveal,
     tapMetronome: metronome.tapTempo,
-    toggleMetronome: metronome.toggle,
+    toggleMetronome,
 
     // data / helpers
     allTunings: tuning.allTunings,

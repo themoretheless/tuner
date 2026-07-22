@@ -45,12 +45,7 @@ mod tests {
         let res = detect_pitch_native(&buf, sr);
         assert!(res.is_some());
         let (f, c) = res.unwrap();
-        // Note: may detect octave, accept close or half for sine test
-        assert!(
-            (f - 440.0).abs() < 10.0 || (f - 220.0).abs() < 10.0,
-            "freq was {}",
-            f
-        );
+        assert!((f - 440.0).abs() < 2.0, "freq was {}", f);
         assert!(c > 0.3);
     }
 
@@ -61,7 +56,12 @@ mod tests {
         let buf = sine_buffer(440.0, sr, n);
         let _ = detect_pitch_native(&buf, sr); // exercises the YIN path
                                                // For MPM direct
-        if let Some((f, _)) = crate::dsp::detect_pitch_mpm_internal(&buf, sr) {
+        if let Some((f, _)) = crate::dsp::detect_pitch_mpm_in_range_internal(
+            &buf,
+            sr,
+            DEFAULT_MIN_FREQUENCY,
+            DEFAULT_MAX_FREQUENCY,
+        ) {
             assert!((f - 440.0).abs() < 2.0);
         }
     }
@@ -187,5 +187,56 @@ mod tests {
         assert!(res.is_some());
         let (f, _) = res.unwrap();
         assert!((f - 110.0).abs() < 2.0, "got {} Hz", f);
+    }
+
+    #[test]
+    fn test_detects_notes_above_legacy_400hz_limit() {
+        let sr = 48000.0;
+        let n = 4096;
+        for &expected in &[440.0_f32, 659.255, 880.0, 1000.0] {
+            let buf = sine_buffer(expected, sr, n);
+            let (frequency, confidence) = detect_pitch_native(&buf, sr)
+                .unwrap_or_else(|| panic!("no detection for {expected} Hz"));
+            assert!(
+                (frequency - expected).abs() < 3.0,
+                "expected {expected} Hz, got {frequency} Hz"
+            );
+            assert!(confidence > 0.5);
+        }
+    }
+
+    #[test]
+    fn test_configurable_pitch_range_is_respected() {
+        let sr = 48000.0;
+        let buf = sine_buffer(659.255, sr, 4096);
+        assert!(detect_pitch_in_range(&buf, sr, 600.0, 800.0).is_some());
+        assert!(detect_pitch_in_range(&buf, sr, 700.0, 800.0).is_none());
+    }
+
+    #[test]
+    fn test_detection_rejects_short_or_invalid_input() {
+        assert!(detect_pitch_native(&[], 48000.0).is_none());
+        assert!(detect_pitch_native(&[0.0; 64], 48000.0).is_none());
+        assert!(detect_pitch_native(&[0.0; 256], 0.0).is_none());
+        let mut invalid = vec![0.0; 256];
+        invalid[10] = f32::NAN;
+        assert!(detect_pitch_native(&invalid, 48000.0).is_none());
+    }
+
+    #[test]
+    fn test_signal_helpers_are_bounded_and_safe() {
+        assert_eq!(compute_rms_volume(&[]), 0.0);
+        assert_eq!(compute_rms_volume(&[f32::NAN]), 0.0);
+        assert_eq!(normalize_level(-1.0), 0.0);
+        assert_eq!(normalize_level(f32::NAN), 0.0);
+        assert_eq!(normalize_level(1.0), 1.0);
+        assert_eq!(normalize_level(0.2), 1.0);
+    }
+
+    #[test]
+    fn test_downsampling_filters_before_decimation() {
+        let alternating = [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0];
+        assert_eq!(downsample_for_pitch(&alternating, 2), vec![0.0; 4]);
+        assert_eq!(downsample_for_pitch(&[0.5; 8], 4), vec![0.5; 2]);
     }
 }

@@ -18,7 +18,7 @@ const emit = defineEmits<{
   (e: 'clear'): void
 }>()
 
-const { t } = useL10n()
+const { plural, t } = useL10n()
 
 function downloadStats(exportStats: () => string) {
   const blob = new Blob([exportStats()], { type: 'application/json' })
@@ -32,6 +32,10 @@ function downloadStats(exportStats: () => string) {
   link.remove()
   URL.revokeObjectURL(url)
 }
+
+function clearHistory() {
+  if (window.confirm(t('confirm.clear.practice'))) emit('clear')
+}
 </script>
 
 <template>
@@ -39,7 +43,7 @@ function downloadStats(exportStats: () => string) {
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <div class="text-sm font-medium text-slate-200">{{ t('practice.title') }}</div>
-        <div class="text-xs text-slate-500">{{ t('practice.history') }} {{ history.length }}</div>
+        <div class="text-xs text-slate-500">{{ history.length }} {{ plural('practice.entry', history.length) }}</div>
       </div>
       <div class="rounded-lg border border-slate-800 bg-[#0f1319] px-4 py-2 text-center">
         <div class="font-mono text-2xl text-emerald-300">{{ summary.dailyStreak }}</div>
@@ -70,7 +74,7 @@ function downloadStats(exportStats: () => string) {
       <button type="button" class="btn btn-ghost flex-1" :disabled="!history.length" @click="downloadStats(exportStats)">
         {{ t('practice.export') }}
       </button>
-      <button type="button" class="btn btn-ghost flex-1 text-red-300 border-red-900/60" :disabled="!history.length" @click="emit('clear')">
+      <button type="button" class="btn btn-ghost flex-1 text-red-300 border-red-900/60" :disabled="!history.length" @click="clearHistory">
         {{ t('practice.clear') }}
       </button>
     </div>

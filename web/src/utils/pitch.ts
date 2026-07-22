@@ -21,11 +21,23 @@ export interface SignalStats {
   maxAbs: number;
 }
 
+export interface PitchDetectionResult {
+  frequency: number;
+  confidence: number;
+}
+
 export function computeSignalStats(buffer: Float32Array): SignalStats {
+  if (buffer.length === 0) {
+    return { rms: 0, maxAbs: 0 };
+  }
+
   let sumSq = 0;
   let maxAbs = 0;
   for (let i = 0; i < buffer.length; i++) {
     const v = buffer[i];
+    if (!Number.isFinite(v)) {
+      return { rms: 0, maxAbs: 0 };
+    }
     sumSq += v * v;
     const a = Math.abs(v);
     if (a > maxAbs) maxAbs = a;
@@ -66,13 +78,14 @@ export function normalizePitchDetectionRange(range: Partial<PitchDetectionRange>
  * YIN pitch detection (De Cheveigné & Kawahara 2002)
  * Significantly more robust on real guitar signals than basic autocorrelation.
  */
-export function detectPitchYIN(
+export function detectPitchYINResult(
   buffer: Float32Array,
   sampleRate: number,
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
-): number | null {
+): PitchDetectionResult | null {
   const size = buffer.length;
+  if (!isValidPitchInput(buffer, sampleRate, stats)) return null;
   const half = Math.floor(size / 2);
   const detectionRange = normalizePitchDetectionRange(range);
 
@@ -86,8 +99,10 @@ export function detectPitchYIN(
 
   const { yin, diff } = ensureYinBuffers(size);
 
-  // 1. Difference function (limited range)
-  for (let tau = minTau; tau < maxTau; tau++) {
+  // Canonical YIN requires every lag from 1 to be included in the cumulative
+  // mean. Starting at minTau makes the first in-range values artificially
+  // large and biases the selected period.
+  for (let tau = 1; tau < maxTau; tau++) {
     let sum = 0;
     for (let i = 0; i < half; i++) {
       const delta = buffer[i] - buffer[i + tau];
@@ -96,12 +111,12 @@ export function detectPitchYIN(
     diff[tau] = sum;
   }
 
-  // 2. Cumulative mean normalized difference (limited)
+  // 2. Cumulative mean normalized difference (CMNDF)
   yin[0] = 1;
   let runningSum = 0;
-  for (let tau = minTau; tau < maxTau; tau++) {
+  for (let tau = 1; tau < maxTau; tau++) {
     runningSum += diff[tau];
-    yin[tau] = diff[tau] * (tau / runningSum);
+    yin[tau] = runningSum > 0 ? diff[tau] * (tau / runningSum) : 1;
   }
 
   // 3. Absolute threshold + find first dip below threshold (limited)
@@ -118,6 +133,7 @@ export function detectPitchYIN(
   }
 
   // Fallback: global minimum if no threshold crossed (limited)
+  let confidence = 0;
   if (tauEstimate === -1) {
     let minVal = Infinity;
     for (let tau = minTau; tau < maxTau; tau++) {
@@ -127,6 +143,9 @@ export function detectPitchYIN(
       }
     }
     if (minVal > 0.35) return null; // too uncertain
+    confidence = clamp01(1 - minVal);
+  } else {
+    confidence = clamp01(1 - yin[tauEstimate]);
   }
 
   if (tauEstimate < 2) return null;
@@ -140,14 +159,25 @@ export function detectPitchYIN(
     const denom = 2 * s1 - s0 - s2;
     if (Math.abs(denom) > 1e-9) {
       const delta = (s2 - s0) / (2 * denom);
-      betterTau = tauEstimate + delta;
+      if (Math.abs(delta) < 1) {
+        betterTau = tauEstimate + delta;
+      }
     }
   }
 
   const freq = sampleRate / betterTau;
 
   if (freq < detectionRange.minFrequency || freq > detectionRange.maxFrequency) return null;
-  return freq;
+  return { frequency: freq, confidence };
+}
+
+export function detectPitchYIN(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): number | null {
+  return detectPitchYINResult(buffer, sampleRate, stats, range)?.frequency ?? null;
 }
 
 // Legacy improved autocorrelation (kept for comparison / fallback)
@@ -166,7 +196,17 @@ export function autoCorrelate(
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
 ): number | null {
+  return autoCorrelateResult(buffer, sampleRate, stats, range)?.frequency ?? null;
+}
+
+function autoCorrelateResult(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): PitchDetectionResult | null {
   const SIZE = buffer.length;
+  if (!isValidPitchInput(buffer, sampleRate, stats)) return null;
   const detectionRange = normalizePitchDetectionRange(range);
   const minLag = Math.max(1, Math.floor(sampleRate / detectionRange.maxFrequency));
   const maxLag = Math.min(Math.floor(sampleRate / detectionRange.minFrequency), Math.floor(SIZE / 2));
@@ -207,7 +247,11 @@ export function autoCorrelate(
   }
 
   const freq = sampleRate / period;
-  return (freq >= detectionRange.minFrequency && freq <= detectionRange.maxFrequency) ? freq : null;
+  if (freq < detectionRange.minFrequency || freq > detectionRange.maxFrequency) return null;
+
+  const zeroLag = corr[0];
+  const confidence = zeroLag > 0 ? clamp01(bestVal / zeroLag) : 0;
+  return { frequency: freq, confidence };
 }
 
 /** Main detector - prefers YIN */
@@ -217,24 +261,64 @@ export function detectPitch(
   stats = computeSignalStats(buffer),
   range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
 ): number | null {
+  return detectPitchWithConfidence(buffer, sampleRate, stats, range)?.frequency ?? null;
+}
+
+export function detectPitchWithConfidence(
+  buffer: Float32Array,
+  sampleRate: number,
+  stats = computeSignalStats(buffer),
+  range: Partial<PitchDetectionRange> | null | undefined = DEFAULT_PITCH_DETECTION_RANGE,
+): PitchDetectionResult | null {
+  if (!isValidPitchInput(buffer, sampleRate, stats)) return null;
   if (stats.rms < 0.002 || stats.maxAbs < 0.01) return null;
 
   // Try YIN first
-  const yinResult = detectPitchYIN(buffer, sampleRate, stats, range);
+  const yinResult = detectPitchYINResult(buffer, sampleRate, stats, range);
   if (yinResult != null) return yinResult;
 
   // Fallback to autocorrelation
-  return autoCorrelate(buffer, sampleRate, stats, range);
+  return autoCorrelateResult(buffer, sampleRate, stats, range);
 }
 
 export class FrequencySmoother {
   private history: number[] = [];
   private ema: number | null = null;
+  private pendingJump: number | null = null;
+  private pendingJumpCount = 0;
   private readonly maxHistory = 5;
   private readonly alpha = 0.4;
+  private readonly largeJumpCents = 150;
+  private readonly jumpAgreementCents = 50;
 
   add(freq: number | null): number | null {
-    if (freq == null || !isFinite(freq)) return this.ema;
+    if (freq == null || !Number.isFinite(freq) || freq <= 0) return this.ema;
+
+    if (this.ema != null && centsBetween(freq, this.ema) > this.largeJumpCents) {
+      if (
+        this.pendingJump != null &&
+        centsBetween(freq, this.pendingJump) <= this.jumpAgreementCents
+      ) {
+        this.pendingJumpCount += 1;
+      } else {
+        this.pendingJump = freq;
+        this.pendingJumpCount = 1;
+      }
+
+      // Ignore a single outlier, but switch promptly when two consecutive
+      // frames agree on a genuinely different note.
+      if (this.pendingJumpCount < 2) return this.currentMedian();
+
+      this.history.length = 0;
+      this.ema = freq;
+      this.pendingJump = null;
+      this.pendingJumpCount = 0;
+      this.history.push(freq);
+      return freq;
+    }
+
+    this.pendingJump = null;
+    this.pendingJumpCount = 0;
 
     this.ema = this.ema == null
       ? freq
@@ -244,19 +328,52 @@ export class FrequencySmoother {
     if (this.history.length > this.maxHistory) this.history.shift();
 
     // Median filter
-    const sorted = this.history.slice().sort((a, b) => a - b);
-    const mid = sorted.length >> 1;
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) * 0.5;
+    return this.currentMedian();
   }
 
   reset() {
     this.history.length = 0;
     this.ema = null;
+    this.pendingJump = null;
+    this.pendingJumpCount = 0;
   }
+
+  private currentMedian(): number | null {
+    if (!this.history.length) return this.ema;
+    const sorted = this.history.slice().sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) * 0.5;
+  }
+}
+
+function centsBetween(a: number, b: number) {
+  return Math.abs(1200 * Math.log2(a / b));
+}
+
+function isValidPitchInput(buffer: Float32Array, sampleRate: number, stats: SignalStats) {
+  if (
+    buffer.length < 64 ||
+    !Number.isFinite(sampleRate) ||
+    sampleRate <= 0 ||
+    !Number.isFinite(stats.rms) ||
+    !Number.isFinite(stats.maxAbs) ||
+    stats.rms < 0 ||
+    stats.maxAbs < 0
+  ) {
+    return false;
+  }
+  for (let index = 0; index < buffer.length; index += 1) {
+    if (!Number.isFinite(buffer[index])) return false;
+  }
+  return true;
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 // Convenience normalized 0..1 level (with soft knee)
 export function normalizeLevel(rms: number): number {
   // Typical mic guitar signal after gate is ~0.01-0.2 rms
-  return Math.min(1, rms * 18);
+  return Number.isFinite(rms) && rms > 0 ? Math.min(1, rms * 18) : 0;
 }

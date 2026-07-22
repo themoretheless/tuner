@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Guitar Tuner",
-  "version": "0.1.0",
+  "version": "0.1.13",
   "identifier": "com.tuner.guitar",
   "build": {
-    "beforeDevCommand": "cd ../web && npm run dev",
-    "beforeBuildCommand": "",
+    "beforeDevCommand": "npm --prefix ../web run dev",
+    "beforeBuildCommand": "npm --prefix ../web run build:tauri",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../../web/dist"
   },
@@ -25,7 +25,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:5173 http://127.0.0.1:5173 ws://localhost:5173 ws://127.0.0.1:5173; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob:"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob:",
+      "devCsp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:5173 ws://127.0.0.1:5173; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob:"
     }
   },
   "bundle": {
@@ -50,7 +51,7 @@
         "language": ["en-US", "ru-RU"]
       },
       "nsis": {
-        "installMode": "perMachine",
+        "installMode": "currentUser",
         "languages": ["English", "Russian"]
       }
     },

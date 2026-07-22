@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   BUILT_IN_TUNINGS,
@@ -54,6 +54,7 @@ function loadRustSnapshot() {
     const output = execFileSync('cargo', [
       'run',
       '--quiet',
+      '--locked',
       '-p',
       'pitch-core',
       '--example',
@@ -61,6 +62,7 @@ function loadRustSnapshot() {
     ], {
       cwd: repoRoot(),
       encoding: 'utf8',
+      timeout: 120_000,
     });
     rustSnapshot = JSON.parse(output) as RustDomainSnapshot;
   }
@@ -72,6 +74,10 @@ function expectClose(actual: number, expected: number, tolerance: number, label:
 }
 
 describe('Rust/Web music-domain parity', () => {
+  beforeAll(() => {
+    loadRustSnapshot();
+  }, 120_000);
+
   it('keeps built-in tuning registries in lockstep', () => {
     const snapshot = loadRustSnapshot();
     const rustNames = snapshot.tunings.map((tuning) => tuning.name);

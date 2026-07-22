@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 function initialLang(): 'ru' | 'en' {
   try { return localStorage.getItem('lang') === 'en' ? 'en' : 'ru' } catch { return 'ru' }
@@ -6,12 +6,19 @@ function initialLang(): 'ru' | 'en' {
 
 const lang = ref<'ru' | 'en'>(initialLang())
 
+watch(lang, (value) => {
+  if (typeof document !== 'undefined') document.documentElement.lang = value
+}, { immediate: true })
+
 const ru: Record<string, string> = {
   'app.title': 'Гитарный Тюнер',
-  subtitle: 'работает оффлайн • браузер + десктоп',
+  subtitle: 'браузер + десктоп',
   listening: 'СЛУШАЕТ',
   ready: 'ГОТОВ',
   requesting: 'ЗАПРОС МИКРОФОНА...',
+  'loading.settings': 'ЗАГРУЗКА НАСТРОЕК...',
+  'settings.retry': 'повторить',
+  failed: 'ОШИБКА',
   dismiss: 'закрыть',
   refresh: 'обновить',
   start: 'старт',
@@ -20,15 +27,15 @@ const ru: Record<string, string> = {
   beats: 'Доли',
   subdivision: 'Дробь',
   metronome: 'Метроном',
-  sweetening: 'Sweetening / offsets',
+  sweetening: 'Коррекция строя по струнам',
   profile: 'Профиль',
   'input.device': 'Вход',
   'input.default': 'По умолчанию',
   'input.level': 'УРОВЕНЬ ВХОДА',
   'input.microphone': 'Микрофон',
   'audio.backend': 'Аудио',
-  'audio.backend.web': 'Web',
-  'audio.backend.native': 'Native',
+  'audio.backend.web': 'Браузерный',
+  'audio.backend.native': 'Нативный',
   detected: 'ОБНАРУЖЕНО',
   target: 'ЦЕЛЬ',
   'display.gauge': 'шкала',
@@ -50,6 +57,7 @@ const ru: Record<string, string> = {
   'toggle.microphone': 'Переключить микрофон',
   'tap.to.start': 'НАЖМИ, ЧТОБЫ СТАРТОВАТЬ',
   'tap.to.stop': 'НАЖМИ, ЧТОБЫ ОСТАНОВИТЬ',
+  'tap.to.request': 'РАЗРЕШИ ДОСТУП К МИКРОФОНУ',
   'random.note': 'СЛУЧАЙНАЯ НОТА (тренировка слуха)',
   'ear.title': 'Тренировка слуха',
   'ear.streak': 'серия',
@@ -64,17 +72,38 @@ const ru: Record<string, string> = {
   'appearance.layout': 'Режим',
   'appearance.dark': 'Темная',
   'appearance.light': 'Светлая',
-  'appearance.colorblind': 'Colorblind',
+  'appearance.colorblind': 'Для дальтонизма',
   'appearance.default': 'Обычный',
   'appearance.stage': 'Сцена',
   'appearance.compact': 'Компакт',
   'appearance.left': 'Леворукий порядок струн',
   'appearance.fullscreen': 'ВО ВЕСЬ ЭКРАН',
   instrument: 'Инструмент',
+  'instrument.guitar': 'Гитара',
+  'instrument.guitar-7': 'Семиструнная гитара',
+  'instrument.baritone-guitar': 'Баритон-гитара',
+  'instrument.guitar-12': 'Двенадцатиструнная гитара',
+  'instrument.bass': 'Бас-гитара',
+  'instrument.ukulele': 'Укулеле',
+  'instrument.baritone-ukulele': 'Баритон-укулеле',
+  'instrument.mandolin': 'Мандолина',
+  'instrument.banjo': 'Банджо',
+  'instrument.violin': 'Скрипка',
+  'instrument.viola': 'Альт',
+  'instrument.cello': 'Виолончель',
+  'instrument.vocal': 'Голос',
+  'instrument.chromatic': 'Хроматический',
   'instrument.profiles': 'Профили инструментов',
   'instrument.profile.name': 'Название профиля',
   'instrument.profile.save': 'СОХРАНИТЬ ПРОФИЛЬ',
   temperament: 'Темперация',
+  'temperament.equal': 'Равномерная',
+  'temperament.just': 'Чистая',
+  'temperament.pythagorean': 'Пифагорейская',
+  'temperament.meantone': 'Среднетоновая 1/4 коммы',
+  'temperament.werckmeister': 'Веркмейстер III',
+  'temperament.kirnberger': 'Кирнбергер III',
+  'temperament.vallotti': 'Валлотти',
   'temperament.advanced': 'Расширенные темперации',
   'temperament.root': 'Тоника',
   'temperament.comparison': 'Сравнение с равномерной темперацией, центы',
@@ -86,6 +115,7 @@ const ru: Record<string, string> = {
   waveform: 'Волна',
   spectrum: 'Спектр',
   spectrogram: 'Спектрограмма',
+  diagnostics: 'Диагностика и аудиовход',
   tolerance: 'Допуск',
   tuning: 'Строй',
   chromatic: 'Хроматический режим: играй любую ноту, тюнер покажет ближайшую высоту.',
@@ -102,8 +132,37 @@ const ru: Record<string, string> = {
   'custom.copy': 'копия',
   'custom.saved': 'сохранено',
   'custom.string': 'Струна',
+  'sweetening.none': 'Без коррекции',
+  'sweetening.sweet-guitar': 'Гитара — мягкая коррекция',
+  'sweetening.sweet-guitar-7': 'Семиструнная гитара — мягкая коррекция',
+  'sweetening.sweet-baritone-guitar': 'Баритон-гитара — мягкая коррекция',
+  'sweetening.sweet-guitar-12': 'Двенадцатиструнная — мягкая коррекция',
+  'sweetening.sweet-bass': 'Бас — мягкая коррекция',
+  'sweetening.sweet-ukulele': 'Укулеле — мягкая коррекция',
+  'sweetening.sweet-baritone-ukulele': 'Баритон-укулеле — мягкая коррекция',
+  'sweetening.sweet-mandolin': 'Мандолина — мягкая коррекция',
+  'sweetening.sweet-banjo': 'Банджо — мягкая коррекция',
+  'sweetening.sweet-violin': 'Скрипка — мягкая коррекция',
+  'sweetening.sweet-viola': 'Альт — мягкая коррекция',
+  'sweetening.sweet-cello': 'Виолончель — мягкая коррекция',
+  'sweetening.custom': 'Своя коррекция',
+  'confirm.delete.tuning': 'Удалить этот пользовательский строй?',
+  'confirm.delete.profile': 'Удалить профиль и все принадлежащие ему строи?',
+  'confirm.delete.temperament': 'Удалить эту пользовательскую темперацию?',
+  'confirm.clear.practice': 'Безвозвратно очистить всю историю практики?',
+  confidence: 'уверенность',
+  'power.chord': 'пауэр-аккорд',
+  'per.string': 'По струнам:',
+  'fretboard.label': 'Гриф гитары с подсветкой целевой ноты',
+  'visual.waveform.label': 'Форма входного аудиосигнала',
+  'visual.spectrum.label': 'Частотный спектр входного сигнала',
+  'visual.spectrogram.label': 'Спектрограмма входного сигнала',
+  'visual.history.label': 'История отклонения высоты в центах',
   'practice.title': 'История практики',
   'practice.history': 'записей:',
+  'practice.entry.one': 'запись',
+  'practice.entry.few': 'записи',
+  'practice.entry.many': 'записей',
   'practice.streak': 'дней подряд',
   'practice.today': 'сегодня',
   'practice.today.accuracy': 'точность сегодня',
@@ -118,10 +177,13 @@ const ru: Record<string, string> = {
 
 const en: Record<string, string> = {
   'app.title': 'Guitar Tuner',
-  subtitle: 'works offline • browser + desktop',
+  subtitle: 'browser + desktop',
   listening: 'LISTENING',
   ready: 'READY',
   requesting: 'REQUESTING MIC...',
+  'loading.settings': 'LOADING SETTINGS...',
+  'settings.retry': 'retry',
+  failed: 'ERROR',
   dismiss: 'dismiss',
   refresh: 'refresh',
   start: 'start',
@@ -160,6 +222,7 @@ const en: Record<string, string> = {
   'toggle.microphone': 'Toggle microphone',
   'tap.to.start': 'TAP TO START',
   'tap.to.stop': 'TAP TO STOP',
+  'tap.to.request': 'ALLOW MICROPHONE ACCESS',
   'random.note': 'RANDOM NOTE (ear training)',
   'ear.title': 'Ear training',
   'ear.streak': 'streak',
@@ -196,6 +259,7 @@ const en: Record<string, string> = {
   waveform: 'Waveform',
   spectrum: 'Spectrum',
   spectrogram: 'Spectrogram',
+  diagnostics: 'Diagnostics and audio input',
   tolerance: 'Tolerance',
   tuning: 'Tuning',
   chromatic: 'Chromatic mode: play any note and the tuner will show the nearest pitch.',
@@ -212,8 +276,23 @@ const en: Record<string, string> = {
   'custom.copy': 'copy',
   'custom.saved': 'saved',
   'custom.string': 'String',
+  'confirm.delete.tuning': 'Delete this custom tuning?',
+  'confirm.delete.profile': 'Delete this profile and every tuning that belongs to it?',
+  'confirm.delete.temperament': 'Delete this custom temperament?',
+  'confirm.clear.practice': 'Permanently clear all practice history?',
+  confidence: 'confidence',
+  'power.chord': 'power chord',
+  'per.string': 'Per string:',
+  'fretboard.label': 'Guitar fretboard with the target note highlighted',
+  'visual.waveform.label': 'Input audio waveform',
+  'visual.spectrum.label': 'Input audio frequency spectrum',
+  'visual.spectrogram.label': 'Input audio spectrogram',
+  'visual.history.label': 'Pitch deviation history in cents',
   'practice.title': 'Practice history',
   'practice.history': 'entries:',
+  'practice.entry.one': 'entry',
+  'practice.entry.few': 'entries',
+  'practice.entry.many': 'entries',
   'practice.streak': 'daily streak',
   'practice.today': 'today',
   'practice.today.accuracy': 'today accuracy',
@@ -235,5 +314,21 @@ export function useL10n() {
     lang.value = lang.value === 'ru' ? 'en' : 'ru'
     try { localStorage.setItem('lang', lang.value) } catch { /* ignore */ }
   }
-  return { lang, t, toggleLang }
+  const catalogName = (prefix: string, id: string, fallback: string) => {
+    const key = `${prefix}.${id}`
+    const dictionary = lang.value === 'en' ? en : ru
+    return dictionary[key] ?? fallback
+  }
+  const plural = (key: string, count: number) => {
+    if (lang.value === 'en') return en[`${key}.${count === 1 ? 'one' : 'many'}`] ?? key
+    const mod10 = Math.abs(count) % 10
+    const mod100 = Math.abs(count) % 100
+    const form = mod10 === 1 && mod100 !== 11
+      ? 'one'
+      : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? 'few'
+        : 'many'
+    return ru[`${key}.${form}`] ?? key
+  }
+  return { catalogName, lang, plural, t, toggleLang }
 }

@@ -11,6 +11,9 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -19,13 +22,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bundle: 'deb appimage'
+            bundle: 'deb,appimage'
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundle: 'dmg app'
+            bundle: 'dmg'
           - os: macos-latest
             target: x86_64-apple-darwin
-            bundle: 'dmg app'
+            bundle: 'dmg'
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundle: 'nsis'
@@ -37,6 +40,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -48,20 +52,25 @@ jobs:
             desktop/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target }},wasm32-unknown-unknown
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "desktop/src-tauri"
+          workspaces: ". -> target"
+
+      - name: Install pinned wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack@0.15.0
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libasound2-dev libudev-dev pkg-config
 
       - name: Install web deps
         working-directory: web
@@ -71,13 +80,9 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build web for Tauri
-        working-directory: web
-        run: npm run build:tauri
-
       - name: Build Tauri
         working-directory: desktop
-        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+        run: npm run build -- --target "${{ matrix.target }}" --bundles "${{ matrix.bundle }}" --ci -- --locked
         env:
           CARGO_INCREMENTAL: 0
 
@@ -86,6 +91,9 @@ jobs:
         with:
           name: tauri-${{ matrix.os }}-${{ matrix.target }}
           path: |
-            desktop/src-tauri/target/**/bundle/**/*
+            target/${{ matrix.target }}/release/bundle/**/*.deb
+            target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            target/${{ matrix.target }}/release/bundle/**/*.dmg
+            target/${{ matrix.target }}/release/bundle/**/*.exe
           retention-days: 7
-          if-no-files-found: warn
+          if-no-files-found: error
