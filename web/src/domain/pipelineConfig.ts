@@ -88,6 +88,19 @@ export function pipelinePresetConfig(preset: PipelinePresetId): PipelineConfig {
   return { ...PIPELINE_PRESETS[preset] };
 }
 
+// The TypeScript fallback deliberately runs a reduced pipeline. Its secondary
+// detector is a plain autocorrelation whose frequency errors and confidence
+// scale differ from the Rust engine's MPM, so keeping it enabled makes the
+// fallback silently disagree with the primary path. Degraded mode keeps only
+// the YIN detector, which is held to the shared parity fixtures.
+export function degradedFallbackPipelineConfig(value: PipelineConfig): PipelineConfig {
+  return normalizePipelineConfig({
+    ...value,
+    secondaryDetectorEnabled: false,
+    yinEnabled: true,
+  });
+}
+
 export function resolvePipelinePreset(config: PipelineConfig): ResolvedPipelinePresetId {
   for (const preset of Object.keys(PIPELINE_PRESETS) as PipelinePresetId[]) {
     if (pipelineConfigsEqual(config, PIPELINE_PRESETS[preset])) return preset;

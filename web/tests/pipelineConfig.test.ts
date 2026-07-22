@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
   normalizePipelineConfig,
   pipelineConfigFingerprint,
   pipelinePresetConfig,
@@ -47,6 +48,22 @@ describe('pipeline configuration', () => {
       yinEnabled: true,
       secondaryDetectorEnabled: false,
     }));
+  });
+
+  it('degrades the fallback pipeline to the parity-tested YIN detector only', () => {
+    const degraded = degradedFallbackPipelineConfig({
+      ...createDefaultPipelineConfig(),
+      yinEnabled: false,
+    });
+
+    expect(degraded.yinEnabled).toBe(true);
+    expect(degraded.secondaryDetectorEnabled).toBe(false);
+    expect(degraded.trackingEnabled).toBe(true);
+    expect(degraded.holdEnabled).toBe(true);
+    // A distinct fingerprint keeps the degraded provenance visible in
+    // telemetry instead of impersonating the full pipeline.
+    expect(pipelineConfigFingerprint(degraded))
+      .not.toBe(pipelineConfigFingerprint(createDefaultPipelineConfig()));
   });
 
   it('runs either fallback candidate provider independently', () => {

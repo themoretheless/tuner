@@ -7,7 +7,11 @@ use std::time::{Duration, Instant};
 const AUDIO_CHUNK_CAPACITY: usize = 8_192;
 const AUDIO_CHUNK_POOL_SIZE: usize = 4;
 const DEFAULT_FRAME_INTERVAL: Duration = Duration::from_millis(33);
-const DEFAULT_WINDOW_SIZE: usize = 4_096;
+// Matches the web analysis window (8192 samples). At 48 kHz a 4096-sample
+// window leaves YIN only ~2 comparison periods of bass E1 (41 Hz), which is
+// not enough for a stable CMNDF on a decaying inharmonic string; 8192 gives
+// the native path the same low-string headroom as the browser path.
+const DEFAULT_WINDOW_SIZE: usize = 8_192;
 const MAX_WINDOW_SIZE: usize = 8_192;
 
 #[derive(Clone, Debug)]

@@ -1,27 +1,22 @@
-import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
-import {
-  ConfidenceEvidenceEstimator,
-  detectCompetingTarget,
-  strongestCandidateFrequency,
-} from '../domain/confidenceEvidence';
+import { ConfidenceEvidenceEstimator } from '../domain/confidenceEvidence';
 import {
   createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
   normalizePipelineConfig,
-  pipelineConfigFingerprint,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
+import { assembleFallbackDetectionFrame } from '../application/services/fallbackFrameAssembly';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import type {
   DetectionFrameSemantics,
   PitchDetectorBackend,
 } from '../types/detectorBackend';
-import {
-  normalizeLevel,
-  type PitchAnalysis,
-  type PitchDetectionRange,
-  type PitchEstimate,
-  type PitchGuidance,
-  type SignalStats,
+import type {
+  PitchAnalysis,
+  PitchDetectionRange,
+  PitchEstimate,
+  PitchGuidance,
+  SignalStats,
 } from '../utils/pitch';
 import { StreamingPitchTracker } from '../utils/pitchTracking';
 import { PipelineSpectralAnalyzer } from '../utils/pipelineSpectralAnalyzer';
@@ -178,65 +173,32 @@ export class PitchCoreAdapter {
     range: PitchDetectionRange,
   ): WorkerPitchFrame {
     const started = nowMs();
+    const degradedConfig = degradedFallbackPipelineConfig(this.pipelineConfig);
     const analysis = normalizeFallbackAnalysis(this.fallback(
       buffer,
       sampleRate,
       stats,
       range,
       this.fallbackGuidance,
-      this.pipelineConfig,
+      degradedConfig,
     ));
-    const tracked = this.fallbackTracker.update(analysis.estimate, stats);
-    const trackerTelemetry = this.fallbackTracker.telemetry();
-    const decision = !analysis.fixedGateOpen && !tracked
-      ? 'fixed-gate-rejected'
-      : trackerTelemetry.decision;
-    const confidence = this.fallbackConfidence.observe({
-      decision,
-      noiseFloor: trackerTelemetry.noiseFloor,
-      outputConfidence: tracked?.confidence ?? 0,
-      rawFrequency: trackerTelemetry.selected?.frequency ?? null,
-      rms: stats.rms,
-      secondary: analysis.secondary,
-      yin: analysis.yin,
-    });
-    const frame = createUnresolvedDetectionFrame({
-      confidence: tracked ? confidence.calibrated : 0,
-      freq: tracked?.frequency ?? null,
-      rawFreq: trackerTelemetry.selected?.frequency ?? null,
-      level: normalizeLevel(stats.rms),
-      pipeline: {
-        adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
-        arbitration: analysis.arbitration,
-        confidence,
-        configFingerprint: pipelineConfigFingerprint(this.pipelineConfig),
-        decision,
-        fixedGateOpen: analysis.fixedGateOpen,
-        gateThreshold: trackerTelemetry.gateThreshold,
-        held: decision === 'held',
-        interference: detectCompetingTarget(
-          strongestCandidateFrequency(analysis.yin, analysis.secondary),
-          this.fallbackGuidance?.selectedFrequency,
-          this.fallbackGuidance?.targetFrequencies ?? [],
-        ),
-        noiseFloor: trackerTelemetry.noiseFloor,
-        sampleRate,
-        secondary: analysis.secondary,
-        selected: trackerTelemetry.selected,
-        spectral: this.pipelineConfig.octaveEnabled
-          ? this.spectralAnalyzer.analyze(
-            buffer,
-            sampleRate,
-            analysis.estimate?.frequency,
-            range,
-          )
-          : null,
-        tracked: this.pipelineConfig.trackingEnabled && decision === 'published',
-        windowSamples: buffer.length,
-        yin: analysis.yin,
+    const frame = assembleFallbackDetectionFrame(
+      {
+        confidence: this.fallbackConfidence,
+        spectralAnalyzer: this.spectralAnalyzer,
+        tracker: this.fallbackTracker,
       },
-      rms: stats.rms,
-    });
+      {
+        analysis,
+        buffer,
+        fixedGateOpen: analysis.fixedGateOpen,
+        guidance: this.fallbackGuidance,
+        pipelineConfig: degradedConfig,
+        range,
+        sampleRate,
+        stats,
+      },
+    );
     frame.pipeline.processingMs = nowMs() - started;
     return {
       backend: 'typescript',

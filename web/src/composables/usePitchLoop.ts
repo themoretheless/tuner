@@ -1,17 +1,14 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
-import {
-  ConfidenceEvidenceEstimator,
-  detectCompetingTarget,
-  strongestCandidateFrequency,
-} from '../domain/confidenceEvidence';
+import { ConfidenceEvidenceEstimator } from '../domain/confidenceEvidence';
 import { cloneFrameContext } from '../domain/frameContext';
 import {
   createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
   normalizePipelineConfig,
-  pipelineConfigFingerprint,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
+import { assembleFallbackDetectionFrame } from '../application/services/fallbackFrameAssembly';
 import type { AudioFrame, AudioFrameTimebase } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import type {
@@ -148,6 +145,12 @@ export function usePitchLoop(
     volume.value = 0;
     lastPitchDetectAt = 0;
     pitchRequestId += 1;
+    // Abandon any in-flight worker request. Its response is already stale
+    // (the id was bumped above), and if it never arrives at all - a worker
+    // reply lost without an onerror - a dangling pending id would block
+    // every future detection request forever.
+    pendingPitchRequestId = null;
+    pendingPitchStartedAt = null;
     quietTicks = 0;
     fallbackTracker.reset();
     fallbackConfidence.reset();
@@ -167,58 +170,23 @@ export function usePitchLoop(
     startedAt = performance.now(),
   ) {
     if (frameContext) fallbackTracker.setContext(frameContext.value);
-    const tracked = fallbackTracker.update(analysis?.estimate ?? null, stats);
-    const trackerTelemetry = fallbackTracker.telemetry();
-    const fixedGateOpen = analysis?.fixedGateOpen ?? false;
-    const decision = !fixedGateOpen && !tracked
-      ? 'fixed-gate-rejected'
-      : trackerTelemetry.decision;
-    const confidenceEvidence = fallbackConfidence.observe({
-      decision,
-      noiseFloor: trackerTelemetry.noiseFloor,
-      outputConfidence: tracked?.confidence ?? 0,
-      rawFrequency: trackerTelemetry.selected?.frequency ?? null,
-      rms: stats.rms,
-      secondary: analysis?.secondary ?? null,
-      yin: analysis?.yin ?? null,
-    });
-    const nextFrame = createUnresolvedDetectionFrame({
-      confidence: tracked ? confidenceEvidence.calibrated : 0,
-      freq: tracked?.frequency ?? null,
-      rawFreq: trackerTelemetry.selected?.frequency ?? null,
-      level: normalizeLevel(stats.rms),
-      pipeline: {
-        adaptiveGateOpen: trackerTelemetry.adaptiveGateOpen,
-        arbitration: analysis?.arbitration ?? 'none',
-        confidence: confidenceEvidence,
-        configFingerprint: pipelineConfigFingerprint(pipelineConfig.value),
-        decision,
-        fixedGateOpen,
-        gateThreshold: trackerTelemetry.gateThreshold,
-        held: decision === 'held',
-        interference: detectCompetingTarget(
-          strongestCandidateFrequency(analysis?.yin, analysis?.secondary),
-          fallbackPitchGuidance?.selectedFrequency,
-          fallbackPitchGuidance?.targetFrequencies ?? [],
-        ),
-        noiseFloor: trackerTelemetry.noiseFloor,
-        sampleRate: audioFrame?.sampleRate ?? 0,
-        secondary: analysis?.secondary ?? null,
-        selected: trackerTelemetry.selected,
-        spectral: pipelineConfig.value.octaveEnabled && audioFrame
-          ? spectralAnalyzer.analyze(
-            audioFrame.buffer,
-            audioFrame.sampleRate,
-            analysis?.estimate?.frequency,
-            detectionRange.value,
-          )
-          : null,
-        tracked: pipelineConfig.value.trackingEnabled && decision === 'published',
-        windowSamples: audioFrame?.buffer.length ?? 0,
-        yin: analysis?.yin ?? null,
+    const nextFrame = assembleFallbackDetectionFrame(
+      {
+        confidence: fallbackConfidence,
+        spectralAnalyzer,
+        tracker: fallbackTracker,
       },
-      rms: stats.rms,
-    });
+      {
+        analysis,
+        buffer: audioFrame?.buffer ?? null,
+        fixedGateOpen: analysis?.fixedGateOpen ?? false,
+        guidance: fallbackPitchGuidance,
+        pipelineConfig: degradedFallbackPipelineConfig(pipelineConfig.value),
+        range: detectionRange.value,
+        sampleRate: audioFrame?.sampleRate ?? 0,
+        stats,
+      },
+    );
     nextFrame.pipeline.processingMs = Math.max(0, performance.now() - startedAt);
     frameTimebase.value = audioFrame?.timebase ?? null;
     detectionFrame.value = nextFrame;
@@ -281,7 +249,7 @@ export function usePitchLoop(
           stats,
           range,
           fallbackPitchGuidance,
-          pipelineConfig.value,
+          degradedFallbackPipelineConfig(pipelineConfig.value),
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
       return;
@@ -337,7 +305,7 @@ export function usePitchLoop(
           stats,
           range,
           fallbackPitchGuidance,
-          pipelineConfig.value,
+          degradedFallbackPipelineConfig(pipelineConfig.value),
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
     }

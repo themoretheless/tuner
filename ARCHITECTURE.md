@@ -11,7 +11,7 @@ Strengths:
 - `pitch-core` is split into domain, detector implementations, signal, smoother, spectrum, frames, engine and WASM modules; `lib.rs` is a small export surface.
 - Tauri and egui share `audio-input`: cpal callbacks only downmix into bounded recycled chunks; worker threads own DSP and UI/event delivery.
 - Web/native/synthetic/file inputs implement one discriminated TypeScript port and are selected through a capability-based registry; exact PCM capture is an optional segregated capability.
-- Web pitch detection uses one full-frame pitch-core/WASM `TunerProcessor` per worker, with an explicit tested TS fallback.
+- Web pitch detection uses one full-frame pitch-core/WASM `TunerProcessor` per worker, with an explicitly degraded TS fallback: YIN-only (`degradedFallbackPipelineConfig`), its own pipeline fingerprint, a visible tuner banner, and one shared frame-assembly module for both fallback environments.
 - Worker frames declare `resolved | unresolved` semantics, so presentation depends on capability rather than a concrete backend name.
 - Native Rust, browser WASM and TS fallback share one B0-E5 fixture manifest with explicit cents and normalized-periodicity confidence budgets.
 - `DetectionFrame` carries bounded decision evidence: composite confidence, five-window uncertainty, pipeline-config fingerprint and optional competing-string diagnostics. The web fallback implements the same contract without importing Vue.
@@ -23,7 +23,7 @@ Strengths:
 
 Remaining weaknesses:
 - Web workflow ownership is split across focused controllers, tuning model/commands/detection and feature-specific ports. Output playback now has one injected port, lazy resumed context, mixer and cancellable scopes; the next coupling hotspot is lifecycle/error propagation across native and web adapters.
-- Primary browser/native frames share Rust detector, smoothing and resolver ownership; TS fallback confidence and smoothing are fixture/trace-gated. Power flags still degrade explicitly in the fallback.
+- Primary browser/native frames share Rust detector, smoothing and resolver ownership; the TS fallback is deliberately reduced to the parity-tested YIN detector (no secondary autocorrelation), with confidence and smoothing fixture/trace-gated. Power flags still degrade explicitly in the fallback.
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - Interactive PCM/float WAV input is implemented without browser resampling and feeds sample-indexed overlapping windows through the same session pipeline; device-loss recovery E2E remains incomplete.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
@@ -92,7 +92,7 @@ The native path now separates configuration from streaming data:
 The Algorithm view keeps collection, derivation and rendering separate:
 
 - `pitch-core::PipelineTelemetry` owns measured, fixed-size backend evidence; native and WASM adapters preserve the same meanings.
-- `pitch-core/src/confidence.rs` combines periodicity, detector agreement, five overlapping-window observations and signal/noise evidence. It changes the displayed confidence and uncertainty, not detector acceptance policy.
+- `pitch-core/src/confidence.rs` combines periodicity, detector agreement, five overlapping-window observations and signal/noise evidence. It changes the displayed confidence and uncertainty, not detector acceptance policy. Fresh evidence is computed only for published frames: held frames decay, and rejected/pending/acquiring frames reset the estimator so telemetry cannot contradict the frame's own decision (mirrored in `web/src/domain/confidenceEvidence.ts`).
 - `web/src/domain/pipelineDiagnostics.ts` contains pure uncertainty, octave, comparison and virtual-bypass models. Unsupported counterfactuals say that replay is required instead of inventing data.
 - `web/src/domain/audioInputDiagnostics.ts` normalizes effective microphone processing and sample rates behind the optional `DiagnosableAudioInputPort`; session and views do not depend on `MediaStreamTrack`.
 - `web/src/session/detectionFramePresentation.ts` and `useDetectionFramePresentation.ts` keep measured frames on the detector clock and expose a separate latest-frame-wins visual frame synchronized by `requestAnimationFrame`. Only frequency, cents, level, RMS and display confidence interpolate over 24 ms. Acquisition, loss, note, target and configuration changes replace the frame immediately; all non-numeric decision/diagnostic fields come from the newest frame even while numeric presentation values are interpolating.
@@ -312,6 +312,17 @@ egui/src/
 - Update all docs, examples, onboarding guide.
 
 **Status 2026-07-19: documentation synchronized.** README, architecture and recommendation use the same validation counts and link the focused 100-repository and broader 473-repository evidence annexes. Thin note-math facades preserve consumer APIs; full-frame WASM, confidence migration, file/WAV input, exact PCM capture and the diagnostic Algorithm view are complete.
+
+**Status 2026-07-21: multi-agent review fixes (P0+P1).**
+- Confidence evidence is published-only in both Rust and the TS mirror: held frames decay, all other non-published decisions reset the estimator instead of presenting fresh evidence (fixes misleading Evidence-panel confidence on rejected frames).
+- `usePitchLoop.reset()` clears the in-flight worker request id, so a worker reply lost without `onerror` can no longer starve detection forever (regression-tested with a fake worker).
+- The default pipeline-config fingerprint (`161_782_394`) is golden-tested on both sides (`pitch-core/src/pipeline.rs` and `web/tests/pipelineConfig.test.ts`), closing the silent cross-language drift risk.
+- Fallback frame assembly is one shared module (`web/src/application/services/fallbackFrameAssembly.ts`) used by both the worker adapter and the main-thread loop; the previous two ~70-line copies are gone.
+- The TS fallback is an explicitly degraded YIN-only pipeline (`degradedFallbackPipelineConfig`): the divergent TS autocorrelation secondary no longer runs, degraded frames carry their own fingerprint, and the tuner shows a visible fallback banner.
+- The TS resolution machine (`tuningDetectionMachine`) idles while frames arrive resolved from the Rust engine and resets on resolved/unresolved transitions, removing per-frame double resolution from the hot path.
+- The native analysis window matches web: 8192 samples (`audio-input/src/lib.rs`), restoring low-string (E1) headroom on desktop at the cost of web-equivalent window latency.
+
+Remaining from the same review, in priority order: the medium web bugs (shallow settings-persistence watcher contract, stored-tuning overwrite on load, display-command coercion, dead `exportCustomTunings`), the port/capability ceremony collapse in `web/src/adapters` and `web/src/app` (~800 mirrored lines), an import-graph linter instead of the regex boundary test, confidence calibration against the quality corpus, and the main-screen UX pass (cents readout size, duplicate gauges, colorblind LevelMeter gap, settings placement).
 
 ## Immediate Next Actions (Concrete)
 

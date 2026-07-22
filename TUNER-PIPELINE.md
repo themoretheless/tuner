@@ -31,7 +31,7 @@ flowchart LR
     WebLoop --> QuietGuard["Main-thread RMS / peak quiet guard"]
     QuietGuard --> Worker["pitchWorker<br/>one request in flight"]
     Worker --> Wasm["WASM TunerProcessor<br/>resolved frame"]
-    Worker -. "fallback" .-> TsDetector["TypeScript detector + tracker<br/>unresolved frame"]
+    Worker -. "fallback" .-> TsDetector["TypeScript YIN-only fallback + tracker<br/>unresolved degraded frame"]
     Wasm --> WebEngine["Web TunerEngine instance"]
     WebEngine --> WebFrame["Resolved web DetectionFrame"]
   end
@@ -39,7 +39,7 @@ flowchart LR
   subgraph TAURI["Tauri native input"]
     NativeMic["Microphone"] --> Cpal["cpal realtime callback"]
     Cpal --> Pool["4 recycled chunks<br/>mono downmix + try_send"]
-    Pool --> Ring["SampleWindow ring<br/>4096 latest samples"]
+    Pool --> Ring["SampleWindow ring<br/>8192 latest samples"]
     Ring --> NativeCadence["Worker cadence<br/>about 33 ms"]
     NativeCadence --> NativeProcessor["NativeFrameProcessor"]
     NativeProcessor --> NativeEngine["Native TunerEngine instance"]
@@ -80,9 +80,10 @@ flowchart LR
 
 - Web microphone и synthetic input поставляют сырые `Float32Array` кадры. Их pitch detection запускается через `usePitchLoop`.
 - Tauri native port поставляет уже готовый `DetectionFrame`; web worker для него не используется.
-- WASM и native используют один Rust `TunerEngine`. TypeScript остается аварийным fallback с отдельным resolution на уровне web composition root.
+- WASM и native используют один Rust `TunerEngine`. TypeScript остается аварийным деградированным fallback: только YIN (общие parity-фикстуры с Rust), собственный config fingerprint, видимый баннер в тюнере. Оба fallback-окружения собирают кадр одним модулем `web/src/application/services/fallbackFrameAssembly.ts`.
+- TS-резолюция ноты (`tuningDetectionMachine`) выполняется только для unresolved-кадров; пока кадры приходят resolved из Rust, машина простаивает и сбрасывается на переходах resolved/unresolved.
 - UI не должен знать, как получены samples. Он получает один frame contract и reactive view-model.
-- Web и native сейчас анализируют окна разной длины: 8192 и 4096 samples соответственно. Поэтому их низкочастотная устойчивость и latency не полностью эквивалентны.
+- Web и native анализируют окна одной длины: 8192 samples. Раньше native использовал 4096, что оставляло YIN около двух периодов сравнения на басовой E1 и делало низкочастотную устойчивость платформ неэквивалентной.
 
 ### Offline quality и replay pipeline
 
@@ -257,7 +258,7 @@ PreprocessedFrame = {
 | B03 | Browser scheduler | frame source, wall clock | at most one worker request per 33 ms | `web/src/composables/usePitchLoop.ts` |
 | B04 | Worker transport | transferable sample buffer + context | backend result + recycled buffer | `web/src/workers/pitchWorker.ts` |
 | B05 | Native capture | cpal interleaved samples | recycled mono chunks | `audio-input/src/lib.rs` |
-| B06 | Native window/scheduler | chunks | latest 4096-sample window about every 33 ms | `audio-input/src/lib.rs` |
+| B06 | Native window/scheduler | chunks | latest 8192-sample window about every 33 ms | `audio-input/src/lib.rs` |
 | B07a | Raw level | audio window | raw RMS + display level | `pitch-core/src/signal.rs` |
 | B07b | Gate statistics | audio window | centered RMS + peak | `pitch-core/src/signal.rs` |
 | B07c | Detector centering | audio window | centered scratch + repeated RMS/peak | `pitch-core/src/dsp/detector.rs` |
@@ -271,14 +272,14 @@ PreprocessedFrame = {
 | B14 | Resolution | stable frequency + `FrameContext` | note, target, cents, `in_tune` | `pitch-core/src/resolution.rs` |
 | B15 | Orchestration | all blocks above | canonical `DetectionFrame` | `pitch-core/src/engine.rs`, `frames.rs` |
 | B16 | Session routing | raw-frame or resolved-frame input port | active session frame | `web/src/composables/useTunerSession.ts` |
-| B17 | Presentation fallback | unresolved TS frame + tuning state | resolved web frame | `web/src/composables/useTuner.ts` |
+| B17 | Presentation fallback | unresolved TS frame + tuning state | resolved web frame | `web/src/adapters/vue/controllers/detectionController.ts` |
 
 ## 4. Временная модель и ожидаемая задержка
 
 | Участок | Текущее значение | При 48 kHz | При 44.1 kHz |
 | --- | ---: | ---: | ---: |
 | Web analysis window | 8192 samples | 170.7 ms | 185.8 ms |
-| Native analysis window | 4096 samples | 85.3 ms | 92.9 ms |
+| Native analysis window | 8192 samples | 170.7 ms | 185.8 ms |
 | Номинальный detection cadence | 33 ms | около 30 fps | около 30 fps |
 | Acquire новой стабильной частоты | 2 frames | около 33-66 ms после появления подходящего окна | то же |
 | Подтверждение octave correction | 2 frames | около 33 ms дополнительного ожидания | то же |
@@ -385,7 +386,7 @@ DiagnosticsFrame = optional evidence and decision trace
 6. Добавить явный `SignalPhaseClassifier` и разные policies для attack/sustain/release.
 7. Ввести multi-candidate temporal tracking, затем проверить его на существующем real-WAV corpus и фиксированной SNR/reverb матрице.
 8. После benchmark заменить target-guided harmonic heuristics на доказанно более точный evidence model.
-9. Унифицировать 4096/8192 или осознанно оставить multi-resolution windows с одинаковыми latency budgets.
+9. Сделано: native окно унифицировано с web (8192 samples, `audio-input/src/lib.rs`).
 10. Зафиксировать parity tests: один WAV должен давать сопоставимые candidates, frequency и transition timing во всех backend-ах.
 
 ## 8. Карта исходников
