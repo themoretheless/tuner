@@ -4,6 +4,7 @@ import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import { cloneFrameContext } from '../domain/frameContext';
 import {
   createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
   normalizePipelineConfig,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
@@ -66,7 +67,9 @@ export function usePitchLoop(
   let pitchRequestId = 0;
   let quietTicks = 0;
   const fallbackProcessor = new FallbackPitchProcessor();
-  fallbackProcessor.setPipelineConfig(pipelineConfig.value);
+  fallbackProcessor.setPipelineConfig(
+    degradedFallbackPipelineConfig(pipelineConfig.value),
+  );
   fallbackProcessor.setDetectionRange(detectionRange.value);
   fallbackProcessor.setContext(frameContext?.value);
   const wasmModuleUrl = resolvePitchCoreModuleUrl();
@@ -148,8 +151,10 @@ export function usePitchLoop(
     frameSemantics.value = 'unresolved';
     frameTimebase.value = null;
     volume.value = 0;
-    lastPitchDetectAt = 0;
+    lastPitchDetectAt = Number.NEGATIVE_INFINITY;
     pitchRequestId += 1;
+    pendingPitchRequestId = null;
+    pendingPitchStartedAt = null;
     quietTicks = 0;
     fallbackProcessor.reset();
     resetWorkerProcessor();
@@ -249,7 +254,7 @@ export function usePitchLoop(
           stats,
           range,
           fallbackProcessor.pitchGuidance,
-          pipelineConfig.value,
+          degradedFallbackPipelineConfig(pipelineConfig.value),
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
       return;
@@ -294,7 +299,7 @@ export function usePitchLoop(
           stats,
           range,
           fallbackProcessor.pitchGuidance,
-          pipelineConfig.value,
+          degradedFallbackPipelineConfig(pipelineConfig.value),
         );
       applyFallbackAnalysis(analysis, stats, frame, startedAt);
     }
@@ -330,7 +335,7 @@ export function usePitchLoop(
     }, { deep: true });
   }
   watch(pipelineConfig, (config) => {
-    fallbackProcessor.setPipelineConfig(config);
+    fallbackProcessor.setPipelineConfig(degradedFallbackPipelineConfig(config));
     pipelineRevision += 1;
     reset();
   }, { deep: true });

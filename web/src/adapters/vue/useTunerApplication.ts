@@ -40,7 +40,11 @@ export function useTunerApplication(): TunerApplication {
   });
   const tuning = useTuningState(
     computed(() => session.detectionFrame.value.freq),
-    { settings, onResetDetection: session.resetDetection },
+    {
+      settings,
+      frameResolved: session.detectionFrameResolved,
+      onResetDetection: session.resetDetection,
+    },
   );
   const detection = useDetectionController(session, tuning);
   const referenceTone = useReferenceTone(() => detection.targetNote.value, audioOutput);

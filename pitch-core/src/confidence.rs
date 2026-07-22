@@ -50,6 +50,16 @@ impl ConfidenceEstimator {
             return held;
         }
 
+        // Rejected, pending, and acquiring frames must not present fresh
+        // evidence: the raw detector output behind them was not published
+        // (octave-pending frequencies are suspected wrong outright), so
+        // seeding the jitter history with it would let the panel show a
+        // confident readout that contradicts the frame's own decision.
+        if observation.decision != PipelineDecision::Published {
+            self.reset();
+            return self.last;
+        }
+
         let Some(frequency) = observation
             .raw_frequency
             .filter(|value| valid_frequency(*value))
@@ -215,6 +225,31 @@ mod tests {
 
         assert!(held.calibrated < published.calibrated);
         assert!(held.uncertainty_cents > published.uncertainty_cents);
+    }
+
+    #[test]
+    fn rejected_frames_do_not_claim_fresh_evidence() {
+        let mut estimator = ConfidenceEstimator::default();
+        estimator.observe(observation(82.4));
+        let mut rejected = observation(82.4);
+        rejected.decision = PipelineDecision::AdaptiveGateRejected;
+        let evidence = estimator.observe(rejected);
+
+        assert_eq!(evidence, PipelineConfidenceTelemetry::default());
+        let reacquired = estimator.observe(observation(82.4));
+        assert!((reacquired.stability - 0.72).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn octave_pending_frequency_does_not_seed_history() {
+        let mut estimator = ConfidenceEstimator::default();
+        let mut pending = observation(164.8);
+        pending.decision = PipelineDecision::OctavePending;
+        let evidence = estimator.observe(pending);
+
+        assert_eq!(evidence.calibrated, 0.0);
+        let published = estimator.observe(observation(82.4));
+        assert!((published.stability - 0.72).abs() < f32::EPSILON);
     }
 
     #[test]

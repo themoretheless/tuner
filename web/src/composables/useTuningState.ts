@@ -10,6 +10,7 @@ export type { CustomTemperamentPayload, CustomTuningPayload } from '../domain/cu
 
 export interface TuningStateOptions {
   settings: SettingsStore;
+  frameResolved?: Readonly<Ref<boolean>>;
   onResetDetection?: () => void;
 }
 
@@ -23,6 +24,7 @@ export function useTuningState(
     a4: settings.a4,
     activeInstrument: settings.activeInstrument,
     detectedFrequency,
+    frameResolved: options.frameResolved,
     isChromaticMode: model.isChromaticMode,
     selectedString: model.selectedString,
     strings: model.strings,

@@ -275,6 +275,16 @@ body {
   text-decoration: underline;
 }
 
+.degraded-banner {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
+  padding: 10px 12px;
+  color: var(--warning);
+  font-size: 0.8rem;
+}
+
 .workspace-stack {
   display: grid;
   gap: 20px;

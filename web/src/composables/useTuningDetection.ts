@@ -16,6 +16,12 @@ interface TuningDetectionDependencies {
   a4: Readonly<Ref<number>>;
   activeInstrument: Readonly<Ref<InstrumentId>>;
   detectedFrequency: Readonly<Ref<number | null>>;
+  // True while detection frames arrive already resolved (note/cents/in-tune
+  // computed by the Rust engine). The TypeScript machine then stays idle:
+  // running a second hysteresis machine per frame would burn CPU in the hot
+  // path only to have its result discarded, and its target could drift from
+  // the one the resolved frame displays.
+  frameResolved?: Readonly<Ref<boolean>>;
   isChromaticMode: Readonly<Ref<boolean>>;
   selectedString: Readonly<Ref<Note | null>>;
   strings: Readonly<Ref<Note[]>>;
@@ -35,7 +41,17 @@ export function useTuningDetection(dependencies: TuningDetectionDependencies) {
     dependencies.selectedString.value,
   ));
 
-  watch(dependencies.detectedFrequency, update, { flush: 'sync', immediate: true });
+  watch(dependencies.detectedFrequency, () => {
+    if (!frameResolved()) update();
+  }, { flush: 'sync', immediate: true });
+  if (dependencies.frameResolved) {
+    // Entering resolved mode clears stale machine state; leaving it lets the
+    // fallback start from a clean acquisition instead of an old latch.
+    watch(dependencies.frameResolved, () => {
+      machine.reset();
+      update();
+    }, { flush: 'sync' });
+  }
   watch([
     dependencies.a4,
     dependencies.isChromaticMode,
@@ -50,10 +66,14 @@ export function useTuningDetection(dependencies: TuningDetectionDependencies) {
     update();
   }, { deep: true, flush: 'sync' });
 
+  function frameResolved() {
+    return dependencies.frameResolved?.value === true;
+  }
+
   function readInput(): TuningDetectionInput {
     return {
       a4: dependencies.a4.value,
-      frequency: dependencies.detectedFrequency.value,
+      frequency: frameResolved() ? null : dependencies.detectedFrequency.value,
       isChromaticMode: dependencies.isChromaticMode.value,
       selectedString: dependencies.selectedString.value,
       strings: dependencies.strings.value,

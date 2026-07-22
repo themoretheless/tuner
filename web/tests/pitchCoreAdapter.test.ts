@@ -6,7 +6,12 @@ import {
   type PitchCoreModuleLoader,
 } from '../src/workers/pitchCoreAdapter';
 import type { FrameContext } from '../src/types/frames';
-import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
+import {
+  createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
+  pipelineConfigFingerprint,
+  pipelinePresetConfig,
+} from '../src/domain/pipelineConfig';
 import { createPipelineTelemetry } from '../src/domain/pipelineTelemetry';
 import type { PitchDetectionRange, SignalStats } from '../src/utils/pitch';
 
@@ -149,15 +154,11 @@ describe('PitchCoreAdapter', () => {
         pipeline: createPipelineTelemetry({
           adaptiveGateOpen: true,
           arbitration: 'yin-only',
-          confidence: {
-            agreement: 0.68,
-            calibrated: 0.754,
-            periodicity: 0.72,
-            signal: 1,
-            stability: 0.72,
-            uncertaintyCents: 11.428,
-          },
-          configFingerprint: 161_782_394,
+          // Acquiring frames present no fresh confidence evidence: the
+          // estimator resets until the tracker publishes.
+          configFingerprint: pipelineConfigFingerprint(
+            degradedFallbackPipelineConfig(createDefaultPipelineConfig()),
+          ),
           decision: 'tracking-acquiring',
           fixedGateOpen: true,
           gateThreshold: 0.003125,
@@ -174,10 +175,20 @@ describe('PitchCoreAdapter', () => {
     });
     const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
     expect(confirmed.frame.freq).toBeCloseTo(220);
-    expect(confirmed.frame.confidence).toBeCloseTo(0.81);
+    expect(confirmed.frame.pipeline.decision).toBe('published');
+    // The first published frame starts a fresh evidence window.
+    expect(confirmed.frame.pipeline.confidence.stability).toBeCloseTo(0.72);
+    expect(confirmed.frame.confidence).toBeGreaterThan(0.5);
+    expect(confirmed.frame.confidence).toBeLessThan(1);
 
     expect(loadModule).toHaveBeenCalledOnce();
     expect(fallback).toHaveBeenCalledTimes(2);
+    // The fallback deliberately runs a reduced YIN-only pipeline: the TS
+    // secondary detector diverges from the Rust engine's MPM.
+    expect(fallback.mock.calls[0]?.[5]).toMatchObject({
+      secondaryDetectorEnabled: false,
+      yinEnabled: true,
+    });
   });
 
   it('keeps numeric pitch guidance available to the fallback detector', async () => {
@@ -200,20 +211,22 @@ describe('PitchCoreAdapter', () => {
     const loadModule: PitchCoreModuleLoader = vi.fn(async () => {
       throw new Error('missing module');
     });
-    let frequency = 82.4069;
-    const fallback = vi.fn(() => ({ confidence: 0.9, frequency }));
+    const fallback = vi.fn(() => ({ confidence: 0.9, frequency: 82.4069 }));
     const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
 
     await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    await adapter.process(BUFFER, 48_000, STATS, RANGE);
     const settled = await adapter.process(BUFFER, 48_000, STATS, RANGE);
+    expect(settled.frame.pipeline.decision).toBe('published');
     expect(settled.frame.pipeline.confidence.stability).toBe(1);
 
-    frequency = 110;
-    const afterRangeChange = await adapter.process(BUFFER, 48_000, STATS, {
-      minFrequency: 70,
-      maxFrequency: 1_200,
-    });
-    expect(afterRangeChange.frame.pipeline.confidence.stability).toBeCloseTo(0.72);
+    const narrowed: PitchDetectionRange = { minFrequency: 70, maxFrequency: 1_200 };
+    const afterRangeChange = await adapter.process(BUFFER, 48_000, STATS, narrowed);
+    expect(afterRangeChange.frame.pipeline.confidence.calibrated).toBe(0);
+
+    const republished = await adapter.process(BUFFER, 48_000, STATS, narrowed);
+    expect(republished.frame.pipeline.decision).toBe('published');
+    expect(republished.frame.pipeline.confidence.stability).toBeCloseTo(0.72);
   });
 
   it('disables a broken processor and keeps serving the smoothed fallback', async () => {
@@ -245,7 +258,9 @@ describe('PitchCoreAdapter', () => {
     expect(first.frame.confidence).toBe(0);
     const confirmed = await adapter.process(BUFFER, 48_000, STATS, RANGE);
     expect(confirmed.frame.freq).toBeCloseTo(82.4069);
-    expect(confirmed.frame.confidence).toBeCloseTo(0.774);
+    expect(confirmed.frame.pipeline.decision).toBe('published');
+    expect(confirmed.frame.confidence).toBeGreaterThan(0.5);
+    expect(confirmed.frame.confidence).toBeLessThan(1);
 
     expect(process).toHaveBeenCalledOnce();
     expect(processorFree).toHaveBeenCalledOnce();

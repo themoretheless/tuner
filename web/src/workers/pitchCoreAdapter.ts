@@ -1,5 +1,6 @@
 import {
   createDefaultPipelineConfig,
+  degradedFallbackPipelineConfig,
   normalizePipelineConfig,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
@@ -61,6 +62,9 @@ export class PitchCoreAdapter {
     this.moduleUrl = moduleUrl;
     this.loadModule = loadModule;
     this.fallback = fallback;
+    this.fallbackProcessor.setPipelineConfig(
+      degradedFallbackPipelineConfig(this.pipelineConfig),
+    );
   }
 
   async process(
@@ -75,7 +79,9 @@ export class PitchCoreAdapter {
     const pipelineChanged = pipelineConfig != null;
     if (pipelineConfig) {
       this.pipelineConfig = normalizePipelineConfig(pipelineConfig);
-      this.fallbackProcessor.setPipelineConfig(this.pipelineConfig);
+      this.fallbackProcessor.setPipelineConfig(
+        degradedFallbackPipelineConfig(this.pipelineConfig),
+      );
     }
     if (frameContext) {
       this.fallbackProcessor.setContext(frameContext);
@@ -115,7 +121,9 @@ export class PitchCoreAdapter {
     this.processorPromise = null;
     this.fallbackProcessor.setContext(undefined);
     this.pipelineConfig = createDefaultPipelineConfig();
-    this.fallbackProcessor.setPipelineConfig(this.pipelineConfig);
+    this.fallbackProcessor.setPipelineConfig(
+      degradedFallbackPipelineConfig(this.pipelineConfig),
+    );
     this.fallbackProcessor.reset();
     const processor = await pending?.catch(() => null);
     processor?.free();
@@ -162,7 +170,7 @@ export class PitchCoreAdapter {
       stats,
       range,
       this.fallbackProcessor.pitchGuidance,
-      this.pipelineConfig,
+      degradedFallbackPipelineConfig(this.pipelineConfig),
     ));
     const frame = this.fallbackProcessor.process({
       analysis,

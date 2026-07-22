@@ -36,6 +36,16 @@ export class ConfidenceEvidenceEstimator {
       return { ...this.last };
     }
 
+    // Rejected, pending, and acquiring frames must not present fresh
+    // evidence: the raw detector output behind them was not published
+    // (octave-pending frequencies are suspected wrong outright), so seeding
+    // the jitter history with it would let the panel show a confident
+    // readout that contradicts the frame's own decision.
+    if (observation.decision !== 'published') {
+      this.reset();
+      return { ...this.last };
+    }
+
     const frequency = observation.rawFrequency;
     if (!validFrequency(frequency)) {
       this.reset();
