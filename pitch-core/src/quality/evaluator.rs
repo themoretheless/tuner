@@ -5,11 +5,25 @@ use super::{
 };
 use crate::{frequency_to_nearest_midi, get_cents};
 
+/// Lower edge of the absolute cents-error band counted as an octave lock.
+const OCTAVE_ERROR_MIN_CENTS: f32 = 1150.0;
+/// Upper edge of the absolute cents-error band counted as an octave lock.
+const OCTAVE_ERROR_MAX_CENTS: f32 = 1250.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct StableErrorSummary {
+    p50: f32,
+    p95: f32,
+    max: f32,
+    octave_error_ratio: f32,
+}
+
 struct SegmentEvaluation {
     metrics: PitchSegmentMetrics,
     stable_cents_error_seconds: f32,
     stable_detected_seconds: f32,
     stable_duration_seconds: f32,
+    stable_errors: Vec<(f32, f32)>,
 }
 
 pub fn evaluate_pitch_quality(
@@ -59,6 +73,11 @@ pub fn evaluate_pitch_quality(
         .skip(1)
         .filter_map(|evaluation| evaluation.metrics.acquisition_latency_ms)
         .collect();
+    let stable_errors: Vec<_> = evaluations
+        .iter()
+        .flat_map(|evaluation| evaluation.stable_errors.iter().copied())
+        .collect();
+    let stable_summary = summarize_stable_errors(&stable_errors);
 
     Ok(PitchQualityMetrics {
         evaluated_duration_seconds,
@@ -76,6 +95,10 @@ pub fn evaluate_pitch_quality(
         note_switches_per_second: note_switches as f32 / evaluated_duration_seconds,
         stable_sustain_cents_mae: (stable_detected_seconds > 0.0)
             .then_some(stable_cents_error_seconds / stable_detected_seconds),
+        stable_sustain_cents_p50: stable_summary.map(|summary| summary.p50),
+        stable_sustain_cents_p95: stable_summary.map(|summary| summary.p95),
+        stable_sustain_cents_max: stable_summary.map(|summary| summary.max),
+        octave_error_ratio: stable_summary.map(|summary| summary.octave_error_ratio),
         stable_detection_coverage: stable_detected_seconds / stable_duration_seconds,
         segments: evaluations
             .into_iter()
@@ -96,6 +119,7 @@ fn evaluate_segment(
     let mut note_switches = 0usize;
     let mut stable_cents_error_seconds = 0.0;
     let mut stable_detected_seconds = 0.0;
+    let mut stable_errors = Vec::new();
     let stable_start = segment.start_seconds + segment.stable_after_seconds;
     let stable_duration_seconds = segment.end_seconds - stable_start;
     let mut cursor = segment.start_seconds;
@@ -153,9 +177,12 @@ fn evaluate_segment(
                 let duration = interval_end - stable_interval_start;
                 stable_detected_seconds += duration;
                 stable_cents_error_seconds += error * duration;
+                stable_errors.push((error, duration));
             }
         }
     }
+
+    let stable_summary = summarize_stable_errors(&stable_errors);
 
     SegmentEvaluation {
         metrics: PitchSegmentMetrics {
@@ -165,12 +192,58 @@ fn evaluate_segment(
             note_switches,
             stable_sustain_cents_mae: (stable_detected_seconds > 0.0)
                 .then_some(stable_cents_error_seconds / stable_detected_seconds),
+            stable_sustain_cents_p50: stable_summary.map(|summary| summary.p50),
+            stable_sustain_cents_p95: stable_summary.map(|summary| summary.p95),
+            stable_sustain_cents_max: stable_summary.map(|summary| summary.max),
+            octave_error_ratio: stable_summary.map(|summary| summary.octave_error_ratio),
             stable_detection_coverage: stable_detected_seconds / stable_duration_seconds,
         },
         stable_cents_error_seconds,
         stable_detected_seconds,
         stable_duration_seconds,
+        stable_errors,
     }
+}
+
+/// Duration-weighted distribution of absolute sustain cents errors.
+///
+/// `samples` holds `(abs_cents_error, duration_seconds)` pairs collected over
+/// the stable sustain window, the same population that feeds
+/// `stable_sustain_cents_mae`. Percentiles use the weighted nearest-rank
+/// convention; the octave ratio is the duration share of errors inside
+/// ±50 cents around one octave (1200 cents).
+fn summarize_stable_errors(samples: &[(f32, f32)]) -> Option<StableErrorSummary> {
+    let total_duration: f32 = samples.iter().map(|(_, duration)| duration).sum();
+    if samples.is_empty() || total_duration <= 0.0 {
+        return None;
+    }
+
+    let mut sorted: Vec<_> = samples.to_vec();
+    sorted.sort_by(|left, right| left.0.total_cmp(&right.0));
+
+    let weighted_percentile = |quantile: f32| {
+        let threshold = quantile * total_duration;
+        let mut cumulative = 0.0;
+        for (error, duration) in &sorted {
+            cumulative += duration;
+            if cumulative >= threshold {
+                return *error;
+            }
+        }
+        sorted.last().map_or(0.0, |(error, _)| *error)
+    };
+
+    let octave_duration: f32 = sorted
+        .iter()
+        .filter(|(error, _)| (OCTAVE_ERROR_MIN_CENTS..=OCTAVE_ERROR_MAX_CENTS).contains(error))
+        .fold(0.0, |total, (_, duration)| total + duration);
+
+    Some(StableErrorSummary {
+        p50: weighted_percentile(0.50),
+        p95: weighted_percentile(0.95),
+        max: sorted.last().map_or(0.0, |(error, _)| *error),
+        octave_error_ratio: octave_duration / total_duration,
+    })
 }
 
 fn valid_frequency(frequency: Option<f32>) -> Option<f32> {

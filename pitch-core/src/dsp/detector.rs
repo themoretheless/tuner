@@ -1,19 +1,33 @@
 use super::{
     prefer_guided_harmonic, select_pitch_candidate_with_reason, CandidateSelectionReason,
-    HarmonicPitchDetector, MpmDetector, OctaveDisambiguator, PitchGuidance, YinDetector,
+    HarmonicPitchDetector, MpmDetector, OctaveDisambiguator, PhaseRefiner, PitchGuidance,
+    YinDetector,
 };
 use crate::{
-    PipelineArbitration, PipelineCandidate, PipelineConfig, PipelineDecision, PipelineTelemetry,
+    BandPassFilter, PipelineArbitration, PipelineCandidate, PipelineConfig, PipelineDecision,
+    PipelineTelemetry,
 };
 
 const DEFAULT_MIN_FREQUENCY: f32 = 30.0;
-const DEFAULT_MAX_FREQUENCY: f32 = 400.0;
+/// Upper bound of the default search range. A 24-fret guitar tops out at
+/// ~1319 Hz (E6 on the high-E string), so 1.4 kHz keeps every fretted note
+/// inside the default range; the old 400 Hz cut-off rejected everything
+/// above the 12th fret of the high-E string (E4 = 329.6 Hz and up).
+const DEFAULT_MAX_FREQUENCY: f32 = 1_400.0;
 
 /// Lowest normalized periodicity score that may update the tuner readout.
 ///
 /// Confidence is a signal-quality score, not a probability: `0.0` means no
 /// usable periodic estimate and `1.0` means an ideal periodic frame.
 pub const MIN_USABLE_CONFIDENCE: f32 = 0.7;
+
+/// Fixed detector floor: a frame quieter than these thresholds never reaches
+/// the pitch detectors. Canonical single source of truth — the WASM export
+/// and the web fallback mirror (web/src/generated/gateThresholds.ts) both
+/// derive from these values.
+pub const FIXED_GATE_RMS: f32 = 0.0025;
+pub const FIXED_GATE_PEAK: f32 = 0.012;
+pub const DEFAULT_YIN_THRESHOLD: f32 = 0.12;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PitchEstimate {
@@ -43,9 +57,9 @@ impl Default for DetectorConfig {
             min_frequency: DEFAULT_MIN_FREQUENCY,
             max_frequency: DEFAULT_MAX_FREQUENCY,
             min_confidence: MIN_USABLE_CONFIDENCE,
-            peak_gate: 0.012,
-            rms_gate: 0.0025,
-            yin_threshold: 0.12,
+            peak_gate: FIXED_GATE_PEAK,
+            rms_gate: FIXED_GATE_RMS,
+            yin_threshold: DEFAULT_YIN_THRESHOLD,
         }
     }
 }
@@ -86,11 +100,13 @@ pub trait PitchDetector {
 }
 
 pub struct HybridPitchDetector {
+    band_pass: BandPassFilter,
     cleaned: Vec<f32>,
     config: DetectorConfig,
     harmonic: HarmonicPitchDetector,
     mpm: MpmDetector,
     octave: OctaveDisambiguator,
+    phase: PhaseRefiner,
     pipeline: PipelineConfig,
     telemetry: PipelineTelemetry,
     yin: YinDetector,
@@ -107,11 +123,13 @@ impl HybridPitchDetector {
         let mut config = config;
         config.set_min_confidence(config.min_confidence);
         Self {
+            band_pass: BandPassFilter::default(),
             cleaned: Vec::new(),
             config,
             harmonic: HarmonicPitchDetector::new(),
             mpm: MpmDetector::new(config),
             octave: OctaveDisambiguator::new(),
+            phase: PhaseRefiner::new(),
             pipeline: PipelineConfig::default(),
             telemetry: PipelineTelemetry::default(),
             yin: YinDetector::new(config),
@@ -177,7 +195,7 @@ impl HybridPitchDetector {
         self.telemetry.window_samples = buffer.len().min(u32::MAX as usize) as u32;
         self.octave.take_correction_started();
         self.octave.begin_frame();
-        if !self.prepare_samples(buffer) {
+        if !self.prepare_samples(buffer, sample_rate) {
             self.octave.reset();
             return None;
         }
@@ -222,13 +240,18 @@ impl HybridPitchDetector {
             self.telemetry.decision = PipelineDecision::BelowConfidence;
         }
         estimate = estimate.and_then(|estimate| {
+            // Phase-domain refinement removes the residual sub-cent bias of
+            // the parabolic peak interpolation; gated internally so noisy
+            // frames pass through untouched.
+            let estimate = self.phase.refine(&cleaned, sample_rate, estimate);
             let frequency = if self.pipeline.octave_enabled {
-                self.octave.resolve(
+                self.octave.resolve_with_confidence(
                     &cleaned,
                     sample_rate,
                     estimate.frequency,
                     self.config.min_frequency,
                     self.config.max_frequency,
+                    estimate.confidence,
                 )
             } else {
                 estimate.frequency
@@ -254,7 +277,7 @@ impl HybridPitchDetector {
         estimate
     }
 
-    fn prepare_samples(&mut self, buffer: &[f32]) -> bool {
+    fn prepare_samples(&mut self, buffer: &[f32], sample_rate: f32) -> bool {
         if buffer.is_empty() {
             return false;
         }
@@ -284,6 +307,19 @@ impl HybridPitchDetector {
         }
 
         self.telemetry.fixed_gate_open = true;
+
+        // Band-limit the analysis buffer to the frequencies the detector
+        // can report: DC removal already ran above, and the gate measured
+        // the unfiltered signal so its behavior is unchanged. The filter
+        // follows the configured frequency range, keeps the low harmonics
+        // for octave disambiguation, and runs allocation-free with state
+        // carried across consecutive stream frames.
+        self.band_pass.reconfigure(
+            sample_rate,
+            self.config.min_frequency,
+            self.config.max_frequency,
+        );
+        self.band_pass.process_in_place(&mut self.cleaned);
         true
     }
 }
@@ -345,11 +381,60 @@ mod tests {
             .collect();
         let mut detector = HybridPitchDetector::new(DetectorConfig::default());
 
-        assert!(!detector.prepare_samples(&samples));
+        assert!(!detector.prepare_samples(&samples, 48_000.0));
         detector.set_pipeline_config(PipelineConfig {
             dc_removal_enabled: false,
             ..PipelineConfig::default()
         });
-        assert!(detector.prepare_samples(&samples));
+        assert!(detector.prepare_samples(&samples, 48_000.0));
+    }
+
+    #[test]
+    fn band_pass_follows_the_configured_frequency_range() {
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| 0.2 * (std::f32::consts::TAU * 220.0 * index as f32 / 48_000.0).sin())
+            .collect();
+        let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+        assert!(detector.prepare_samples(&samples, 48_000.0));
+        assert_eq!(detector.band_pass.cutoffs(), Some((15.0, 8_400.0)));
+
+        detector.set_frequency_range(200.0, 1_200.0);
+        assert!(detector.prepare_samples(&samples, 48_000.0));
+        assert_eq!(detector.band_pass.cutoffs(), Some((100.0, 7_200.0)));
+
+        // A new sample rate re-derives the Nyquist clamp.
+        assert!(detector.prepare_samples(&samples, 10_000.0));
+        assert_eq!(detector.band_pass.cutoffs(), Some((100.0, 4_500.0)));
+    }
+
+    #[test]
+    fn band_pass_preprocessing_rejects_mains_hum_below_the_range() {
+        // 330 Hz tone buried under stronger 50 Hz mains hum, with a click.
+        // With a 300..1200 Hz range the hum sits far below the high-pass
+        // edge (150 Hz); without preprocessing this signal yields no
+        // detection at all (verified against the pre-change tract).
+        let sample_rate = 48_000.0;
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| {
+                let t = index as f32 / sample_rate;
+                let mut value = 0.3 * (std::f32::consts::TAU * 330.0 * t).sin()
+                    + 0.8 * (std::f32::consts::TAU * 50.0 * t).sin();
+                if index == 2_048 {
+                    value += 1.5; // mechanical click
+                }
+                value
+            })
+            .collect();
+        let config = DetectorConfig::default().with_frequency_range(300.0, 1_200.0);
+        let mut detector = HybridPitchDetector::new(config);
+        let estimate = detector
+            .detect(&samples, sample_rate)
+            .expect("filtered signal must still detect the 330 Hz tone");
+        let cents = 1_200.0 * (estimate.frequency / 330.0).log2().abs();
+        assert!(
+            cents < 15.0,
+            "330 Hz tone under hum must resolve within 15 cents, got {} Hz ({cents} cents)",
+            estimate.frequency
+        );
     }
 }

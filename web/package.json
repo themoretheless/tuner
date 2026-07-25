@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "codegen:note-math": "node ../scripts/generate-note-math.mjs",
-    "codegen:check": "node ../scripts/generate-note-math.mjs --check",
+    "codegen:gate": "node ../scripts/generate-gate-thresholds.mjs",
+    "codegen:check": "node ../scripts/generate-note-math.mjs --check && node ../scripts/generate-gate-thresholds.mjs --check",
     "dev": "npm run codegen:check && npm run build:wasm && vite",
     "build": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build",
     "build:tauri": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build --base ./",

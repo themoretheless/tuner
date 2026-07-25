@@ -6,6 +6,7 @@ import {
   pipelineConfigsEqual,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
+import { GATE_THRESHOLDS } from '../generated/gateThresholds';
 import {
   normalizePitchDetectionRange,
   type PitchDetectionRange,
@@ -13,8 +14,11 @@ import {
   type SignalStats,
 } from './pitch';
 
-const BASE_RMS = 0.0025;
-const BASE_PEAK = 0.012;
+// Canonical gate values come from the Rust core via generated/gateThresholds.ts
+// (scripts/generate-gate-thresholds.mjs); do not reintroduce local literals.
+const ADAPTIVE = GATE_THRESHOLDS.adaptive;
+const BASE_RMS = GATE_THRESHOLDS.rmsGate;
+const BASE_PEAK = GATE_THRESHOLDS.peakGate;
 const ACQUIRE_FRAMES = 2;
 const ACQUIRE_CENTS = 45;
 const INLIER_CENTS = 85;
@@ -38,7 +42,7 @@ export class StreamingPitchTracker {
   private maxFrequency = 1_200;
   private minFrequency = 24;
   private missingFrames = 0;
-  private noiseFloor = BASE_RMS;
+  private noiseFloor: number = BASE_RMS;
   private pipelineConfig = createDefaultPipelineConfig();
   private pendingConfidence = 0;
   private pendingLog: number | null = null;
@@ -179,8 +183,8 @@ export class StreamingPitchTracker {
       adaptiveGateOpen: this.lastAdaptiveGateOpen,
       decision: this.lastDecision,
       gateThreshold: this.gateOpen
-        ? Math.max(BASE_RMS * 0.9, this.noiseFloor * 1.25)
-        : Math.max(BASE_RMS * 1.2, this.noiseFloor * 1.8),
+        ? Math.max(BASE_RMS * ADAPTIVE.closeBaseRmsFactor, this.noiseFloor * ADAPTIVE.closeNoiseRatio)
+        : Math.max(BASE_RMS * ADAPTIVE.openBaseRmsFactor, this.noiseFloor * ADAPTIVE.openNoiseRatio),
       noiseFloor: this.noiseFloor,
       selected: this.lastSelected,
     } as const;
@@ -200,28 +204,33 @@ export class StreamingPitchTracker {
 
   private observeGate(stats: SignalStats, estimate: PitchEstimate | null) {
     const onset = this.previousRms > 0
-      && stats.rms - this.previousRms >= 0.002
-      && stats.rms >= this.previousRms * 1.6;
+      && stats.rms - this.previousRms >= ADAPTIVE.onsetRmsDelta
+      && stats.rms >= this.previousRms * ADAPTIVE.onsetRatio;
     this.previousRms = stats.rms;
 
     if (this.gateOpen) {
-      const closeThreshold = Math.max(BASE_RMS * 0.9, this.noiseFloor * 1.25);
-      this.belowGateFrames = stats.rms < closeThreshold || stats.maxAbs < BASE_PEAK * 0.75
+      const closeThreshold = Math.max(
+        BASE_RMS * ADAPTIVE.closeBaseRmsFactor,
+        this.noiseFloor * ADAPTIVE.closeNoiseRatio,
+      );
+      this.belowGateFrames = stats.rms < closeThreshold || stats.maxAbs < BASE_PEAK * ADAPTIVE.closePeakFactor
         ? this.belowGateFrames + 1
         : 0;
-      if (this.belowGateFrames >= 3) this.gateOpen = false;
+      if (this.belowGateFrames >= ADAPTIVE.closeConfirmFrames) this.gateOpen = false;
       return this.gateOpen;
     }
 
-    const strongAttack = stats.rms >= 0.012 && stats.maxAbs >= 0.03;
+    const strongAttack = stats.rms >= ADAPTIVE.strongAttackRms && stats.maxAbs >= ADAPTIVE.strongAttackPeak;
     const targetDistance = estimate ? this.directTargetDistance(estimate.frequency) : null;
     const trusted = estimate != null && (
-      estimate.confidence >= 0.9
-      || (estimate.confidence >= 0.72 && targetDistance != null && targetDistance <= 90)
+      estimate.confidence >= ADAPTIVE.universalConfidence
+      || (estimate.confidence >= ADAPTIVE.targetConfidence
+        && targetDistance != null
+        && targetDistance <= ADAPTIVE.targetDistanceCents)
     );
     const attackOpen = estimate != null && (strongAttack || onset);
     const qualityOpen = estimate != null
-      && stats.rms >= Math.max(BASE_RMS * 1.2, this.noiseFloor * 1.8)
+      && stats.rms >= Math.max(BASE_RMS * ADAPTIVE.openBaseRmsFactor, this.noiseFloor * ADAPTIVE.openNoiseRatio)
       && stats.maxAbs >= BASE_PEAK
       && trusted;
 
@@ -230,7 +239,7 @@ export class StreamingPitchTracker {
       this.belowGateFrames = 0;
       return true;
     }
-    if (this.calibratedFrames < 4) {
+    if (this.calibratedFrames < ADAPTIVE.calibrationFrames) {
       this.calibratedFrames += 1;
       this.updateNoiseFloor(stats.rms);
       return false;
@@ -241,8 +250,9 @@ export class StreamingPitchTracker {
 
   private updateNoiseFloor(rms: number) {
     if (!Number.isFinite(rms) || rms < 0) return;
-    const bounded = Math.min(rms, Math.max(BASE_RMS, this.noiseFloor * 3));
-    this.noiseFloor = 0.85 * this.noiseFloor + 0.15 * bounded;
+    const bounded = Math.min(rms, Math.max(BASE_RMS, this.noiseFloor * ADAPTIVE.noiseFloorCapFactor));
+    this.noiseFloor = ADAPTIVE.noiseFloorDecay * this.noiseFloor
+      + ADAPTIVE.noiseFloorUpdateWeight * bounded;
   }
 
   private correctOctave(frequency: number) {

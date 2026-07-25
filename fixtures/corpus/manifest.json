@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "real-instruments-v1",
   "configRevision": "pitch-core-quality-v1",
   "thresholds": {
@@ -125,7 +125,7 @@
       "annotation": {
         "method": "librosa.yin 0.11.0 median over the stable interval (4096-sample frame, 256-sample hop, 30-900 Hz), with -42 dB silence boundaries and nominal-note cross-check",
         "nominalFrequency": 110,
-        "measuredFrequency": 110.16760,
+        "measuredFrequency": 110.1676,
         "attackStartSeconds": 0.227,
         "sustainStartSeconds": 0.55,
         "releaseStartSeconds": 2.6,
@@ -136,7 +136,7 @@
           "id": "guitar-a2",
           "startSeconds": 0.227,
           "endSeconds": 2.6,
-          "targetFrequency": 110.16760,
+          "targetFrequency": 110.1676,
           "stableAfterSeconds": 0.32300000000000006
         }
       },
@@ -243,16 +243,16 @@
         "method": "librosa.yin 0.11.0 median over the stable interval (4096-sample frame, 256-sample hop, 30-900 Hz), with -42 dB silence boundaries and nominal-note cross-check",
         "nominalFrequency": 246.94165,
         "measuredFrequency": 247.36734,
-        "attackStartSeconds": 0.180,
+        "attackStartSeconds": 0.18,
         "sustainStartSeconds": 0.55,
-        "releaseStartSeconds": 1.90,
+        "releaseStartSeconds": 1.9,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "guitar-b3",
-          "startSeconds": 0.180,
-          "endSeconds": 1.90,
+          "startSeconds": 0.18,
+          "endSeconds": 1.9,
           "targetFrequency": 247.36734,
           "stableAfterSeconds": 0.37000000000000005
         }
@@ -282,7 +282,7 @@
         "method": "librosa.yin 0.11.0 median over the stable interval (4096-sample frame, 256-sample hop, 30-900 Hz), with -42 dB silence boundaries and nominal-note cross-check",
         "nominalFrequency": 329.62756,
         "measuredFrequency": 330.46036,
-        "attackStartSeconds": 0.220,
+        "attackStartSeconds": 0.22,
         "sustainStartSeconds": 0.55,
         "releaseStartSeconds": 2.6,
         "endSeconds": 3.5
@@ -290,7 +290,7 @@
       "scenario": {
         "segment": {
           "id": "guitar-e4",
-          "startSeconds": 0.220,
+          "startSeconds": 0.22,
           "endSeconds": 2.6,
           "targetFrequency": 330.46036,
           "stableAfterSeconds": 0.33000000000000007
@@ -557,14 +557,14 @@
         "measuredFrequency": 329.60882,
         "attackStartSeconds": 0.15,
         "sustainStartSeconds": 0.55,
-        "releaseStartSeconds": 1.10,
+        "releaseStartSeconds": 1.1,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "uke-e4",
           "startSeconds": 0.15,
-          "endSeconds": 1.10,
+          "endSeconds": 1.1,
           "targetFrequency": 329.60882,
           "stableAfterSeconds": 0.4
         }
@@ -636,14 +636,14 @@
         "measuredFrequency": 193.63579,
         "attackStartSeconds": 0.15,
         "sustainStartSeconds": 0.65,
-        "releaseStartSeconds": 3.10,
+        "releaseStartSeconds": 3.1,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "violin-g3",
           "startSeconds": 0.15,
-          "endSeconds": 3.10,
+          "endSeconds": 3.1,
           "targetFrequency": 193.63579,
           "stableAfterSeconds": 0.5
         }
@@ -675,14 +675,14 @@
         "measuredFrequency": 293.41825,
         "attackStartSeconds": 0.15,
         "sustainStartSeconds": 0.65,
-        "releaseStartSeconds": 3.10,
+        "releaseStartSeconds": 3.1,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "violin-d4",
           "startSeconds": 0.15,
-          "endSeconds": 3.10,
+          "endSeconds": 3.1,
           "targetFrequency": 293.41825,
           "stableAfterSeconds": 0.5
         }
@@ -714,14 +714,14 @@
         "measuredFrequency": 438.89754,
         "attackStartSeconds": 0.15,
         "sustainStartSeconds": 0.65,
-        "releaseStartSeconds": 3.10,
+        "releaseStartSeconds": 3.1,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "violin-a4",
           "startSeconds": 0.15,
-          "endSeconds": 3.10,
+          "endSeconds": 3.1,
           "targetFrequency": 438.89754,
           "stableAfterSeconds": 0.5
         }
@@ -753,14 +753,14 @@
         "measuredFrequency": 659.42271,
         "attackStartSeconds": 0.15,
         "sustainStartSeconds": 0.65,
-        "releaseStartSeconds": 3.10,
+        "releaseStartSeconds": 3.1,
         "endSeconds": 3.5
       },
       "scenario": {
         "segment": {
           "id": "violin-e5",
           "startSeconds": 0.15,
-          "endSeconds": 3.10,
+          "endSeconds": 3.1,
           "targetFrequency": 659.42271,
           "stableAfterSeconds": 0.5
         }
@@ -814,5 +814,38 @@
         "durationSeconds": 0.7
       }
     }
-  ]
+  ],
+  "snrGrid": {
+    "levelsDb": [
+      30,
+      20,
+      10
+    ],
+    "thresholds": {
+      "30": {
+        "maxTimeToFirstCorrectMs": 900,
+        "maxMissedAcquisitions": 1,
+        "maxFalseLockRatio": 0.35,
+        "maxNoteSwitchesPerSecond": 1.5,
+        "maxStableSustainCentsMae": 12,
+        "minStableDetectionCoverage": 0.5
+      },
+      "20": {
+        "maxTimeToFirstCorrectMs": 1100,
+        "maxMissedAcquisitions": 2,
+        "maxFalseLockRatio": 0.45,
+        "maxNoteSwitchesPerSecond": 2.0,
+        "maxStableSustainCentsMae": 15,
+        "minStableDetectionCoverage": 0.45
+      },
+      "10": {
+        "maxTimeToFirstCorrectMs": 1300,
+        "maxMissedAcquisitions": 3,
+        "maxFalseLockRatio": 0.6,
+        "maxNoteSwitchesPerSecond": 3.0,
+        "maxStableSustainCentsMae": 20,
+        "minStableDetectionCoverage": 0.35
+      }
+    }
+  }
 }

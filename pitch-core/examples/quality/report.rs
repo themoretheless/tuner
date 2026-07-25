@@ -2,7 +2,7 @@ mod schema;
 
 use self::schema::{
     ConfigurationReport, CorpusCaptureReport, CorpusReport, CorpusSummary, MetricsReport,
-    QualityReport, SegmentReport, ThresholdsReport,
+    QualityReport, SegmentReport, SnrLevelReport, ThresholdsReport,
 };
 use super::manifest::{
     CorpusCapture, CorpusManifest, ScenarioDefinition, ScenarioRuntime, SCHEMA_VERSION,
@@ -34,35 +34,64 @@ pub(super) fn build(
             min_frequency: scenario.min_frequency,
             max_frequency: scenario.max_frequency,
         },
-        metrics: MetricsReport {
-            evaluated_duration_seconds: metrics.evaluated_duration_seconds,
-            time_to_first_correct_ms: metrics.time_to_first_correct_ms,
-            mean_reacquisition_latency_ms: metrics.mean_reacquisition_latency_ms,
-            max_reacquisition_latency_ms: metrics.max_reacquisition_latency_ms,
-            missed_acquisitions: metrics.missed_acquisitions,
-            false_lock_duration_ms: metrics.false_lock_duration_ms,
-            false_lock_ratio: metrics.false_lock_ratio,
-            note_switches_per_second: metrics.note_switches_per_second,
-            stable_sustain_cents_mae: metrics.stable_sustain_cents_mae,
-            stable_detection_coverage: metrics.stable_detection_coverage,
-            segments: metrics
-                .segments
-                .into_iter()
-                .zip(&scenario.segments)
-                .map(|(metrics, segment)| SegmentReport {
-                    id: segment.id.clone(),
-                    target_frequency: metrics.target_frequency,
-                    acquisition_latency_ms: metrics.acquisition_latency_ms,
-                    false_lock_duration_ms: metrics.false_lock_duration_ms,
-                    note_switches: metrics.note_switches,
-                    stable_sustain_cents_mae: metrics.stable_sustain_cents_mae,
-                    stable_detection_coverage: metrics.stable_detection_coverage,
-                })
-                .collect(),
-        },
+        metrics: metrics_report(metrics, scenario),
     }
 }
 
+fn metrics_report(metrics: PitchQualityMetrics, scenario: &ScenarioDefinition) -> MetricsReport {
+    MetricsReport {
+        evaluated_duration_seconds: metrics.evaluated_duration_seconds,
+        time_to_first_correct_ms: metrics.time_to_first_correct_ms,
+        mean_reacquisition_latency_ms: metrics.mean_reacquisition_latency_ms,
+        max_reacquisition_latency_ms: metrics.max_reacquisition_latency_ms,
+        missed_acquisitions: metrics.missed_acquisitions,
+        false_lock_duration_ms: metrics.false_lock_duration_ms,
+        false_lock_ratio: metrics.false_lock_ratio,
+        note_switches_per_second: metrics.note_switches_per_second,
+        stable_sustain_cents_mae: metrics.stable_sustain_cents_mae,
+        stable_sustain_cents_p50: metrics.stable_sustain_cents_p50,
+        stable_sustain_cents_p95: metrics.stable_sustain_cents_p95,
+        stable_sustain_cents_max: metrics.stable_sustain_cents_max,
+        octave_error_ratio: metrics.octave_error_ratio,
+        stable_detection_coverage: metrics.stable_detection_coverage,
+        segments: metrics
+            .segments
+            .into_iter()
+            .zip(&scenario.segments)
+            .map(|(metrics, segment)| SegmentReport {
+                id: segment.id.clone(),
+                target_frequency: metrics.target_frequency,
+                acquisition_latency_ms: metrics.acquisition_latency_ms,
+                false_lock_duration_ms: metrics.false_lock_duration_ms,
+                note_switches: metrics.note_switches,
+                stable_sustain_cents_mae: metrics.stable_sustain_cents_mae,
+                stable_sustain_cents_p50: metrics.stable_sustain_cents_p50,
+                stable_sustain_cents_p95: metrics.stable_sustain_cents_p95,
+                stable_sustain_cents_max: metrics.stable_sustain_cents_max,
+                octave_error_ratio: metrics.octave_error_ratio,
+                stable_detection_coverage: metrics.stable_detection_coverage,
+            })
+            .collect(),
+    }
+}
+
+pub(super) fn build_snr_level(
+    snr_db: f32,
+    scenario: &ScenarioDefinition,
+    thresholds: PitchQualityThresholds,
+    metrics: PitchQualityMetrics,
+    violations: Vec<QualityThresholdViolation>,
+) -> SnrLevelReport {
+    SnrLevelReport {
+        snr_db,
+        passed: violations.is_empty(),
+        thresholds: thresholds.into(),
+        violations: violations.into_iter().map(Into::into).collect(),
+        metrics: metrics_report(metrics, scenario),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn build_corpus_capture(
     capture: &CorpusCapture,
     path: String,
@@ -71,6 +100,7 @@ pub(super) fn build_corpus_capture(
     thresholds: PitchQualityThresholds,
     metrics: PitchQualityMetrics,
     violations: Vec<QualityThresholdViolation>,
+    snr_levels: Vec<SnrLevelReport>,
 ) -> CorpusCaptureReport {
     CorpusCaptureReport {
         id: capture.id.clone(),
@@ -90,6 +120,7 @@ pub(super) fn build_corpus_capture(
             metrics,
             violations,
         ),
+        snr_levels,
     }
 }
 
@@ -105,16 +136,29 @@ pub(super) fn build_corpus(
         .iter()
         .map(|capture| capture.report.violations.len())
         .sum();
+    let snr_levels_evaluated = captures
+        .iter()
+        .map(|capture| capture.snr_levels.len())
+        .sum();
+    let snr_levels_passed = captures
+        .iter()
+        .flat_map(|capture| capture.snr_levels.iter())
+        .filter(|level| level.passed)
+        .count();
     CorpusReport {
         schema_version: SCHEMA_VERSION,
         corpus: corpus.id.clone(),
         config_revision: corpus.config_revision.clone(),
-        passed: passed_captures == captures.len(),
+        // The clean gate is unchanged: every capture must pass its clean
+        // thresholds. SNR levels gate on top of that, never instead of it.
+        passed: passed_captures == captures.len() && snr_levels_passed == snr_levels_evaluated,
         summary: CorpusSummary {
             capture_count: captures.len(),
             passed_captures,
             failed_captures: captures.len() - passed_captures,
             violation_count,
+            snr_levels_evaluated,
+            snr_levels_passed,
         },
         captures,
     }

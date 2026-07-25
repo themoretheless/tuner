@@ -49,20 +49,23 @@ impl YinDetector {
         self.difference[..max_tau].fill(0.0);
         self.normalized[..max_tau].fill(1.0);
 
+        // Accumulate in f64: the difference function sums thousands of
+        // squared deltas per tau, and f32 accumulation noise moves CMNDF
+        // values around the threshold, flipping borderline decisions.
         for tau in 1..max_tau {
-            let mut sum = 0.0;
+            let mut sum = 0.0_f64;
             for index in 0..analysis_length {
-                let delta = buffer[index] - buffer[index + tau];
+                let delta = f64::from(buffer[index] - buffer[index + tau]);
                 sum += delta * delta;
             }
-            self.difference[tau] = sum;
+            self.difference[tau] = sum as f32;
         }
 
-        let mut running_sum = 0.0;
+        let mut running_sum = 0.0_f64;
         for tau in 1..max_tau {
-            running_sum += self.difference[tau];
+            running_sum += f64::from(self.difference[tau]);
             self.normalized[tau] = if running_sum > 0.0 {
-                self.difference[tau] * tau as f32 / running_sum
+                (f64::from(self.difference[tau]) * tau as f64 / running_sum) as f32
             } else {
                 1.0
             };

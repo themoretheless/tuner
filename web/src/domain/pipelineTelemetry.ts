@@ -66,6 +66,8 @@ export interface PipelineTelemetry {
   held: boolean;
   interference: PipelineInterferenceTelemetry | null;
   noiseFloor: number;
+  /** Set when the detector suppressed a frame pending octave confirmation. */
+  octaveCorrectionPending?: boolean;
   processingMs: number;
   roundTripMs: number;
   sampleRate: number;
@@ -95,6 +97,9 @@ export function createPipelineTelemetry(
     held: Boolean(input.held),
     interference: normalizeInterference(input.interference),
     noiseFloor: nonNegativeFinite(input.noiseFloor),
+    ...(input.octaveCorrectionPending == null
+      ? {}
+      : { octaveCorrectionPending: Boolean(input.octaveCorrectionPending) }),
     processingMs: nonNegativeFinite(input.processingMs),
     roundTripMs: nonNegativeFinite(input.roundTripMs),
     sampleRate: nonNegativeFinite(input.sampleRate),

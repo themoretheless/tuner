@@ -55,6 +55,7 @@ interface WasmTunerFrame {
   readonly octave_active: number;
   readonly octave_base_frequency: number;
   readonly octave_center_score: number;
+  readonly octave_correction_pending: boolean;
   readonly octave_down_score: number;
   readonly octave_pending: number;
   readonly octave_up_score: number;
@@ -194,6 +195,7 @@ export function readWasmFrame(frame: WasmTunerFrame): DetectionFrame {
         selectedTargetFrequency: frame.interference_selected_target_frequency,
       } : null,
       noiseFloor: frame.noise_floor,
+      octaveCorrectionPending: frame.octave_correction_pending,
       sampleRate: frame.sample_rate,
       secondary: frame.has_secondary_candidate ? {
         confidence: frame.secondary_confidence,

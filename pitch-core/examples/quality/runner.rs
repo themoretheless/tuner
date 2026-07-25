@@ -3,7 +3,7 @@ use super::checksum::sha256;
 use super::manifest::{invalid_input, CorpusManifest, ScenarioManifest};
 use super::pipeline::{evaluate_capture, evaluate_thresholds, merge_thresholds};
 use super::report;
-use pitch_core::PitchQualityThresholds;
+use pitch_core::{mix_white_noise_at_snr, PitchQualityThresholds};
 use std::error::Error;
 use std::path::Path;
 
@@ -51,6 +51,25 @@ pub fn run_corpus(manifest_path: &Path) -> Result<(String, bool), Box<dyn Error>
         let metrics = evaluate_capture(&capture.samples, &scenario, &runtime)?;
         let thresholds = merge_thresholds(global_thresholds, scenario.quality_thresholds());
         let violations = evaluate_thresholds(&metrics, Some(thresholds))?;
+
+        // SNR robustness grid: replay the same capture against deterministic
+        // white Gaussian noise (mixed in memory; fixtures stay untouched).
+        // Each level has its own, looser, tolerances from the manifest.
+        let mut snr_levels = Vec::new();
+        if let Some(grid) = &corpus.snr_grid {
+            for (level, level_thresholds) in grid.levels() {
+                let noisy =
+                    mix_white_noise_at_snr(&capture.samples, level, snr_seed(&entry.id, level));
+                let metrics = evaluate_capture(&noisy, &scenario, &runtime)?;
+                let thresholds =
+                    merge_thresholds(level_thresholds.into(), scenario.quality_thresholds());
+                let violations = evaluate_thresholds(&metrics, Some(thresholds))?;
+                snr_levels.push(report::build_snr_level(
+                    level, &scenario, thresholds, metrics, violations,
+                ));
+            }
+        }
+
         capture_reports.push(report::build_corpus_capture(
             entry,
             capture_path.display().to_string(),
@@ -59,12 +78,29 @@ pub fn run_corpus(manifest_path: &Path) -> Result<(String, bool), Box<dyn Error>
             thresholds,
             metrics,
             violations,
+            snr_levels,
         ));
     }
 
     let report = report::build_corpus(&corpus, capture_reports);
     let passed = report.passed();
     Ok((serde_json::to_string_pretty(&report)?, passed))
+}
+
+/// Stable per-capture, per-level noise seed (FNV-1a over the capture id and
+/// the level bits) so grid runs are reproducible but captures do not share
+/// one noise realization.
+fn snr_seed(capture_id: &str, level: f32) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in capture_id
+        .as_bytes()
+        .iter()
+        .chain(level.to_bits().to_le_bytes().iter())
+    {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 fn validate_duration(

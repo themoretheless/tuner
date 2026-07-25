@@ -1,16 +1,26 @@
 use crate::{signal::SignalStats, tracking::PitchPrior, PitchEstimate};
 
-const CALIBRATION_FRAMES: u8 = 4;
-const CLOSE_CONFIRM_FRAMES: u8 = 3;
-const OPEN_NOISE_RATIO: f32 = 1.8;
-const CLOSE_NOISE_RATIO: f32 = 1.25;
-const STRONG_ATTACK_RMS: f32 = 0.012;
-const STRONG_ATTACK_PEAK: f32 = 0.03;
-const ONSET_RATIO: f32 = 1.6;
-const ONSET_RMS_DELTA: f32 = 0.002;
-const UNIVERSAL_CONFIDENCE: f32 = 0.90;
-const TARGET_CONFIDENCE: f32 = 0.72;
-const TARGET_DISTANCE_CENTS: f32 = 90.0;
+// Canonical adaptive-gate constants. These are the single source of truth:
+// the WASM export in `wasm.rs` and the web fallback mirror
+// (web/src/generated/gateThresholds.ts via scripts/generate-gate-thresholds.mjs)
+// both derive from them.
+pub(crate) const CALIBRATION_FRAMES: u8 = 4;
+pub(crate) const CLOSE_CONFIRM_FRAMES: u8 = 3;
+pub(crate) const OPEN_NOISE_RATIO: f32 = 1.8;
+pub(crate) const CLOSE_NOISE_RATIO: f32 = 1.25;
+pub(crate) const OPEN_BASE_RMS_FACTOR: f32 = 1.2;
+pub(crate) const CLOSE_BASE_RMS_FACTOR: f32 = 0.9;
+pub(crate) const CLOSE_PEAK_FACTOR: f32 = 0.75;
+pub(crate) const STRONG_ATTACK_RMS: f32 = 0.012;
+pub(crate) const STRONG_ATTACK_PEAK: f32 = 0.03;
+pub(crate) const ONSET_RATIO: f32 = 1.6;
+pub(crate) const ONSET_RMS_DELTA: f32 = 0.002;
+pub(crate) const UNIVERSAL_CONFIDENCE: f32 = 0.90;
+pub(crate) const TARGET_CONFIDENCE: f32 = 0.72;
+pub(crate) const TARGET_DISTANCE_CENTS: f32 = 90.0;
+pub(crate) const NOISE_FLOOR_DECAY: f32 = 0.85;
+pub(crate) const NOISE_FLOOR_UPDATE_WEIGHT: f32 = 0.15;
+pub(crate) const NOISE_FLOOR_CAP_FACTOR: f32 = 3.0;
 
 /// Learns the local noise floor while idle and opens only for a plausible
 /// pitched signal. The detector's fixed floor protects its math; this gate
@@ -51,8 +61,9 @@ impl AdaptiveSignalGate {
         self.previous_rms = stats.rms;
 
         if self.open {
-            let close_threshold = (self.noise_floor * CLOSE_NOISE_RATIO).max(self.base_rms * 0.9);
-            if stats.rms < close_threshold || stats.peak < self.base_peak * 0.75 {
+            let close_threshold =
+                (self.noise_floor * CLOSE_NOISE_RATIO).max(self.base_rms * CLOSE_BASE_RMS_FACTOR);
+            if stats.rms < close_threshold || stats.peak < self.base_peak * CLOSE_PEAK_FACTOR {
                 self.below_streak = self.below_streak.saturating_add(1);
                 if self.below_streak >= CLOSE_CONFIRM_FRAMES {
                     self.open = false;
@@ -74,7 +85,8 @@ impl AdaptiveSignalGate {
                         .is_some_and(|distance| distance <= TARGET_DISTANCE_CENTS))
         });
         let attack_open = estimate.is_some() && (strong_attack || onset);
-        let dynamic_open = (self.noise_floor * OPEN_NOISE_RATIO).max(self.base_rms * 1.2);
+        let dynamic_open =
+            (self.noise_floor * OPEN_NOISE_RATIO).max(self.base_rms * OPEN_BASE_RMS_FACTOR);
         let quality_open = has_detector_energy && stats.rms >= dynamic_open && trusted_estimate;
 
         if attack_open || quality_open {
@@ -109,9 +121,9 @@ impl AdaptiveSignalGate {
 
     pub(crate) fn threshold(&self) -> f32 {
         if self.open {
-            (self.noise_floor * CLOSE_NOISE_RATIO).max(self.base_rms * 0.9)
+            (self.noise_floor * CLOSE_NOISE_RATIO).max(self.base_rms * CLOSE_BASE_RMS_FACTOR)
         } else {
-            (self.noise_floor * OPEN_NOISE_RATIO).max(self.base_rms * 1.2)
+            (self.noise_floor * OPEN_NOISE_RATIO).max(self.base_rms * OPEN_BASE_RMS_FACTOR)
         }
     }
 
@@ -119,8 +131,9 @@ impl AdaptiveSignalGate {
         if !rms.is_finite() || rms < 0.0 {
             return;
         }
-        let bounded = rms.min((self.noise_floor * 3.0).max(self.base_rms));
-        self.noise_floor = 0.85 * self.noise_floor + 0.15 * bounded;
+        let bounded = rms.min((self.noise_floor * NOISE_FLOOR_CAP_FACTOR).max(self.base_rms));
+        self.noise_floor =
+            NOISE_FLOOR_DECAY * self.noise_floor + NOISE_FLOOR_UPDATE_WEIGHT * bounded;
     }
 }
 

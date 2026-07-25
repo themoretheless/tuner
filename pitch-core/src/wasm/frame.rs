@@ -45,6 +45,7 @@ pub struct WasmDetectionFrame {
     octave_active: i8,
     octave_base_frequency: f32,
     octave_center_score: f32,
+    octave_correction_pending: bool,
     octave_down_score: f32,
     octave_pending: i8,
     octave_up_score: f32,
@@ -275,6 +276,11 @@ impl WasmDetectionFrame {
     }
 
     #[wasm_bindgen(getter)]
+    pub fn octave_correction_pending(&self) -> bool {
+        self.octave_correction_pending
+    }
+
+    #[wasm_bindgen(getter)]
     pub fn octave_down_score(&self) -> f32 {
         self.octave_down_score
     }
@@ -420,6 +426,7 @@ impl From<DetectionFrame> for WasmDetectionFrame {
             octave_active: spectral.active_octave,
             octave_base_frequency: spectral.base_frequency,
             octave_center_score: spectral.octave_scores[1],
+            octave_correction_pending: pipeline.octave_correction_pending,
             octave_down_score: spectral.octave_scores[0],
             octave_pending: spectral.pending_octave,
             octave_up_score: spectral.octave_scores[2],

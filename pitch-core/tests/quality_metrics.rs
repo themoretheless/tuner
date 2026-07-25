@@ -132,6 +132,99 @@ fn computes_time_weighted_stable_sustain_mae() {
 }
 
 #[test]
+fn computes_duration_weighted_sustain_error_distribution() {
+    // Stable window is 0.2..1.0: in tune for 0.4s, one octave up for 0.4s.
+    let metrics = evaluate_pitch_quality(
+        &[observation(0.0, Some(100.0)), observation(0.6, Some(200.0))],
+        &[segment(0.0, 1.0, 100.0, 0.2)],
+        QualityEvaluationConfig::default(),
+    )
+    .expect("valid octave trace");
+
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_mae.unwrap(),
+        600.0,
+        epsilon = 0.5
+    );
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_p50.unwrap(),
+        0.0,
+        epsilon = 0.01
+    );
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_p95.unwrap(),
+        1200.0,
+        epsilon = 0.5
+    );
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_max.unwrap(),
+        1200.0,
+        epsilon = 0.5
+    );
+    assert_abs_diff_eq!(metrics.octave_error_ratio.unwrap(), 0.5, epsilon = 0.0001);
+    assert_eq!(metrics.segments.len(), 1);
+    assert_abs_diff_eq!(
+        metrics.segments[0].octave_error_ratio.unwrap(),
+        0.5,
+        epsilon = 0.0001
+    );
+    assert_abs_diff_eq!(
+        metrics.segments[0].stable_sustain_cents_max.unwrap(),
+        1200.0,
+        epsilon = 0.5
+    );
+}
+
+#[test]
+fn reports_zero_octave_ratio_when_errors_stay_within_tolerance() {
+    let ten_cents_sharp = 100.0 * 2.0_f32.powf(10.0 / 1200.0);
+    let metrics = evaluate_pitch_quality(
+        &[observation(0.0, Some(ten_cents_sharp))],
+        &[segment(0.0, 1.0, 100.0, 0.2)],
+        QualityEvaluationConfig {
+            tolerance_cents: 15.0,
+            ..QualityEvaluationConfig::default()
+        },
+    )
+    .expect("valid detuned trace");
+
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_p50.unwrap(),
+        10.0,
+        epsilon = 0.01
+    );
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_p95.unwrap(),
+        10.0,
+        epsilon = 0.01
+    );
+    assert_abs_diff_eq!(
+        metrics.stable_sustain_cents_max.unwrap(),
+        10.0,
+        epsilon = 0.01
+    );
+    assert_abs_diff_eq!(metrics.octave_error_ratio.unwrap(), 0.0, epsilon = 0.0001);
+}
+
+#[test]
+fn reports_no_error_distribution_without_stable_detection() {
+    let metrics = evaluate_pitch_quality(
+        &[observation(0.0, None)],
+        &[segment(0.0, 1.0, 100.0, 0.2)],
+        QualityEvaluationConfig::default(),
+    )
+    .expect("valid silence trace");
+
+    assert_eq!(metrics.stable_sustain_cents_mae, None);
+    assert_eq!(metrics.stable_sustain_cents_p50, None);
+    assert_eq!(metrics.stable_sustain_cents_p95, None);
+    assert_eq!(metrics.stable_sustain_cents_max, None);
+    assert_eq!(metrics.octave_error_ratio, None);
+    assert_eq!(metrics.segments[0].stable_sustain_cents_p95, None);
+    assert_eq!(metrics.segments[0].octave_error_ratio, None);
+}
+
+#[test]
 fn rejects_invalid_and_overlapping_scenarios() {
     assert_eq!(
         evaluate_pitch_quality(&[], &[], QualityEvaluationConfig::default()),

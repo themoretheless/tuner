@@ -35,17 +35,19 @@ impl MpmDetector {
 
         self.normalized_square_difference.resize(max_tau, 0.0);
         let calculation_start = min_tau.saturating_sub(1);
+        // Same rationale as YIN: accumulate the NSDF sums in f64 so long
+        // windows do not lose precision near the peak-picking thresholds.
         for tau in calculation_start..max_tau {
-            let mut numerator = 0.0;
-            let mut denominator = 0.0;
+            let mut numerator = 0.0_f64;
+            let mut denominator = 0.0_f64;
             for index in 0..(length - tau) {
-                let left = buffer[index];
-                let right = buffer[index + tau];
+                let left = f64::from(buffer[index]);
+                let right = f64::from(buffer[index + tau]);
                 numerator += left * right;
                 denominator += left * left + right * right;
             }
             self.normalized_square_difference[tau] = if denominator > 0.0 {
-                2.0 * numerator / denominator
+                (2.0 * numerator / denominator) as f32
             } else {
                 0.0
             };

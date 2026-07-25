@@ -41,6 +41,20 @@ pub(crate) struct CorpusCaptureReport {
     pub(super) source_license_url: String,
     #[serde(flatten)]
     pub(super) report: QualityReport,
+    /// Per-SNR-level robustness results (deterministic noise mix); empty
+    /// when the corpus manifest defines no `snrGrid`.
+    pub(super) snr_levels: Vec<SnrLevelReport>,
+}
+
+/// Evaluation of one capture at one SNR level.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SnrLevelReport {
+    pub(super) snr_db: f32,
+    pub(super) passed: bool,
+    pub(super) thresholds: ThresholdsReport,
+    pub(super) violations: Vec<ThresholdViolationReport>,
+    pub(super) metrics: MetricsReport,
 }
 
 #[derive(Serialize)]
@@ -50,6 +64,8 @@ pub(super) struct CorpusSummary {
     pub(super) passed_captures: usize,
     pub(super) failed_captures: usize,
     pub(super) violation_count: usize,
+    pub(super) snr_levels_evaluated: usize,
+    pub(super) snr_levels_passed: usize,
 }
 
 #[derive(Serialize)]
@@ -88,6 +104,10 @@ pub(super) struct MetricsReport {
     pub(super) false_lock_ratio: f32,
     pub(super) note_switches_per_second: f32,
     pub(super) stable_sustain_cents_mae: Option<f32>,
+    pub(super) stable_sustain_cents_p50: Option<f32>,
+    pub(super) stable_sustain_cents_p95: Option<f32>,
+    pub(super) stable_sustain_cents_max: Option<f32>,
+    pub(super) octave_error_ratio: Option<f32>,
     pub(super) stable_detection_coverage: f32,
     pub(super) segments: Vec<SegmentReport>,
 }
@@ -101,6 +121,10 @@ pub(super) struct SegmentReport {
     pub(super) false_lock_duration_ms: f32,
     pub(super) note_switches: usize,
     pub(super) stable_sustain_cents_mae: Option<f32>,
+    pub(super) stable_sustain_cents_p50: Option<f32>,
+    pub(super) stable_sustain_cents_p95: Option<f32>,
+    pub(super) stable_sustain_cents_max: Option<f32>,
+    pub(super) octave_error_ratio: Option<f32>,
     pub(super) stable_detection_coverage: f32,
 }
 

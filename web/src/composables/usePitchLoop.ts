@@ -38,6 +38,17 @@ const PITCH_WORKER_TIMEOUT_MS = 1_500;
 // clears quickly, a mid-decay dip does not.
 const QUIET_TICKS_BEFORE_CLEAR = 8;
 
+// How many consecutive too-quiet rAF ticks before the worker-side processor
+// (smoother/tracker) is reset. This is intentionally much earlier than
+// QUIET_TICKS_BEFORE_CLEAR: the UI hold only affects what is on screen, while
+// the worker keeps blending state internally. Without an early reset, a pause
+// shorter than QUIET_TICKS_BEFORE_CLEAR followed by a new note makes the
+// worker smoother "glue" the two notes together and the readout shows
+// transitional garbage between them. ~3 ticks is roughly 50ms at 60fps —
+// long enough to survive a single dropped/gated frame mid-note, short enough
+// to cover any perceptible inter-note pause.
+const QUIET_TICKS_BEFORE_WORKER_RESET = 3;
+
 export function usePitchLoop(
   readFrame: () => AudioFrame | null,
   detectionRange: Ref<PitchDetectionRange> = ref(DEFAULT_PITCH_DETECTION_RANGE),
@@ -204,19 +215,22 @@ export function usePitchLoop(
     const signalTooQuiet = pipelineConfig.value.fixedGateEnabled
       && isBelowPitchDetectionGate(stats);
     if (signalTooQuiet) {
-      // Hold the current reading through brief dips (a decaying string
-      // crossing the gate): skip detection, keep the last frame on screen,
-      // and only clear once the quiet is sustained. The one-time worker
-      // reset makes sure the next note starts from a clean smoother instead
-      // of blending with the note that just ended.
+      // Two independent thresholds while the signal is quiet:
+      // 1) Processor reset (early): the worker smoother/tracker must forget
+      //    the ending note quickly, otherwise a new note after a short pause
+      //    (< QUIET_TICKS_BEFORE_CLEAR) blends with it and the readout shows
+      //    transitional garbage between the notes.
+      // 2) UI clear (late): the display holds the last reading through brief
+      //    dips so a decaying string does not flicker between a value and a
+      //    dash; only sustained quiet clears the screen.
       quietTicks += 1;
+      const resetAt = pipelineConfig.value.holdEnabled
+        ? QUIET_TICKS_BEFORE_WORKER_RESET
+        : 1;
+      if (quietTicks === resetAt) resetWorkerProcessor();
       const shouldClear = !pipelineConfig.value.holdEnabled
         || quietTicks >= QUIET_TICKS_BEFORE_CLEAR;
       if (shouldClear) {
-        const resetAt = pipelineConfig.value.holdEnabled
-          ? QUIET_TICKS_BEFORE_CLEAR
-          : 1;
-        if (quietTicks === resetAt) resetWorkerProcessor();
         pitchRequestId += 1;
         applyFallbackAnalysis(null, stats, frame);
       }

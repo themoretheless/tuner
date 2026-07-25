@@ -12,6 +12,38 @@ pub(crate) fn apply_hann_window(input: &[f32], output: &mut Vec<f32>) {
     }
 }
 
+/// Complex single-frequency DFT of `samples` at `frequency` under a Hann
+/// window. Returns `(re, im)` of `sum w[n] x[n] e^-i*2*pi*f*n/sr` accumulated
+/// in f64: the phase refiners compare these probes across shifted windows,
+/// where f32 accumulation noise would show up directly as phase bias.
+pub(crate) fn windowed_probe(samples: &[f32], sample_rate: f32, frequency: f32) -> (f64, f64) {
+    if samples.len() < 2
+        || !sample_rate.is_finite()
+        || sample_rate <= 0.0
+        || !frequency.is_finite()
+        || frequency <= 0.0
+    {
+        return (0.0, 0.0);
+    }
+    let step = std::f64::consts::TAU * f64::from(frequency) / f64::from(sample_rate);
+    let (sin_step, cos_step) = step.sin_cos();
+    let mut cos = 1.0_f64;
+    let mut sin = 0.0_f64;
+    let mut re = 0.0_f64;
+    let mut im = 0.0_f64;
+    let scale = std::f64::consts::TAU / (samples.len() - 1) as f64;
+    for (index, sample) in samples.iter().enumerate() {
+        let window = 0.5 * (1.0 - (scale * index as f64).cos());
+        let value = f64::from(*sample) * window;
+        re += value * cos;
+        im -= value * sin;
+        let next_cos = cos * cos_step - sin * sin_step;
+        sin = sin * cos_step + cos * sin_step;
+        cos = next_cos;
+    }
+    (re, im)
+}
+
 /// Spectral power at an arbitrary frequency via the Goertzel recurrence.
 pub(crate) fn goertzel_power(samples: &[f32], sample_rate: f32, frequency: f32) -> f32 {
     if samples.is_empty()

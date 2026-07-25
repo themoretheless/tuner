@@ -8,6 +8,7 @@ import {
   type PipelineConfig,
 } from '../domain/pipelineConfig';
 import type { PipelineArbitration } from '../domain/pipelineTelemetry';
+import { GATE_THRESHOLDS } from '../generated/gateThresholds';
 
 export interface PitchDetectionRange {
   minFrequency: number;
@@ -37,9 +38,9 @@ export const DEFAULT_PITCH_DETECTION_RANGE: PitchDetectionRange = {
   maxFrequency: 1200,
 };
 
-const YIN_THRESHOLD = 0.12; // classic value, can be tuned 0.1-0.2
-const MIN_RMS = 0.0025;
-const MIN_PEAK = 0.012;
+const YIN_THRESHOLD = GATE_THRESHOLDS.yinThreshold; // classic value, can be tuned 0.1-0.2
+const MIN_RMS = GATE_THRESHOLDS.rmsGate;
+const MIN_PEAK = GATE_THRESHOLDS.peakGate;
 const DETECTOR_AGREEMENT_CENTS = 35;
 const DECISIVE_CONFIDENCE_MARGIN = 0.12;
 const GUIDED_IMPROVEMENT_CENTS = 80;
@@ -48,7 +49,7 @@ const STRONG_DISAGREEMENT_CONFIDENCE = 0.9;
 
 // Confidence is normalized periodicity quality, not a probability. Frames
 // below this score do not update the readout in either the Rust or TS path.
-export const MIN_USABLE_PITCH_CONFIDENCE = 0.7;
+export const MIN_USABLE_PITCH_CONFIDENCE = GATE_THRESHOLDS.minUsableConfidence;
 
 export interface SignalStats {
   rms: number;
@@ -70,8 +71,12 @@ export function computeSignalStats(buffer: Float32Array): SignalStats {
   };
 }
 
+// Fixed quiet gate. Uses the canonical pitch-core thresholds
+// (generated/gateThresholds.ts): previously this guard used looser local
+// values (rms 0.002 / peak 0.01), so the main thread could accept frames the
+// Rust core's fixed gate would reject. Unified toward the core values.
 export function isBelowPitchDetectionGate(stats: SignalStats) {
-  return stats.rms < 0.002 || stats.maxAbs < 0.01;
+  return stats.rms < GATE_THRESHOLDS.rmsGate || stats.maxAbs < GATE_THRESHOLDS.peakGate;
 }
 
 // Reusable buffers

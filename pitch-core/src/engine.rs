@@ -206,6 +206,11 @@ impl TunerEngine {
             // detector already suspects is wrong.
             estimate = None;
             pipeline_telemetry.decision = PipelineDecision::OctavePending;
+            // Keep the suspicion as a standalone flag: the decision below
+            // may be overwritten by the readout outcome (e.g. Held while a
+            // settled track rides out the suppressed frame), and the fact
+            // that the detector doubted its own octave must survive that.
+            pipeline_telemetry.octave_correction_pending = true;
         }
 
         let gate_open = !self.pipeline.adaptive_gate_enabled

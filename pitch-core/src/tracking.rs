@@ -300,7 +300,15 @@ impl PitchTracker {
     fn history_median(&self) -> f32 {
         let mut values = self.history;
         values[..self.history_length].sort_by(f32::total_cmp);
-        values[self.history_length / 2]
+        let upper = self.history_length / 2;
+        if self.history_length.is_multiple_of(2) {
+            // Even count: average the two central order statistics. Taking
+            // just the upper one biases the track upward right after a
+            // commit, when the history holds exactly two frames.
+            (values[upper - 1] + values[upper]) * 0.5
+        } else {
+            values[upper]
+        }
     }
 }
 
@@ -413,6 +421,19 @@ mod tests {
         assert!((prior.correct_octave(164.9) - 82.45).abs() < 0.2);
         assert!((prior.correct_octave(160.0) - 80.0).abs() < 0.01);
         assert!((prior.correct_octave(111.0) - 111.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn history_median_averages_the_two_central_values_on_even_length() {
+        let mut tracker = PitchTracker::new();
+        tracker.push_history(2.0);
+        assert_eq!(tracker.history_median(), 2.0);
+        tracker.push_history(4.0);
+        // Regression: the old upper-median returned 4.0 here, biasing the
+        // track upward for the first inlier after every commit.
+        assert_eq!(tracker.history_median(), 3.0);
+        tracker.push_history(9.0);
+        assert_eq!(tracker.history_median(), 4.0);
     }
 
     #[test]

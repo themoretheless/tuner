@@ -192,6 +192,12 @@ pub struct PipelineTelemetry {
     pub held: bool,
     pub interference: Option<PipelineInterferenceTelemetry>,
     pub noise_floor: f32,
+    /// The detector suspects its own octave on this frame, but the fold has
+    /// not survived confirmation yet. Kept as a separate flag (not a
+    /// `PipelineDecision` variant) because the frame's decision still
+    /// describes what happened to the readout - e.g. `Held` while the last
+    /// settled frequency is ridden out - and both facts must survive.
+    pub octave_correction_pending: bool,
     pub processing_ms: f32,
     pub sample_rate: f32,
     pub secondary: Option<PipelineCandidate>,

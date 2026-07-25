@@ -26,6 +26,32 @@ fn engine(pipeline: PipelineConfig) -> TunerEngine {
     })
 }
 
+fn engine_default_range() -> TunerEngine {
+    TunerEngine::with_config(EngineConfig {
+        spectrum_bins: 0,
+        tuning: Some(Tuning {
+            name: "Chromatic",
+            strings: Vec::new(),
+        }),
+        ..EngineConfig::default()
+    })
+}
+
+/// A 1024-sample harmonic-rich 110 Hz frame: too short for the spectral
+/// cross-check to trust the reported octave, so the detector holds an
+/// unconfirmed fold and the engine reports OctavePending.
+fn short_harmonic_buffer() -> Vec<f32> {
+    (0..1024)
+        .map(|index| {
+            let phase = std::f32::consts::TAU * 110.0 * index as f32 / SAMPLE_RATE;
+            0.05 * phase.sin()
+                + (2.0 * phase).sin()
+                + 0.5 * (3.0 * phase).sin()
+                + 0.3 * (4.0 * phase).sin()
+        })
+        .collect()
+}
+
 #[test]
 fn disabling_tracking_publishes_the_first_coherent_frame() {
     let samples = sine(220.0, 0.5);
@@ -135,4 +161,38 @@ fn fixed_gate_rejection_is_visible_in_telemetry() {
     assert_eq!(frame.pipeline.decision, PipelineDecision::FixedGateRejected);
     assert!(!frame.pipeline.fixed_gate_open);
     assert!(frame.pipeline.selected.is_none());
+}
+
+#[test]
+fn held_frame_keeps_pending_octave_correction_in_telemetry() {
+    let suspicious = short_harmonic_buffer();
+
+    // On a fresh engine (nothing to hold) the frame surfaces OctavePending.
+    let fresh = engine_default_range().process(&suspicious, SAMPLE_RATE);
+    assert_eq!(fresh.pipeline.decision, PipelineDecision::OctavePending);
+    assert!(fresh.pipeline.octave_correction_pending);
+    assert!(fresh.freq.is_none());
+
+    // With a settled track the readout holds the last value through the
+    // suppressed frame; the hold must not erase the octave suspicion.
+    let stable = sine(110.0, 0.5);
+    let mut tuner = engine_default_range();
+    let mut published_freq = None;
+    for _ in 0..8 {
+        if let Some(frequency) = tuner.process(&stable, SAMPLE_RATE).freq {
+            published_freq = Some(frequency);
+            break;
+        }
+    }
+    let published_freq = published_freq.expect("track settles on the stable tone");
+
+    let held = tuner.process(&suspicious, SAMPLE_RATE);
+    assert_eq!(held.pipeline.decision, PipelineDecision::Held);
+    assert!(held.pipeline.held);
+    assert!(
+        held.pipeline.octave_correction_pending,
+        "the hold must not erase the unconfirmed octave correction"
+    );
+    let held_freq = held.freq.expect("held reading keeps the settled value");
+    assert!((held_freq - published_freq).abs() < 0.5);
 }

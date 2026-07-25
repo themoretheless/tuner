@@ -38,6 +38,10 @@ pub struct PitchSegmentMetrics {
     pub false_lock_duration_ms: f32,
     pub note_switches: usize,
     pub stable_sustain_cents_mae: Option<f32>,
+    pub stable_sustain_cents_p50: Option<f32>,
+    pub stable_sustain_cents_p95: Option<f32>,
+    pub stable_sustain_cents_max: Option<f32>,
+    pub octave_error_ratio: Option<f32>,
     pub stable_detection_coverage: f32,
 }
 
@@ -52,6 +56,10 @@ pub struct PitchQualityMetrics {
     pub false_lock_ratio: f32,
     pub note_switches_per_second: f32,
     pub stable_sustain_cents_mae: Option<f32>,
+    pub stable_sustain_cents_p50: Option<f32>,
+    pub stable_sustain_cents_p95: Option<f32>,
+    pub stable_sustain_cents_max: Option<f32>,
+    pub octave_error_ratio: Option<f32>,
     pub stable_detection_coverage: f32,
     pub segments: Vec<PitchSegmentMetrics>,
 }

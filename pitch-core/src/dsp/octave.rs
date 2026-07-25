@@ -10,6 +10,7 @@
 //! frame, no full FFT needed) and folds the estimate when the spectral
 //! evidence contradicts it.
 
+use super::hps::{HpsGuard, HpsVerdict};
 use super::spectral::{apply_hann_window, goertzel_power};
 use crate::PipelineSpectralTelemetry;
 
@@ -97,6 +98,7 @@ pub struct OctaveDisambiguator {
     pending_streak: u8,
     correction_started: bool,
     evidence: Option<PipelineSpectralTelemetry>,
+    hps: HpsGuard,
 }
 
 impl Default for OctaveDisambiguator {
@@ -114,6 +116,7 @@ impl OctaveDisambiguator {
             pending_streak: 0,
             correction_started: false,
             evidence: None,
+            hps: HpsGuard::new(),
         }
     }
 
@@ -162,6 +165,29 @@ impl OctaveDisambiguator {
         min_frequency: f32,
         max_frequency: f32,
     ) -> f32 {
+        // Public callers supply no confidence; use a mid-range value so the
+        // HPS guard runs with its strictest dominance requirement.
+        self.resolve_with_confidence(
+            buffer,
+            sample_rate,
+            frequency,
+            min_frequency,
+            max_frequency,
+            0.90,
+        )
+    }
+
+    /// Same as [`Self::resolve`], but the time-domain estimate's confidence
+    /// gates the HPS guard (very confident frames are never flipped).
+    pub(crate) fn resolve_with_confidence(
+        &mut self,
+        buffer: &[f32],
+        sample_rate: f32,
+        frequency: f32,
+        min_frequency: f32,
+        max_frequency: f32,
+        confidence: f32,
+    ) -> f32 {
         self.correction_started = false;
         if buffer.len() < 64
             || !sample_rate.is_finite()
@@ -175,7 +201,25 @@ impl OctaveDisambiguator {
         apply_hann_window(buffer, &mut self.windowed);
 
         let powers = self.measure_powers(sample_rate, frequency, min_frequency);
-        let desired = self.desired_fold(powers, frequency, min_frequency, max_frequency);
+        let mut desired = self.desired_fold(powers, frequency, min_frequency, max_frequency);
+        if desired == FoldDirection::None {
+            // The Goertzel probes saw nothing conclusive; ask the harmonic
+            // product spectrum. The HPS verdict feeds the same confirmation
+            // state machine below, so it needs the same consecutive-frame
+            // evidence before it can move the readout.
+            desired = match self.hps.verdict(
+                buffer,
+                sample_rate,
+                frequency,
+                confidence,
+                min_frequency,
+                max_frequency,
+            ) {
+                HpsVerdict::Double => FoldDirection::Up,
+                HpsVerdict::Half => FoldDirection::Down,
+                HpsVerdict::Neutral => FoldDirection::None,
+            };
+        }
         let previous_active = self.active;
 
         if desired == self.active {

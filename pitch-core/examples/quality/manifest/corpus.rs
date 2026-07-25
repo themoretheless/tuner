@@ -17,6 +17,48 @@ pub struct CorpusManifest {
     pub scenario_defaults: CorpusScenarioDefaults,
     pub requirements: Vec<CorpusRequirement>,
     pub captures: Vec<CorpusCapture>,
+    /// Optional SNR robustness grid: every capture is re-evaluated against
+    /// deterministic noise mixed at each listed level.
+    pub snr_grid: Option<SnrGridManifest>,
+}
+
+/// SNR robustness grid evaluated on top of the clean corpus gate.
+///
+/// `thresholds` keys are the level in dB formatted without a fractional part
+/// (`"30"`, `"20"`, `"10"`); every level in `levels_db` must have an entry.
+/// Tolerances are expected to loosen as the level drops — the clean gate
+/// (`thresholds`) is evaluated separately and stays unchanged.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SnrGridManifest {
+    pub levels_db: Vec<f32>,
+    pub thresholds: std::collections::HashMap<String, ThresholdManifest>,
+}
+
+impl SnrGridManifest {
+    /// Validated `(level, thresholds)` pairs in descending-SNR order.
+    pub fn levels(&self) -> Vec<(f32, ThresholdManifest)> {
+        let mut levels: Vec<(f32, ThresholdManifest)> = self
+            .levels_db
+            .iter()
+            .filter_map(|level| {
+                self.thresholds
+                    .get(&snr_level_key(*level))
+                    .map(|thresholds| (*level, *thresholds))
+            })
+            .collect();
+        levels.sort_by(|left, right| right.0.total_cmp(&left.0));
+        levels
+    }
+}
+
+/// Stable string key for an SNR level (`30.0` -> `"30"`).
+pub fn snr_level_key(level: f32) -> String {
+    if level.fract() == 0.0 {
+        format!("{}", level as i64)
+    } else {
+        format!("{level}")
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +127,29 @@ impl CorpusManifest {
             return Err(invalid_input(
                 "corpus thresholds must gate acquisition, misses, false locks, note switches, sustain error and coverage",
             ));
+        }
+        if let Some(grid) = &self.snr_grid {
+            if grid.levels_db.is_empty()
+                || grid
+                    .levels_db
+                    .iter()
+                    .any(|level| !level.is_finite() || *level <= 0.0)
+            {
+                return Err(invalid_input("snrGrid levelsDb must be positive dB levels"));
+            }
+            for level in &grid.levels_db {
+                let key = snr_level_key(*level);
+                let Some(thresholds) = grid.thresholds.get(&key) else {
+                    return Err(invalid_input(format!(
+                        "snrGrid thresholds are missing level {key}"
+                    )));
+                };
+                if !thresholds.has_single_note_release_gate() {
+                    return Err(invalid_input(format!(
+                        "snrGrid thresholds for level {key} must gate acquisition, misses, false locks, note switches, sustain error and coverage",
+                    )));
+                }
+            }
         }
 
         let mut capture_ids = HashSet::new();
