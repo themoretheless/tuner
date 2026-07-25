@@ -44,6 +44,21 @@ pub(crate) struct CorpusCaptureReport {
     /// Per-SNR-level robustness results (deterministic noise mix); empty
     /// when the corpus manifest defines no `snrGrid`.
     pub(super) snr_levels: Vec<SnrLevelReport>,
+    /// Per-reverb-condition robustness results (deterministic IR
+    /// convolution); empty when the corpus manifest defines no `reverbGrid`.
+    pub(super) reverb_conditions: Vec<ReverbConditionReport>,
+}
+
+/// Evaluation of one capture under one artificial reverb condition.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ReverbConditionReport {
+    pub(super) rt60_seconds: f32,
+    pub(super) wet_db: f32,
+    pub(super) passed: bool,
+    pub(super) thresholds: ThresholdsReport,
+    pub(super) violations: Vec<ThresholdViolationReport>,
+    pub(super) metrics: MetricsReport,
 }
 
 /// Evaluation of one capture at one SNR level.
@@ -66,6 +81,8 @@ pub(super) struct CorpusSummary {
     pub(super) violation_count: usize,
     pub(super) snr_levels_evaluated: usize,
     pub(super) snr_levels_passed: usize,
+    pub(super) reverb_conditions_evaluated: usize,
+    pub(super) reverb_conditions_passed: usize,
 }
 
 #[derive(Serialize)]

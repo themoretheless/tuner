@@ -20,6 +20,65 @@ pub struct CorpusManifest {
     /// Optional SNR robustness grid: every capture is re-evaluated against
     /// deterministic noise mixed at each listed level.
     pub snr_grid: Option<SnrGridManifest>,
+    /// Optional reverb robustness grid: every capture is re-evaluated after
+    /// convolution with a deterministic exponentially decaying noise IR.
+    pub reverb_grid: Option<ReverbGridManifest>,
+}
+
+/// Reverb robustness grid evaluated on top of the clean corpus gate.
+///
+/// Conditions are RT60 targets in seconds (`0.3`, `0.8`, `1.5`); the wet mix
+/// is fixed at [`DEFAULT_WET_DB`] so conditions stay comparable across
+/// corpora. `thresholds` keys are the RT60 value formatted like Rust's
+/// default float display (`"0.3"`, `"0.8"`, `"1.5"`). Tolerances loosen as
+/// RT60 grows — the clean gate is evaluated separately and stays unchanged.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReverbGridManifest {
+    pub conditions: Vec<ReverbConditionManifest>,
+    pub thresholds: std::collections::HashMap<String, ThresholdManifest>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReverbConditionManifest {
+    pub rt60_seconds: f32,
+    /// Wet level in dB relative to the dry RMS; negative values attenuate.
+    /// Defaults to [`DEFAULT_WET_DB`].
+    pub wet_db: Option<f32>,
+}
+
+/// Fixed wet/dry mix for grid conditions: −12 dB wet puts the reverberant
+/// tail at a quarter of the dry power — a moderately reverberant room that
+/// still lets a good detector hold pitch.
+pub const DEFAULT_WET_DB: f32 = -12.0;
+
+impl ReverbConditionManifest {
+    pub fn wet_db(&self) -> f32 {
+        self.wet_db.unwrap_or(DEFAULT_WET_DB)
+    }
+}
+
+impl ReverbGridManifest {
+    /// Validated `(condition, thresholds)` pairs in ascending-RT60 order.
+    pub fn levels(&self) -> Vec<(ReverbConditionManifest, ThresholdManifest)> {
+        let mut levels: Vec<(ReverbConditionManifest, ThresholdManifest)> = self
+            .conditions
+            .iter()
+            .filter_map(|condition| {
+                self.thresholds
+                    .get(&reverb_condition_key(condition.rt60_seconds))
+                    .map(|thresholds| (*condition, *thresholds))
+            })
+            .collect();
+        levels.sort_by(|left, right| left.0.rt60_seconds.total_cmp(&right.0.rt60_seconds));
+        levels
+    }
+}
+
+/// Stable string key for an RT60 condition (`0.3` -> `"0.3"`).
+pub fn reverb_condition_key(rt60_seconds: f32) -> String {
+    format!("{rt60_seconds}")
 }
 
 /// SNR robustness grid evaluated on top of the clean corpus gate.
@@ -147,6 +206,35 @@ impl CorpusManifest {
                 if !thresholds.has_single_note_release_gate() {
                     return Err(invalid_input(format!(
                         "snrGrid thresholds for level {key} must gate acquisition, misses, false locks, note switches, sustain error and coverage",
+                    )));
+                }
+            }
+        }
+
+        if let Some(grid) = &self.reverb_grid {
+            if grid.conditions.is_empty()
+                || grid.conditions.iter().any(|condition| {
+                    !condition.rt60_seconds.is_finite()
+                        || condition.rt60_seconds <= 0.0
+                        || condition
+                            .wet_db
+                            .is_some_and(|wet| !wet.is_finite() || wet >= 0.0)
+                })
+            {
+                return Err(invalid_input(
+                    "reverbGrid conditions need positive rt60Seconds and negative wetDb",
+                ));
+            }
+            for condition in &grid.conditions {
+                let key = reverb_condition_key(condition.rt60_seconds);
+                let Some(thresholds) = grid.thresholds.get(&key) else {
+                    return Err(invalid_input(format!(
+                        "reverbGrid thresholds are missing condition {key}"
+                    )));
+                };
+                if !thresholds.has_single_note_release_gate() {
+                    return Err(invalid_input(format!(
+                        "reverbGrid thresholds for condition {key} must gate acquisition, misses, false locks, note switches, sustain error and coverage",
                     )));
                 }
             }

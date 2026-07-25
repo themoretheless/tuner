@@ -847,5 +847,44 @@
         "minStableDetectionCoverage": 0.35
       }
     }
+  },
+  "reverbGrid": {
+    "conditions": [
+      {
+        "rt60Seconds": 0.3
+      },
+      {
+        "rt60Seconds": 0.8
+      },
+      {
+        "rt60Seconds": 1.5
+      }
+    ],
+    "thresholds": {
+      "0.3": {
+        "maxTimeToFirstCorrectMs": 900,
+        "maxMissedAcquisitions": 1,
+        "maxFalseLockRatio": 0.35,
+        "maxNoteSwitchesPerSecond": 1.5,
+        "maxStableSustainCentsMae": 12,
+        "minStableDetectionCoverage": 0.5
+      },
+      "0.8": {
+        "maxTimeToFirstCorrectMs": 1100,
+        "maxMissedAcquisitions": 2,
+        "maxFalseLockRatio": 0.45,
+        "maxNoteSwitchesPerSecond": 2.0,
+        "maxStableSustainCentsMae": 15,
+        "minStableDetectionCoverage": 0.45
+      },
+      "1.5": {
+        "maxTimeToFirstCorrectMs": 1300,
+        "maxMissedAcquisitions": 3,
+        "maxFalseLockRatio": 0.6,
+        "maxNoteSwitchesPerSecond": 3.0,
+        "maxStableSustainCentsMae": 20,
+        "minStableDetectionCoverage": 0.35
+      }
+    }
   }
 }

@@ -2,7 +2,7 @@ mod schema;
 
 use self::schema::{
     ConfigurationReport, CorpusCaptureReport, CorpusReport, CorpusSummary, MetricsReport,
-    QualityReport, SegmentReport, SnrLevelReport, ThresholdsReport,
+    QualityReport, ReverbConditionReport, SegmentReport, SnrLevelReport, ThresholdsReport,
 };
 use super::manifest::{
     CorpusCapture, CorpusManifest, ScenarioDefinition, ScenarioRuntime, SCHEMA_VERSION,
@@ -91,6 +91,24 @@ pub(super) fn build_snr_level(
     }
 }
 
+pub(super) fn build_reverb_condition(
+    rt60_seconds: f32,
+    wet_db: f32,
+    scenario: &ScenarioDefinition,
+    thresholds: PitchQualityThresholds,
+    metrics: PitchQualityMetrics,
+    violations: Vec<QualityThresholdViolation>,
+) -> ReverbConditionReport {
+    ReverbConditionReport {
+        rt60_seconds,
+        wet_db,
+        passed: violations.is_empty(),
+        thresholds: thresholds.into(),
+        violations: violations.into_iter().map(Into::into).collect(),
+        metrics: metrics_report(metrics, scenario),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_corpus_capture(
     capture: &CorpusCapture,
@@ -101,6 +119,7 @@ pub(super) fn build_corpus_capture(
     metrics: PitchQualityMetrics,
     violations: Vec<QualityThresholdViolation>,
     snr_levels: Vec<SnrLevelReport>,
+    reverb_conditions: Vec<ReverbConditionReport>,
 ) -> CorpusCaptureReport {
     CorpusCaptureReport {
         id: capture.id.clone(),
@@ -121,6 +140,7 @@ pub(super) fn build_corpus_capture(
             violations,
         ),
         snr_levels,
+        reverb_conditions,
     }
 }
 
@@ -145,13 +165,25 @@ pub(super) fn build_corpus(
         .flat_map(|capture| capture.snr_levels.iter())
         .filter(|level| level.passed)
         .count();
+    let reverb_conditions_evaluated = captures
+        .iter()
+        .map(|capture| capture.reverb_conditions.len())
+        .sum();
+    let reverb_conditions_passed = captures
+        .iter()
+        .flat_map(|capture| capture.reverb_conditions.iter())
+        .filter(|condition| condition.passed)
+        .count();
     CorpusReport {
         schema_version: SCHEMA_VERSION,
         corpus: corpus.id.clone(),
         config_revision: corpus.config_revision.clone(),
         // The clean gate is unchanged: every capture must pass its clean
-        // thresholds. SNR levels gate on top of that, never instead of it.
-        passed: passed_captures == captures.len() && snr_levels_passed == snr_levels_evaluated,
+        // thresholds. SNR levels and reverb conditions gate on top of that,
+        // never instead of it.
+        passed: passed_captures == captures.len()
+            && snr_levels_passed == snr_levels_evaluated
+            && reverb_conditions_passed == reverb_conditions_evaluated,
         summary: CorpusSummary {
             capture_count: captures.len(),
             passed_captures,
@@ -159,6 +191,8 @@ pub(super) fn build_corpus(
             violation_count,
             snr_levels_evaluated,
             snr_levels_passed,
+            reverb_conditions_evaluated,
+            reverb_conditions_passed,
         },
         captures,
     }

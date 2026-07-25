@@ -3,7 +3,10 @@ use super::checksum::sha256;
 use super::manifest::{invalid_input, CorpusManifest, ScenarioManifest};
 use super::pipeline::{evaluate_capture, evaluate_thresholds, merge_thresholds};
 use super::report;
-use pitch_core::{mix_white_noise_at_snr, PitchQualityThresholds};
+use pitch_core::{
+    apply_reverb, mix_white_noise_at_snr, reverb_seed, synthesize_impulse_response,
+    PitchQualityThresholds,
+};
 use std::error::Error;
 use std::path::Path;
 
@@ -70,6 +73,33 @@ pub fn run_corpus(manifest_path: &Path) -> Result<(String, bool), Box<dyn Error>
             }
         }
 
+        // Reverb robustness grid: convolve with a deterministic
+        // exponentially decaying noise IR per condition (in memory; fixtures
+        // stay untouched). Longer RT60 gets looser tolerances.
+        let mut reverb_conditions = Vec::new();
+        if let Some(grid) = &corpus.reverb_grid {
+            for (condition, condition_thresholds) in grid.levels() {
+                let ir = synthesize_impulse_response(
+                    condition.rt60_seconds,
+                    scenario.sample_rate,
+                    reverb_seed(&entry.id, condition.rt60_seconds),
+                );
+                let reverbed = apply_reverb(&capture.samples, &ir, condition.wet_db());
+                let metrics = evaluate_capture(&reverbed, &scenario, &runtime)?;
+                let thresholds =
+                    merge_thresholds(condition_thresholds.into(), scenario.quality_thresholds());
+                let violations = evaluate_thresholds(&metrics, Some(thresholds))?;
+                reverb_conditions.push(report::build_reverb_condition(
+                    condition.rt60_seconds,
+                    condition.wet_db(),
+                    &scenario,
+                    thresholds,
+                    metrics,
+                    violations,
+                ));
+            }
+        }
+
         capture_reports.push(report::build_corpus_capture(
             entry,
             capture_path.display().to_string(),
@@ -79,6 +109,7 @@ pub fn run_corpus(manifest_path: &Path) -> Result<(String, bool), Box<dyn Error>
             metrics,
             violations,
             snr_levels,
+            reverb_conditions,
         ));
     }
 

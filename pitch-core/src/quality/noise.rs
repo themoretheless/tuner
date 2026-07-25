@@ -45,7 +45,7 @@ pub fn mix_white_noise_at_snr(samples: &[f32], snr_db: f32, seed: u64) -> Vec<f3
     mixed
 }
 
-fn next_uniform(state: &mut u64) -> f64 {
+pub(crate) fn next_uniform(state: &mut u64) -> f64 {
     // xorshift64*: period 2^64-1, good enough for noise synthesis.
     let mut x = *state;
     x ^= x >> 12;
@@ -57,7 +57,7 @@ fn next_uniform(state: &mut u64) -> f64 {
         + f64::MIN_POSITIVE
 }
 
-fn box_muller(state: &mut u64) -> (f32, f32) {
+pub(crate) fn box_muller(state: &mut u64) -> (f32, f32) {
     let u1 = next_uniform(state);
     let u2 = next_uniform(state);
     let radius = (-2.0 * u1.ln()).sqrt();
