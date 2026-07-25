@@ -40,7 +40,7 @@
 - Web/native/synthetic/file adapters реализуют один TS `AudioInputPort`; интерактивный WAV-вход декодирует PCM/float без browser resampling, публикует sample-indexed окна и проходит общий session pipeline.
 - `useTunerApplication` является composition root и внедряет типизированный `TunerInputSet` в session; lifecycle больше не создаёт конкретные web/file/native/synthetic adapters. Worker и main-thread fallback используют общий stateful processor и единый protocol contract.
 - Spectrum больше не считается, когда скрыт, но включённый Rust frame всё ещё клонирует `Vec<f32>`.
-- Лицензированный корпус из 19 реальных WAV покрывает guitar, bass, ukulele, violin и voice и блокирует CI по временным quality-метрикам. Permission/device-loss/backend-switch recovery уже проверяется; не хватает SNR/noise/reverb матрицы, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
+- Лицензированный корпус из 19 реальных WAV покрывает guitar, bass, ukulele, violin и voice и блокирует CI по временным quality-метрикам, включая SNR-сетку 30/20/10 дБ (57/57, report schema v2). Permission/device-loss/backend-switch recovery уже проверяется; не хватает reverb-матрицы, soak/benchmark/visual-regression tests и более широкого DSP fuzzing.
 - На вкладке Algorithm работают live route, составная уверенность с реальным разбросом окон, отпечаток конфигурации, диагностика обработки микрофона, предупреждение о конкурирующей струне, decision timeline, freeze/replay inspector, harmonic/octave/noise views, latency budget, virtual bypass и baseline A/B overlay. Debug capture пишет тот же PCM, который анализирует AudioWorklet, и выгружает mono PCM16 WAV + JSON v2 с sample timebase/SHA-256. Rust replay v2 и общий лицензированный контракт автоматически сравнивают native/WASM кадры и проверяют Tauri/egui projections; mic self-test и общая typed error taxonomy остаются открытыми.
 - Release hardening (signing/notarization/CSP/checksums) остаётся открытым.
 
@@ -58,7 +58,7 @@
 2. **Input provenance:** кадр несёт отпечаток pipeline-конфигурации и предупреждение о соседней струне; web-порт отдельно сообщает фактические AGC/noise/echo/sample-rate настройки.
 3. **Presentation review:** канонические кадры остаются на аудиочасах, а отдельный visual frame обновляется через `requestAnimationFrame` на частоте дисплея по правилу latest-frame-wins; смысловые переходы проходят сразу, Analysis получил мастер мензуры, а экранный диктор больше не зачитывает меняющийся процент.
 
-После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-21: `159` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19`, весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, одиннадцать browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Replay-проход добавил frame-by-frame parity для bass E1, guitar E2 и violin A4 через native Rust/browser WASM, Tauri wire contract и egui view state; следующий input-проход закрепил permission denial, track loss/restart, transient devicechange и Web/Native switching.
+После трёх продуктовых проходов и отдельного SOLID/GoF review текущий gate 2026-07-25: `159` Vitest, `71` pitch-core all-feature tests, лицензированный corpus `19/19` плюс SNR-сетка 30/20/10 дБ `57/57` (clean mean MAE 2.436 цента, p95 4.763), весь Rust workspace, strict clippy/fmt/codegen, production Vue/WASM build, одиннадцать browser-проверок, ручная desktop/`390 px`/`320 px` проверка и полный Tauri `.app`/`.dmg` bundle. Replay-проход добавил frame-by-frame parity для bass E1, guitar E2 и violin A4 через native Rust/browser WASM, Tauri wire contract и egui view state; следующий input-проход закрепил permission denial, track loss/restart, transient devicechange и Web/Native switching. DSP-раунд 07 добавил HPS octave guard и фазовое уточнение периода (синтетика E6: 0.406 → 0.000 цента).
 
 ## Возможности
 
@@ -898,7 +898,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 - Native adapters общие и realtime-safe; web/native/synthetic/file реализуют единый TS `AudioInputPort`, включая sample-indexed WAV и exact PCM capture capability.
 - Web/Tauri/egui используют pitch-core для primary detection; full-frame browser WASM владеет smoothing/resolution, а TS fallback проверяется теми же cents/confidence fixtures и общим smoothing trace manifest.
 - Таблицы строев и note/cents primitives генерируются из canonical registry/expression sources; stale output блокируется проверкой.
-- Real-WAV temporal gate и permission/device-loss recovery выполнены; нужны SNR/noise/reverb, benchmark/soak/visual regression tests и более широкий DSP fuzzing.
+- Real-WAV temporal gate, permission/device-loss recovery, HPS octave guard, фазовое уточнение периода и SNR-сетка 30/20/10 дБ выполнены (clean MAE 2.436 цента, сетка 57/57); нужны reverb, benchmark/soak/visual regression tests и более широкий DSP fuzzing.
 - Diagnostics, typed errors, automated a11y и release hardening ещё не закрыты.
 
 См. также раздел "Current Problems" в [ARCHITECTURE.md](ARCHITECTURE.md).

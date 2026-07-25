@@ -41,7 +41,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
-| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate and licensed cross-backend replay are done; phase-aware tracking, stress scenarios and differential/benchmark/soak gates remain |
+| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement and a gated 30/20/10 dB SNR grid (57/57) are done; stress/reverb scenarios and differential/benchmark/soak gates remain |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
 
 ---
@@ -125,6 +125,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 **Status 2026-07-21:** partial. A licensed guitar/bass/ukulele/violin/voice corpus, deterministic rebuild/checksums, temporal metrics, per-scenario thresholds, blocking CI artifact and sample-indexed native/WASM/Tauri/egui replay parity are complete. The next evidence slices are fixed SNR/noise/reverb transforms, differential baselines, criterion hot-path benchmarks and restart soak tests.
 
+**Status 2026-07-25 (DSP round 07):** HPS octave guard (`dsp/hps.rs`, harmonic product spectrum over 3 compression stages, consulted only when Hz probes are inconclusive, skipped at confidence >= 0.97), phase period refinement (`dsp/phase.rs`, two Hann windows with N/4 shift, magnitude^2 weighting, gated on confidence/stationarity/dominant fundamental, clamp ±6 cents) and a deterministic seeded white-noise SNR grid at 30/20/10 dB (report schema v2, per-level `--check` thresholds, clean gate unchanged) are done. Benchmark `benchmark-07-dsp-*`: clean corpus 19/19, mean MAE 2.645 -> 2.436 cents (-7.9 %), mean p95 4.945 -> 4.763 cents; SNR grid 57/57 passed (30 dB MAE 2.45, 20 dB 2.44, 10 dB 2.48, coverage >= 0.93). Reverb transforms, differential baselines, criterion hot-path benchmarks and soak tests remain.
+
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
 **Targets:** `R36-R44`, `R175-R183`; grounded audit `C19-C20`, `C39-C42`, `C95`, `C168-C172`, `C178-C180`; master `M5`, `M8`, `M14`, `M16`, `M23`, `M31`, `M33`, `M37`, `M45`.
@@ -141,8 +143,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 ## Now / Next / Later
 
 - **Now:** add cross-platform typed diagnostics with actionable presentation for web, Tauri and egui.
-- **Next:** add SNR/noise/reverb corpus transforms and differential/benchmark/soak gates.
-- **Later:** complete M7 phase-aware accuracy work and the remaining M8 accessibility/release gates.
+- **Next:** add reverb corpus transforms and differential/benchmark/soak gates.
+- **Later:** complete M7 confidence-weighted detector fusion and the remaining M8 accessibility/release gates.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.
