@@ -14,11 +14,8 @@ const props = defineProps<{
 
 const { t } = useL10n()
 const confidencePercent = computed(() => Math.round(Math.max(0, Math.min(1, props.confidence ?? 0)) * 100))
-const liveAnnouncement = computed(() => (
-  props.isDetected
-    ? `${props.display ?? ''} ${t('detected')}`
-    : t('waiting.signal')
-))
+// NOTE: no live region here — the single throttled announcer lives in
+// LiveTunerView so note/state changes are spoken exactly once.
 
 // Non-breaking space: keeps placeholder rows at their normal line height (a
 // plain space collapses and the row would contribute zero height).
@@ -27,7 +24,6 @@ const NBSP = ' '
 
 <template>
   <div class="text-center pt-2 pb-1 select-none">
-    <span class="sr-only" aria-live="polite" aria-atomic="true">{{ liveAnnouncement }}</span>
     <!-- Both states render the same three rows so detection flickering on
          and off never changes the block height and shifts the layout below. -->
     <div class="flex flex-col items-center">

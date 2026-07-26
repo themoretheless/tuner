@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useLiveTunerPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
+import { TuneAnnouncer, snapshotOf, type TuneSnapshot } from '../../utils/tuneA11y';
 import CentsGauge from '../../components/CentsGauge.vue';
 import AudioFileInput from '../../components/AudioFileInput.vue';
 import DebugOverlay from '../../components/DebugOverlay.vue';
@@ -22,6 +24,35 @@ const { t } = useL10n();
 const debugEnabled = typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).has('debug');
 
+// Single polite live region for the tuner readout. The TuneAnnouncer
+// throttles to at most ~1 announcement/second and only speaks up on a note
+// change or a meaningful tune-state transition (incl. an explicit "in tune").
+const announcer = new TuneAnnouncer({ intervalMs: 1000 });
+const liveAnnouncement = ref('');
+
+const tuneSnapshot = computed(() => snapshotOf({
+  note: tuner.currentNoteDisplay,
+  cents: tuner.cents,
+  isInTune: tuner.isInTune,
+  isDetected: tuner.hasDetection,
+}));
+
+function formatAnnouncement(s: TuneSnapshot): string {
+  const note = s.note ?? '';
+  switch (s.state) {
+    case 'in-tune': return t('a11y.announce.inTune').replace('{note}', note);
+    case 'near': return t(s.direction === 'sharp' ? 'a11y.announce.nearSharp' : 'a11y.announce.nearFlat')
+      .replace('{note}', note);
+    case 'out': return t(s.direction === 'sharp' ? 'a11y.announce.sharp' : 'a11y.announce.flat')
+      .replace('{note}', note);
+    default: return t('waiting.signal');
+  }
+}
+
+watch(tuneSnapshot, (snapshot) => {
+  const accepted = announcer.push(snapshot);
+  if (accepted) liveAnnouncement.value = formatAnnouncement(accepted);
+});
 </script>
 
 <template>
@@ -39,6 +70,12 @@ const debugEnabled = typeof window !== 'undefined'
     />
     <div class="live-panel card">
       <div class="sr-only" id="live-tuner-heading">{{ t('nav.tuner') }}</div>
+      <span
+        class="sr-only"
+        data-testid="tune-announcer"
+        aria-live="polite"
+        aria-atomic="true"
+      >{{ liveAnnouncement }}</span>
       <MicButton
         :is-listening="tuner.isListening"
         :status="tuner.sessionStatus"

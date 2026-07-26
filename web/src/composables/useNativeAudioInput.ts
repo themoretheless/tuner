@@ -8,6 +8,10 @@ import {
 } from '../platform/nativeAudioApi';
 import type { PitchDetectionRange } from '../utils/pitch';
 import type { PipelineConfig } from '../domain/pipelineConfig';
+import {
+  normalizeDiagnosticCodes,
+  type DiagnosticCode,
+} from '../domain/diagnostics';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import {
   cloneNativeAudioConfiguration,
@@ -29,6 +33,8 @@ export interface NativeAudioInputAdapter extends DetectionFrameInputPort {
   error: Ref<string | null>;
   frame: Ref<DetectionFrame | null>;
   isListening: Ref<boolean>;
+  /** Signal-quality diagnostic codes reported by the native engine. */
+  signalDiagnostics: Ref<DiagnosticCode[]>;
   refreshAvailability(): Promise<boolean>;
 }
 
@@ -39,6 +45,7 @@ export function useNativeAudioInput(
   const error = ref<string | null>(null);
   const frame = ref<DetectionFrame | null>(null);
   const isListening = ref(false);
+  const signalDiagnostics = ref<DiagnosticCode[]>([]);
 
   let invokeFn: NativeInvoke | null = null;
   let listenFn: NativeListen | null = null;
@@ -100,11 +107,13 @@ export function useNativeAudioInput(
       unlistenError = await listenFn<NativeAudioErrorPayload>(NATIVE_AUDIO_ERROR_EVENT, (event) => {
         error.value = normalizeNativeAudioError(event.payload);
         frame.value = null;
+        signalDiagnostics.value = [];
         isListening.value = false;
         cleanupListeners();
       });
       unlistenFrame = await listenFn<NativeAudioFramePayload>(NATIVE_AUDIO_FRAME_EVENT, (event) => {
         frame.value = normalizeNativeFrame(event.payload);
+        signalDiagnostics.value = normalizeDiagnosticCodes(event.payload?.signal);
       });
       const startRevision = configurationRevision;
       await invokeFn('start_native_audio', {
@@ -121,6 +130,7 @@ export function useNativeAudioInput(
       cleanupListeners();
       isListening.value = false;
       frame.value = null;
+      signalDiagnostics.value = [];
       if (!error.value) {
         error.value = nativeError instanceof Error ? nativeError.message : String(nativeError);
       }
@@ -142,6 +152,7 @@ export function useNativeAudioInput(
       cleanupListeners();
       isListening.value = false;
       frame.value = null;
+      signalDiagnostics.value = [];
     }
   }
 
@@ -234,6 +245,7 @@ export function useNativeAudioInput(
     setDetectionRange,
     setFrameContext,
     setPipelineConfig,
+    signalDiagnostics,
     start,
     stop,
   };

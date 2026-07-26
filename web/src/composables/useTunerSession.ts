@@ -24,6 +24,16 @@ import type { DetectionFrame, FrameContext } from '../types/frames';
 import { createDefaultFrameContext } from '../domain/frameContext';
 import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import { createDefaultPipelineConfig, type PipelineConfig } from '../domain/pipelineConfig';
+import {
+  createDiagnostic,
+  diagnosticsFromInputWarnings,
+  diagnosticsFromMicrophoneFailure,
+  microphoneTrackLostDiagnostic,
+  nativeStreamFailedDiagnostic,
+  signalDiagnostics,
+  type DiagnosticSource,
+  type TunerDiagnostic,
+} from '../domain/diagnostics';
 
 const MAX_WAV_FILE_BYTES = 64 * 1024 * 1024;
 
@@ -132,6 +142,41 @@ export function useTunerSession(options: TunerSessionOptions) {
   const inputDiagnostics = computed(() => {
     const port = activeInputPort.value;
     return isDiagnosableAudioInputPort(port) ? port.inputDiagnostics.value : null;
+  });
+
+  // Unified typed user-facing diagnostics, shared shape across platforms.
+  // The web backend contributes typed mic failures, track loss, processing
+  // warnings and signal health measured in the pitch loop; the native (Tauri)
+  // backend contributes its typed stream failure plus the signal-quality
+  // codes computed inside the native engine.
+  const diagnostics = computed<TunerDiagnostic[]>(() => {
+    const result: TunerDiagnostic[] = [];
+    const backend = effectiveInputId.value;
+    const source: DiagnosticSource = backend === 'native' ? 'tauri' : 'web';
+    if (backend === 'native') {
+      if (nativeAudio.error.value) {
+        result.push(nativeStreamFailedDiagnostic('tauri'));
+      }
+      for (const code of nativeAudio.signalDiagnostics.value) {
+        result.push(createDiagnostic(code, 'tauri'));
+      }
+      return result;
+    }
+    if (audio.startFailure.value) {
+      result.push(...diagnosticsFromMicrophoneFailure(audio.startFailure.value, 'web'));
+    }
+    if (audio.trackLost.value) {
+      result.push(microphoneTrackLostDiagnostic('web'));
+    }
+    const processing = inputDiagnostics.value;
+    if (processing) {
+      result.push(...diagnosticsFromInputWarnings(processing.warnings, source));
+    }
+    const health = pitch.signalHealth.value;
+    if (health && isListening.value) {
+      result.push(...signalDiagnostics(health, source));
+    }
+    return result;
   });
 
   const status = computed(() => {
@@ -328,6 +373,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     )),
     detectedFrequency,
     detectionRange,
+    diagnostics,
     error,
     exactPcmCaptureAvailable: computed(() => {
       const port = activeInputPort.value;

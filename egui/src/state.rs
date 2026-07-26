@@ -1,3 +1,4 @@
+use crate::diagnostics::signal_health_codes;
 use pitch_core::DetectionFrame;
 use std::sync::{Arc, Mutex};
 
@@ -7,6 +8,9 @@ pub(crate) type SharedTunerState = Arc<Mutex<TunerViewState>>;
 pub(crate) struct TunerViewState {
     pub(crate) cents: f32,
     pub(crate) confidence: f32,
+    /// Stable signal-quality diagnostic codes from the shared cross-platform
+    /// contract (web/src/domain/diagnostics.ts).
+    pub(crate) diagnostics: Vec<&'static str>,
     pub(crate) error: Option<String>,
     pub(crate) frame_id: u64,
     pub(crate) frequency: Option<f32>,
@@ -22,6 +26,7 @@ impl TunerViewState {
     pub(crate) fn apply(&mut self, frame: DetectionFrame, waveform: &[f32], sample_rate: f32) {
         self.cents = frame.cents;
         self.confidence = normalized_ratio(frame.confidence);
+        self.diagnostics = signal_health_codes(waveform, sample_rate);
         self.error = None;
         self.frame_id = self.frame_id.wrapping_add(1);
         self.frequency = frame.freq;
@@ -37,6 +42,7 @@ impl TunerViewState {
     pub(crate) fn clear_detection(&mut self) {
         self.cents = 0.0;
         self.confidence = 0.0;
+        self.diagnostics.clear();
         self.frequency = None;
         self.is_power = false;
         self.level = 0.0;

@@ -1,4 +1,5 @@
 use crate::audio::AudioManager;
+use crate::diagnostics::diagnostic_hint;
 use crate::state::{SharedTunerState, TunerViewState};
 use crate::visualization::VisualizationHistory;
 use eframe::egui;
@@ -196,6 +197,16 @@ impl App {
         );
         if let Some(error) = &state.error {
             ui.colored_label(egui::Color32::from_rgb(248, 113, 113), error);
+        }
+        // Typed signal-quality watchdog (shared diagnostic contract). The egui
+        // UI shows the stable code plus a short actionable hint; richer
+        // localized presentation lives in the web/Tauri shell.
+        // TODO(presentation): localize hints when egui gets a l10n layer.
+        for code in &state.diagnostics {
+            ui.colored_label(
+                egui::Color32::from_rgb(234, 179, 8),
+                format!("⚠ {} — {}", code, diagnostic_hint(code)),
+            );
         }
     }
 

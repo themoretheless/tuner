@@ -1,5 +1,6 @@
 import type { Ref } from 'vue';
 import type { AudioInputDiagnostics } from '../../../domain/audioInputDiagnostics';
+import type { TunerDiagnostic } from '../../../domain/diagnostics';
 import type { AudioFrameTimebase, ExactPcmCapture } from '../../../ports/audioInput';
 import type { SessionStatus } from '../../../session/sessionLifecycle';
 import type { DetectorBackend } from '../../../types/detectorBackend';
@@ -27,6 +28,7 @@ export interface SessionCapability {
   beginExactPcmCapture(): boolean;
   detectionFrameTimebase: Readonly<Ref<AudioFrameTimebase | null>>;
   detectorBackend: Readonly<Ref<DetectorBackend>>;
+  diagnostics: Readonly<Ref<TunerDiagnostic[]>>;
   error: Readonly<Ref<string | null>>;
   exactPcmCaptureAvailable: Readonly<Ref<boolean>>;
   fileAudioDuration: Readonly<Ref<number>>;

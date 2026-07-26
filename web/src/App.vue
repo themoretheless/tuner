@@ -4,6 +4,7 @@ import { Minimize2 } from '@lucide/vue';
 import { provideFeaturePorts } from './app/featurePorts';
 import { useTuner } from './composables/useTuner';
 import { useL10n } from './stores/l10n';
+import DiagnosticsStrip from './features/diagnostics/DiagnosticsStrip.vue';
 import LiveTunerView from './features/tuner/LiveTunerView.vue';
 
 const AnalysisView = defineAsyncComponent(() => import('./features/analysis/AnalysisView.vue'));
@@ -113,6 +114,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
     </nav>
 
     <main class="app-main app-width">
+      <DiagnosticsStrip :diagnostics="tuner.diagnostics.value" />
       <LiveTunerView v-if="activeView === 'tuner'" />
       <PipelineView v-else-if="activeView === 'pipeline'" />
       <LibraryView v-else-if="activeView === 'library'" />

@@ -1021,3 +1021,89 @@ summary:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- a11y: non-color tune-state indicators ---------------------------- */
+/* Border style + icon differentiate states even without hue/brightness. */
+.tune-status {
+  border: 1px solid transparent;
+}
+
+.tune-status[data-tune-state='in-tune'] {
+  border-style: solid;
+  border-color: currentColor;
+  font-weight: 600;
+}
+
+.tune-status[data-tune-state='near'] {
+  border-style: dotted;
+  border-color: currentColor;
+}
+
+.tune-status[data-tune-state='out'] {
+  border-style: dashed;
+  border-color: currentColor;
+}
+
+.tune-status-icon {
+  font-size: 0.85em;
+  line-height: 1;
+}
+
+/* Colorblind theme: near-state uses the palette's sky blue, which stays
+   separable from amber "out" by brightness for deuteranopia/protanopia/
+   tritanopia; the dotted vs dashed border carries the distinction too. */
+.theme-colorblind .tune-status[data-tune-state='near'] {
+  color: #56b4e9;
+}
+
+/* --- a11y: forced colors (Windows High Contrast) ---------------------- */
+@media (forced-colors: active) {
+  .tune-status {
+    background: ButtonFace !important;
+    color: ButtonText !important;
+    border: 1px solid ButtonText !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    forced-color-adjust: none;
+  }
+
+  .tune-status[data-tune-state='in-tune'] {
+    border-width: 2px !important;
+    border-style: solid !important;
+  }
+
+  .tune-status[data-tune-state='near'] {
+    border-style: dotted !important;
+  }
+
+  .tune-status[data-tune-state='out'] {
+    border-style: dashed !important;
+  }
+
+  .app-root,
+  .card {
+    background: Canvas !important;
+    color: CanvasText !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .btn-primary,
+  .segmented button.active,
+  .string-btn.active {
+    background: Highlight !important;
+    color: HighlightText !important;
+    box-shadow: none !important;
+  }
+}
+
+/* --- a11y: prefers-contrast ------------------------------------------- */
+@media (prefers-contrast: more) {
+  .tune-status {
+    border-width: 2px;
+  }
+
+  .tune-status[data-tune-state='in-tune'] {
+    font-weight: 700;
+  }
+}

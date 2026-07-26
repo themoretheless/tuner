@@ -1,0 +1,24 @@
+{
+  // DEV-ОВЕРРАЙД CSP (файл в формате JSON5 — Tauri парсит конфиги как JSON5,
+  // комментарии допустимы; базовый tauri.conf.json остаётся строгим JSON,
+  // т.к. его читает JSON.parse в .github/workflows/build-web.yml).
+  //
+  // Механизм разделения dev/prod CSP:
+  //  - tauri.conf.json        — СТРОГИЙ прод-CSP (default; применяется при
+  //                             любой сборке, включая `tauri build` в CI).
+  //  - tauri.conf.dev.json    — этот файл; подмешивается ТОЛЬКО в dev-режиме
+  //                             через `npm run dev` (desktop/package.json):
+  //                             `tauri dev -c src-tauri/tauri.conf.dev.json`.
+  //                             Tauri глубоко мержит конфиги, строка csp
+  //                             заменяется целиком.
+  //
+  // Отличия от прод-CSP — только connect-src: добавлены origin'ы vite
+  // dev-сервера и его WebSocket (HMR). Всё остальное идентично продy,
+  // чтобы dev-режим не маскировал CSP-ошибки.
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:5173 http://127.0.0.1:5173 ws://localhost:5173 ws://127.0.0.1:5173; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    }
+  }
+}

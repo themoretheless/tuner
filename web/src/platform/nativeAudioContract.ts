@@ -30,6 +30,9 @@ export interface NativeAudioFramePayload {
   pipeline?: unknown;
   rawFreq?: unknown;
   rms?: unknown;
+  /** Stable signal-quality diagnostic codes computed natively
+   * (desktop/src-tauri/src/native_audio/signal_health.rs). */
+  signal?: unknown;
   target?: unknown;
 }
 

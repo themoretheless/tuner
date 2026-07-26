@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DisplayMode } from '../utils/settingsStorage'
+import { classifyTuneState } from '../utils/tuneA11y'
 import { useL10n } from '../stores/l10n'
 
 const props = defineProps<{
@@ -14,6 +16,26 @@ const clamped = (c: number) => Math.max(-50, Math.min(50, c))
 const offset = (c: number) => (clamped(c) / 100) * 50   // -50..50 cents → -25..25 in % of half-width
 const needleAngle = (c: number) => (clamped(c) / 50) * 42
 const strobeShift = (c: number) => Math.max(-18, Math.min(18, c / 2))
+
+// Non-color tune state: drives icons, border style and data attributes so
+// in-tune/near/out are distinguishable without relying on hue alone.
+const tuneState = computed(() => classifyTuneState(props.cents, props.isInTune, props.isDetected))
+const statusLabel = computed(() => {
+  switch (tuneState.value) {
+    case 'in-tune': return t('in.tune')
+    case 'silent': return t('waiting.signal')
+    case 'near': return props.cents > 0 ? t('a11y.near.sharp') : t('a11y.near.flat')
+    default: return props.cents > 0 ? t('adjust.sharp') : t('adjust.flat')
+  }
+})
+// Direction cue: flat → raise pitch, sharp → lower pitch.
+const statusIcon = computed(() => {
+  switch (tuneState.value) {
+    case 'in-tune': return '✓'
+    case 'silent': return '…'
+    default: return props.cents > 0 ? '▼' : '▲'
+  }
+})
 </script>
 
 <template>
@@ -62,16 +84,17 @@ const strobeShift = (c: number) => Math.max(-18, Math.min(18, c / 2))
 
     <div class="flex justify-center mt-1.5">
       <div
-        class="text-xs px-3 py-0.5 rounded-full inline-flex items-center gap-1.5"
-        role="status"
-        aria-live="polite"
-        :class="isInTune ? 'bg-emerald-500/15 text-emerald-400' : isDetected ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-500'"
+        class="tune-status text-xs px-3 py-0.5 rounded-full inline-flex items-center gap-1.5"
+        :data-tune-state="tuneState"
+        :class="{
+          'bg-emerald-500/15 text-emerald-400': tuneState === 'in-tune',
+          'bg-sky-500/10 text-sky-300': tuneState === 'near',
+          'bg-amber-500/10 text-amber-400': tuneState === 'out',
+          'bg-slate-800 text-slate-500': tuneState === 'silent',
+        }"
       >
-        <span v-if="isInTune">{{ t('in.tune') }}</span>
-        <span v-else-if="!isDetected">{{ t('waiting.signal') }}</span>
-        <span v-else>
-          {{ cents > 0 ? t('adjust.sharp') : t('adjust.flat') }}
-        </span>
+        <span class="tune-status-icon" aria-hidden="true">{{ statusIcon }}</span>
+        <span>{{ statusLabel }}</span>
       </div>
     </div>
   </div>

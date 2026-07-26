@@ -1,4 +1,6 @@
 import type { DecodedWav } from '../audio/wav';
+import type { DiagnosticCode } from '../domain/diagnostics';
+import type { MicrophoneStartFailure } from '../domain/microphoneStartFailure';
 import type { SyntheticAudioFixture } from '../utils/syntheticAudio';
 import type {
   AudioFrameInputPort,
@@ -15,6 +17,10 @@ export interface WebTunerInputPort
   DiagnosableAudioInputPort {
   readonly analyser: ReadableValue<AnalyserNode | null>;
   readonly sampleRate: ReadableValue<number>;
+  /** Typed classification of the last start() failure (typed diagnostics). */
+  readonly startFailure: ReadableValue<MicrophoneStartFailure | null>;
+  /** True when the mic track ended involuntarily (unplug / OS revoke). */
+  readonly trackLost: ReadableValue<boolean>;
 }
 
 export interface FileTunerInputPort extends ExactPcmCaptureInputPort {
@@ -29,7 +35,10 @@ export interface SyntheticTunerInputPort extends AudioFrameInputPort {
   readonly fixture: SyntheticAudioFixture | null;
 }
 
-export type NativeTunerInputPort = DetectionFrameInputPort;
+export interface NativeTunerInputPort extends DetectionFrameInputPort {
+  /** Signal-quality diagnostic codes reported by the native engine. */
+  readonly signalDiagnostics: ReadableValue<DiagnosticCode[]>;
+}
 
 export interface TunerInputSet {
   readonly file: FileTunerInputPort;

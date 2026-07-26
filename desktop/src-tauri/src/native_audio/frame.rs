@@ -1,4 +1,5 @@
 use super::config::{NativeAudioConfig, NativeAudioNote};
+use super::signal_health::signal_health_codes;
 use pitch_core::{
     DetectorConfig, EngineConfig, PipelineCandidate, PipelineConfidenceTelemetry,
     PipelineSpectralTelemetry, PipelineTelemetry, TunerEngine, Tuning,
@@ -34,6 +35,9 @@ pub(crate) struct NativeAudioFrame {
     note: String,
     rms: f32,
     pipeline: NativePipelineTelemetry,
+    /// Stable signal-quality diagnostic codes (shared cross-platform
+    /// contract, see web/src/domain/diagnostics.ts).
+    signal: Vec<&'static str>,
     target: Option<NativeAudioNote>,
 }
 
@@ -224,6 +228,7 @@ impl NativeFrameProcessor {
             note: frame.note,
             rms: frame.rms,
             pipeline: NativePipelineTelemetry::from_core(frame.pipeline),
+            signal: signal_health_codes(samples, sample_rate),
             target: frame.target.map(NativeAudioNote::from_core),
         }
     }
@@ -397,6 +402,34 @@ mod tests {
     }
 
     #[test]
+    fn processor_emits_signal_quality_codes() {
+        let sample_rate = 48_000.0;
+        // Strong DC offset + clipping peaks: both codes must surface.
+        let samples: Vec<f32> = (0..4096)
+            .map(|index| {
+                (0.9 * (std::f32::consts::TAU * 440.0 * index as f32 / sample_rate).sin() + 0.15)
+                    .clamp(-1.0, 1.0)
+            })
+            .collect();
+        let mut processor = NativeFrameProcessor::new(NativeAudioConfig::default());
+
+        let frame = processor.process(&samples, sample_rate);
+        assert!(
+            frame.signal.contains(&"signal-clipping"),
+            "{:?}",
+            frame.signal
+        );
+        assert!(
+            frame.signal.contains(&"signal-dc-offset"),
+            "{:?}",
+            frame.signal
+        );
+
+        let silent = processor.process(&vec![0.0; 4096], sample_rate);
+        assert_eq!(silent.signal, vec!["signal-silent"]);
+    }
+
+    #[test]
     fn serialized_frame_has_one_top_level_frequency_field() {
         let frame = NativeAudioFrame {
             cents: 0.0,
@@ -409,6 +442,7 @@ mod tests {
             note: "A4".to_string(),
             rms: 0.125,
             pipeline: NativePipelineTelemetry::from_core(PipelineTelemetry::default()),
+            signal: Vec::new(),
             target: None,
         };
         let serialized = serde_json::to_value(frame).expect("serializable frame");
@@ -452,6 +486,7 @@ mod tests {
                     "windowSamples": 0,
                     "yin": null,
                 },
+                "signal": [],
                 "target": null,
             })
         );

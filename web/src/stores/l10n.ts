@@ -438,6 +438,34 @@ const ru: Record<string, string> = {
   'quiet.room': 'Тихая комната. Играй по одной струне. Используй ручной выбор для точности.',
   'keyboard.hint': 'Space/M микрофон, 1-9 струны, R референс',
   footer: 'Гитарный Тюнер — Vue + Tauri/Rust',
+
+  // a11y: screen-reader announcements and non-color tune labels
+  'a11y.near.flat': 'ЧУТЬ НИЖЕ — натяни',
+  'a11y.near.sharp': 'ЧУТЬ ВЫШЕ — ослабь',
+  'a11y.announce.inTune': '{note} — в строю',
+  'a11y.announce.nearFlat': '{note} — почти в строю, чуть ниже',
+  'a11y.announce.nearSharp': '{note} — почти в строю, чуть выше',
+  'a11y.announce.flat': '{note} — низко, натяни струну',
+  'a11y.announce.sharp': '{note} — высоко, ослабь струну',
+
+  // diagnostics: typed user-facing diagnostics hints (domain/diagnostics.ts)
+  'diagnostics.title': 'Диагностика звука',
+  'diagnostics.signal-silent': 'Тишина: микрофон открыт, но сигнала нет — проверьте вход и уровень громкости',
+  'diagnostics.signal-clipping': 'Клиппинг: сигнал упирается в максимум (пик {peak}) — понизьте громкость входа',
+  'diagnostics.signal-dc-offset': 'Постоянное смещение сигнала ({offset}) — проверьте кабель и разъём входа',
+  'diagnostics.signal-hum': 'Фон {frequency} Гц — отодвиньтесь от источника наводок и проверьте заземление',
+  'diagnostics.mic-permission-denied': 'Нет доступа к микрофону — разрешите доступ в настройках браузера или системы',
+  'diagnostics.mic-device-unavailable': 'Микрофон недоступен — подключите его или выберите другой вход',
+  'diagnostics.mic-device-busy': 'Микрофон занят — закройте другие аудиоприложения и повторите попытку',
+  'diagnostics.mic-unknown-error': 'Не удалось открыть микрофон — повторите попытку',
+  'diagnostics.mic-track-lost': 'Микрофон отключён — переподключите его и начните прослушивание заново',
+  'diagnostics.input-agc-active': 'Автогейн включён системой — отключите AGC в настройках устройства для точной настройки',
+  'diagnostics.input-echo-cancellation-active': 'Эхоподавление активно — отключите обработку звука в настройках устройства',
+  'diagnostics.input-noise-suppression-active': 'Шумоподавление активно — отключите его для точного анализа высоты тона',
+  'diagnostics.input-multi-channel': 'Многоканальный вход — используйте моно-вход для точности',
+  'diagnostics.input-resampled': 'Частота входа пересчитывается системой — выровняйте частоты устройства и контекста',
+  'diagnostics.input-settings-unavailable': 'Параметры входа недоступны — диагностика обработки звука ограничена',
+  'diagnostics.backend-native-stream-failed': 'Сбой нативного аудиопотока — перезапустите прослушивание',
 }
 
 const en: Record<string, string> = {
@@ -872,6 +900,34 @@ const en: Record<string, string> = {
   'quiet.room': 'Works best in a quiet room. Pluck one string at a time. Use manual selection for best accuracy.',
   'keyboard.hint': 'Space/M mic, 1-9 strings, R reference',
   footer: 'Guitar Tuner — Vue frontend • Tauri/Rust desktop',
+
+  // a11y: screen-reader announcements and non-color tune labels
+  'a11y.near.flat': 'ALMOST — tighten',
+  'a11y.near.sharp': 'ALMOST — loosen',
+  'a11y.announce.inTune': '{note} — in tune',
+  'a11y.announce.nearFlat': '{note} — almost in tune, slightly flat',
+  'a11y.announce.nearSharp': '{note} — almost in tune, slightly sharp',
+  'a11y.announce.flat': '{note} — flat, tighten the string',
+  'a11y.announce.sharp': '{note} — sharp, loosen the string',
+
+  // diagnostics: typed user-facing diagnostics hints (domain/diagnostics.ts)
+  'diagnostics.title': 'Audio diagnostics',
+  'diagnostics.signal-silent': 'Silence: the mic is open but no signal arrives — check the input and gain',
+  'diagnostics.signal-clipping': 'Clipping: the signal hits full scale (peak {peak}) — lower the input volume',
+  'diagnostics.signal-dc-offset': 'DC offset in the signal ({offset}) — check the input cable and connector',
+  'diagnostics.signal-hum': 'Mains hum at {frequency} Hz — move away from hum sources and check grounding',
+  'diagnostics.mic-permission-denied': 'Microphone access denied — allow microphone access in browser or system settings',
+  'diagnostics.mic-device-unavailable': 'Microphone unavailable — reconnect it or choose another input',
+  'diagnostics.mic-device-busy': 'Microphone is busy — close other audio apps and try again',
+  'diagnostics.mic-unknown-error': 'Could not open the microphone — try again',
+  'diagnostics.mic-track-lost': 'Microphone disconnected — reconnect it and start listening again',
+  'diagnostics.input-agc-active': 'Auto gain control is on — disable AGC in device settings for accurate tuning',
+  'diagnostics.input-echo-cancellation-active': 'Echo cancellation is active — disable audio processing in device settings',
+  'diagnostics.input-noise-suppression-active': 'Noise suppression is active — disable it for accurate pitch analysis',
+  'diagnostics.input-multi-channel': 'Multi-channel input — use a mono input for accuracy',
+  'diagnostics.input-resampled': 'Input is being resampled — align device and context sample rates',
+  'diagnostics.input-settings-unavailable': 'Input settings unavailable — audio-processing diagnostics are limited',
+  'diagnostics.backend-native-stream-failed': 'Native audio stream failed — restart listening',
 }
 
 export function useL10n() {

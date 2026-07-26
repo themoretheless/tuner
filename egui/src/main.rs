@@ -1,5 +1,6 @@
 mod app;
 mod audio;
+mod diagnostics;
 mod state;
 mod visualization;
 

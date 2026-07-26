@@ -1,4 +1,5 @@
 import type { ReadableValue } from '../../application/ports/value';
+import type { TunerDiagnostic } from '../../domain/diagnostics';
 import type { SessionStatus } from '../../session/sessionLifecycle';
 import type { DetectorBackend } from '../../types/detectorBackend';
 import type { Note } from '../../utils/notes';
@@ -6,6 +7,7 @@ import type { LayoutMode, ThemeMode } from '../../utils/settingsStorage';
 
 export interface ShellPort {
   detectorBackend: ReadableValue<DetectorBackend>;
+  diagnostics: ReadableValue<TunerDiagnostic[]>;
   isListening: ReadableValue<boolean>;
   layoutMode: ReadableValue<LayoutMode>;
   leftHanded: ReadableValue<boolean>;

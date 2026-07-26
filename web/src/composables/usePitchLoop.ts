@@ -8,6 +8,10 @@ import {
   normalizePipelineConfig,
   type PipelineConfig,
 } from '../domain/pipelineConfig';
+import {
+  measureSignalHealth,
+  type SignalHealthMeasurement,
+} from '../domain/diagnostics';
 import type { AudioFrame, AudioFrameTimebase } from '../ports/audioInput';
 import type { DetectionFrame, FrameContext } from '../types/frames';
 import type {
@@ -30,6 +34,11 @@ import {
 } from '../utils/pitch';
 const PITCH_DETECT_INTERVAL_MS = 33;
 const PITCH_WORKER_TIMEOUT_MS = 1_500;
+
+// Signal-health (silent/clipping/DC/hum) is computed at a low cadence: the
+// measurement is statistical, not per-frame, and a 2 Hz refresh keeps the
+// watchdog cheap while still reacting within half a second.
+const SIGNAL_HEALTH_INTERVAL_MS = 500;
 
 // How many consecutive too-quiet rAF ticks to ride out before clearing the
 // readout. A decaying string hovers around the gate thresholds, and clearing
@@ -60,6 +69,7 @@ export function usePitchLoop(
   const frameSemantics = ref<DetectionFrameSemantics>('unresolved');
   const frameTimebase = ref<AudioFrameTimebase | null>(null);
   const volume = ref(0);
+  const signalHealth = ref<SignalHealthMeasurement | null>(null);
   const confidence = computed(() => detectionFrame.value.confidence);
   const currentFrequency = computed(() => detectionFrame.value.freq);
   const smoothedFrequency = currentFrequency;
@@ -77,6 +87,7 @@ export function usePitchLoop(
   let workerTransferBuffer: ArrayBuffer | null = null;
   let pitchRequestId = 0;
   let quietTicks = 0;
+  let lastSignalHealthAt = 0;
   const fallbackProcessor = new FallbackPitchProcessor();
   fallbackProcessor.setPipelineConfig(
     degradedFallbackPipelineConfig(pipelineConfig.value),
@@ -162,6 +173,8 @@ export function usePitchLoop(
     frameSemantics.value = 'unresolved';
     frameTimebase.value = null;
     volume.value = 0;
+    signalHealth.value = null;
+    lastSignalHealthAt = 0;
     lastPitchDetectAt = Number.NEGATIVE_INFINITY;
     pitchRequestId += 1;
     pendingPitchRequestId = null;
@@ -212,6 +225,10 @@ export function usePitchLoop(
     volume.value = normalizeLevel(stats.rms);
 
     const now = performance.now();
+    if (now - lastSignalHealthAt >= SIGNAL_HEALTH_INTERVAL_MS) {
+      lastSignalHealthAt = now;
+      signalHealth.value = measureSignalHealth(frame.buffer, frame.sampleRate);
+    }
     const signalTooQuiet = pipelineConfig.value.fixedGateEnabled
       && isBelowPitchDetectionGate(stats);
     if (signalTooQuiet) {
@@ -365,6 +382,7 @@ export function usePitchLoop(
     start,
     stop,
     reset,
+    signalHealth,
     volume,
   };
 }

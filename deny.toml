@@ -1,0 +1,104 @@
+# cargo-deny configuration — release gate M8.
+# Проверяется в CI (.github/workflows/security.yml) и локально: `cargo deny check`.
+#
+# Список лицензий ниже составлен по фактическому дереву зависимостей
+# (`cargo metadata --locked`, снимок от 2026-07-26). При добавлении зависимости
+# с новой лицензией CI упадёт — лицензию нужно осознанно добавить сюда.
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+version = 2
+# БД уязвимостей RustSec по умолчанию (github.com/RustSec/advisory-db).
+yanked = "deny"
+# unmaintained/unsound — предупреждения: большинство приходят транзитивно из
+# tauri/wry/gtk-rs/egui, безопасного апгрейда на текущий момент нет; обновляем
+# вместе с мажорными релизами tauri/egui.
+# unmaintained = "workspace": падаем только если unmaintained-крейт — прямая
+# зависимость workspace. Транзитивные (gtk-rs, derivative, instant, unic-* и др.
+# через tauri/wry/egui) логируются как предупреждения; безопасного апгрейда для
+# них на текущий момент нет, обновляем вместе с мажорными релизами tauri/egui.
+unmaintained = "workspace"
+# Зафиксированные исключения (только с причиной и датой пересмотра):
+ignore = [
+    "RUSTSEC-2026-0194", # quick-xml 0.39.4: DoS O(N^2) при парсинге XML. Тянется через plist -> tauri; фикса в совместимой ветке нет (проверено 2026-07-26, `cargo update -p quick-xml` нечего обновлять). XML/плисты парсятся только из собственных ресурсов приложения, не из сети. Пересмотреть при обновлении tauri/plist.
+    "RUSTSEC-2026-0195", # quick-xml 0.39.4: memory-exhaustion в NsReader. Тот же источник и та же поверхность атаки, что RUSTSEC-2026-0194. Пересмотреть при обновлении tauri/plist.
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+workspace-default-features = "warn"
+external-default-features = "warn"
+# Запрещённые крейты: сетевые стеки на уровне приложения.
+# Приложение заявлено как полностью offline; HTTP/WebSocket клиенты в
+# приложении недопустимы. (reqwest/hyper присутствуют в Cargo.lock только
+# как target-specific транзитивные зависимости самого tauri — на уровне
+# бан-правил они не блокируются, т.к. запрет reqwest сломал бы сборку tauri.
+# Zero-network гарантируется гейтом scripts/check-no-network.mjs: в коде
+# приложения и desktop/src-tauri сетевые API запрещены.)
+deny = [
+    { name = "tauri-plugin-updater" },  # автообновления тянут сеть; решение осознанное
+    { name = "tauri-plugin-http" },     # HTTP из webview через плагин запрещён
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    "MPL-2.0",   # cssparser и др. (servo) — file-level copyleft, совместим со static linking
+    "OFL-1.1",   # шрифты в epaint (см. clarify ниже)
+]
+
+[[licenses.clarify]]
+# epaint декларирует "(MIT OR Apache-2.0) AND OFL-1.1 AND LicenseRef-UFL-1.0".
+# LicenseRef-UFL-1.0 — это Ubuntu Font License, применяемая к встроенному
+# шрифту Ubuntu; cargo-deny не знает SPDX-идентификатора UFL. Код epaint —
+# MIT/Apache-2.0, шрифт — OFL/UFL (обе свободные шрифтовые лицензии,
+# допускающие встраивание). Уточняем выражение до известных SPDX-термов.
+name = "epaint"
+expression = "(MIT OR Apache-2.0) AND OFL-1.1"
+license-files = []
+
+# Локальные workspace-крейты: лицензия проекта — MIT (см. LICENSE в корне),
+# но поле license в их Cargo.toml не заполнено. Уточняем здесь, не трогая
+# чужие зоны ответственности (pitch-core/ и т.п.).
+[[licenses.clarify]]
+name = "audio-input"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+name = "pitch-core"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+name = "tuner-test-support"
+expression = "MIT"
+license-files = []
+
+[[licenses.clarify]]
+name = "guitar-tuner-egui"
+expression = "MIT"
+license-files = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

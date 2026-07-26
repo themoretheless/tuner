@@ -12,7 +12,10 @@ import {
   REQUESTED_AUDIO_PROCESSING,
   type AudioInputDiagnostics,
 } from '../domain/audioInputDiagnostics';
-import { classifyMicrophoneStartFailure } from '../domain/microphoneStartFailure';
+import {
+  classifyMicrophoneStartFailure,
+  type MicrophoneStartFailure,
+} from '../domain/microphoneStartFailure';
 
 const DEFAULT_SAMPLE_RATE = 44100;
 const DEVICE_REFRESH_DEBOUNCE_MS = 250;
@@ -24,6 +27,10 @@ export interface WebAudioInputAdapter
   analyser: Ref<AnalyserNode | null>;
   inputDevices: Ref<MediaDeviceInfo[]>;
   inputDiagnostics: Ref<AudioInputDiagnostics | null>;
+  /** Typed classification of the last start() failure, for typed diagnostics. */
+  startFailure: Ref<MicrophoneStartFailure | null>;
+  /** True when the mic track ended involuntarily (unplug / OS revoke). */
+  trackLost: Ref<boolean>;
   refreshInputDevices(): Promise<void>;
   sampleRate: Ref<number>;
   selectedInputDeviceId: Ref<string>;
@@ -45,6 +52,8 @@ export function useAudioInput(
   const analyser = ref<AnalyserNode | null>(null);
   const inputDevices = ref<MediaDeviceInfo[]>([]);
   const inputDiagnostics = ref<AudioInputDiagnostics | null>(null);
+  const startFailure = ref<MicrophoneStartFailure | null>(null);
+  const trackLost = ref(false);
   const sampleRate = ref(DEFAULT_SAMPLE_RATE);
   const exactPcmCaptureAvailable = ref(false);
   const available = computed(() => (
@@ -89,6 +98,8 @@ export function useAudioInput(
     if (isListening.value) return true;
     const revision = ++streamRevision;
     inputDiagnostics.value = null;
+    startFailure.value = null;
+    trackLost.value = false;
     if (!available.value) {
       error.value = 'Microphone API unavailable';
       return false;
@@ -149,10 +160,12 @@ export function useAudioInput(
       return true;
     } catch (e: unknown) {
       if (revision !== streamRevision) return false;
-      error.value = classifyMicrophoneStartFailure(
+      const failure = classifyMicrophoneStartFailure(
         e,
         Boolean(selectedInputDeviceId.value),
-      ).message;
+      );
+      startFailure.value = failure;
+      error.value = failure.message;
       cleanup();
       isListening.value = false;
       return false;
@@ -161,6 +174,7 @@ export function useAudioInput(
 
   function handleTrackEnded() {
     streamRevision += 1;
+    trackLost.value = true;
     error.value = 'Microphone disconnected. Reconnect it and start listening again.';
     cleanup();
     isListening.value = false;
@@ -331,6 +345,8 @@ export function useAudioInput(
     selectedInputDeviceId,
     selectInputDevice,
     start,
+    startFailure,
     stop,
+    trackLost,
   };
 }

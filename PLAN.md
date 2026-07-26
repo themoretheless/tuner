@@ -42,7 +42,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
 | M7 DSP hardening | Done | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement, gated SNR (57/57) and reverb (57/57) grids, calibrated confidence-weighted YIN/MPM fusion, criterion hot-path benchmarks, restart soak tests and a CI differential baseline gate are done |
-| M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
+| M8 product/release | Done baseline | Offline SW, feature UI, themes, typed cross-platform diagnostics with signal-health watchdog, throttled aria-live/forced-colors/non-color a11y, strict prod CSP with dev override, zero-network CI, cargo-deny/npm-audit gates and signing scaffolding are done; actual Apple/Windows signing requires certificates |
 
 ---
 
@@ -142,13 +142,15 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 **Status 2026-07-21:** lifecycle visibility, native teardown propagation and web input recovery evidence are complete: restart intent is immediate, failed stop retains its backend for retry, snapshots expose typed operations, the Tauri API boundary is injectable, stale mic starts are revision-cancelled, and permission denial/track loss/devicechange/backend switching are tested. Cross-platform typed user-facing diagnostics, CSP/signing and accessibility gates remain.
 
+**Status 2026-07-26 (M8 round):** typed cross-platform diagnostics are done: shared contract `web/src/domain/diagnostics.ts` (categories, severity, stable string codes, localized actionable hints) with signal-health detection (silent/clipping/DC offset/50-60 Hz hum via Goertzel) mirrored in `desktop/.../signal_health.rs` and `egui/src/diagnostics.rs`, surfaced via `DiagnosticsStrip.vue` (web/Tauri wire field `signal`) and egui state. a11y gates done: throttled aria-live tune announcer (`utils/tuneA11y.ts`, immediate on in-tune/note change, else <= 1/s), non-color in-tune cues (icons + border styles + text), forced-colors and prefers-contrast media branches, colorblind palette audit. Release gates done: strict prod CSP in `tauri.conf.json` with `tauri.conf.dev.json` override (safe-by-default), `scripts/check-no-network.mjs` zero-network proof wired into new `security.yml` (blocking `release.yml`), `deny.toml` cargo-deny (licenses/bans/advisories, two documented quick-xml RUSTSEC exceptions), npm audit gates (postcss high fixed), signing scaffolding in `RELEASE-SIGNING.md` + `scripts/check-release-signing.mjs` (entitlements minimal, no secrets in git). Web 209/209, workspace cargo tests green. Remaining: real Apple/Windows signing needs certificates (checklist in RELEASE-SIGNING.md); version numbers across version.json/Cargo.toml/tauri.conf.json/web package.json are inconsistent and should be aligned.
+
 ---
 
 ## Now / Next / Later
 
-- **Now:** add cross-platform typed diagnostics with actionable presentation for web, Tauri and egui.
-- **Next:** M8 accessibility/release gates (aria-live, colorblind palettes, CSP/signing, zero-network CI).
-- **Later:** revisit fusion weight clamp [0.5, 2.0] with more representative synthetic data; M6 recovery telemetry.
+- **Now:** align version numbers across version.json, Cargo.toml, tauri.conf.json and web package.json (build-web version gate will fail otherwise).
+- **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update.
+- **Later:** revisit fusion weight clamp [0.5, 2.0] with more representative synthetic data; M6 recovery telemetry; egui diagnostics presentation localization.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

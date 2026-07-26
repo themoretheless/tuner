@@ -1,5 +1,6 @@
 mod config;
 mod frame;
+mod signal_health;
 mod stream;
 
 use self::config::{NativeAudioConfig, SharedNativeAudioSettings};

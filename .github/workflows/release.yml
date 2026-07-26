@@ -24,7 +24,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  security:
+    uses: ./.github/workflows/security.yml
+
   build-web:
+    needs: security
     uses: ./.github/workflows/build-web.yml
 
   build-tauri:

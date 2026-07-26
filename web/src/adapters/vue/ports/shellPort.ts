@@ -11,7 +11,7 @@ interface Dependencies {
   display: Pick<DisplayCapability, 'layoutMode' | 'leftHanded' | 'setLayoutMode' | 'themeMode'>;
   listening: Pick<ListeningCapability, 'start' | 'stop' | 'toggle'>;
   referenceTone: Pick<ReferenceToneCapability, 'toggleReferenceTone'>;
-  session: Pick<SessionCapability, 'detectorBackend' | 'isListening' | 'status'>;
+  session: Pick<SessionCapability, 'detectorBackend' | 'diagnostics' | 'isListening' | 'status'>;
   tuning: Pick<TuningCapability, 'strings' | 'toggleString'>;
 }
 
@@ -20,6 +20,7 @@ export function createShellPort(
 ): ShellPort {
   return {
     detectorBackend: session.detectorBackend,
+    diagnostics: session.diagnostics,
     isListening: session.isListening,
     layoutMode: display.layoutMode,
     leftHanded: display.leftHanded,
