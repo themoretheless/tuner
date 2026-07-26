@@ -11,6 +11,9 @@ pub(crate) struct TunerViewState {
     /// Stable signal-quality diagnostic codes from the shared cross-platform
     /// contract (web/src/domain/diagnostics.ts).
     pub(crate) diagnostics: Vec<&'static str>,
+    /// Stream-loss recovery telemetry codes from the native backend
+    /// (backend-stream-lost / backend-recovery-*), same contract.
+    pub(crate) backend_diagnostics: Vec<&'static str>,
     pub(crate) error: Option<String>,
     pub(crate) frame_id: u64,
     pub(crate) frequency: Option<f32>,
@@ -43,6 +46,7 @@ impl TunerViewState {
         self.cents = 0.0;
         self.confidence = 0.0;
         self.diagnostics.clear();
+        self.backend_diagnostics.clear();
         self.frequency = None;
         self.is_power = false;
         self.level = 0.0;
@@ -57,6 +61,25 @@ fn normalized_ratio(value: f32) -> f32 {
         value.clamp(0.0, 1.0)
     } else {
         0.0
+    }
+}
+
+/// Reduce a stream-recovery event code into the visible backend diagnostics.
+/// A fatal recovery failure also surfaces as the session error.
+pub(crate) fn apply_recovery_code(state: &mut TunerViewState, code: &'static str) {
+    use crate::diagnostics::{
+        diagnostic_hint, BACKEND_RECOVERY_ATTEMPTED, BACKEND_RECOVERY_FAILED,
+        BACKEND_RECOVERY_SUCCEEDED, BACKEND_STREAM_LOST,
+    };
+    state.backend_diagnostics = match code {
+        BACKEND_STREAM_LOST => vec![BACKEND_STREAM_LOST],
+        BACKEND_RECOVERY_ATTEMPTED => vec![BACKEND_STREAM_LOST, BACKEND_RECOVERY_ATTEMPTED],
+        BACKEND_RECOVERY_SUCCEEDED => vec![BACKEND_RECOVERY_SUCCEEDED],
+        BACKEND_RECOVERY_FAILED => vec![BACKEND_RECOVERY_FAILED],
+        _ => return,
+    };
+    if code == BACKEND_RECOVERY_FAILED {
+        state.error = Some(diagnostic_hint(code).to_string());
     }
 }
 

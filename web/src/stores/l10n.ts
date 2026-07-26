@@ -466,6 +466,10 @@ const ru: Record<string, string> = {
   'diagnostics.input-resampled': 'Частота входа пересчитывается системой — выровняйте частоты устройства и контекста',
   'diagnostics.input-settings-unavailable': 'Параметры входа недоступны — диагностика обработки звука ограничена',
   'diagnostics.backend-native-stream-failed': 'Сбой нативного аудиопотока — перезапустите прослушивание',
+  'diagnostics.backend-stream-lost': 'Аудиопоток потерян — переподключаем вход…',
+  'diagnostics.backend-recovery-attempted': 'Попытка восстановить аудиовход…',
+  'diagnostics.backend-recovery-succeeded': 'Аудиовход восстановлен — прослушивание продолжается',
+  'diagnostics.backend-recovery-failed': 'Не удалось восстановить аудиовход — переподключите устройство и начните прослушивание заново',
 }
 
 const en: Record<string, string> = {
@@ -928,6 +932,10 @@ const en: Record<string, string> = {
   'diagnostics.input-resampled': 'Input is being resampled — align device and context sample rates',
   'diagnostics.input-settings-unavailable': 'Input settings unavailable — audio-processing diagnostics are limited',
   'diagnostics.backend-native-stream-failed': 'Native audio stream failed — restart listening',
+  'diagnostics.backend-stream-lost': 'Audio stream lost — reconnecting the input…',
+  'diagnostics.backend-recovery-attempted': 'Trying to recover the audio input…',
+  'diagnostics.backend-recovery-succeeded': 'Audio input recovered — listening continues',
+  'diagnostics.backend-recovery-failed': 'Could not recover the audio input — reconnect the device and start listening again',
 }
 
 export function useL10n() {

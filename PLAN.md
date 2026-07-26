@@ -40,7 +40,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 | M3 web decomposition | Done | One-line compatibility facade, 124-line Vue composition adapter, framework-independent use cases, injected `TunerInputSet`, explicit capabilities and five segregated feature-port contracts are architecture-tested |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
-| M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
+| M6 native realtime | Done | Shared bounded input worker, decomposed egui/Tauri and supervised native input with typed recovery telemetry (stream-lost/recovery-attempted/succeeded/failed, stall watchdog, bounded backoff retries, session survives device unplug) are done |
 | M7 DSP hardening | Done | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement, gated SNR (57/57) and reverb (57/57) grids, calibrated confidence-weighted YIN/MPM fusion, criterion hot-path benchmarks, restart soak tests and a CI differential baseline gate are done |
 | M8 product/release | Done baseline | Offline SW, feature UI, themes, typed cross-platform diagnostics with signal-health watchdog, throttled aria-live/forced-colors/non-color a11y, strict prod CSP with dev override, zero-network CI, cargo-deny/npm-audit gates and signing scaffolding are done; actual Apple/Windows signing requires certificates |
 
@@ -148,9 +148,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** align version numbers across version.json, Cargo.toml, tauri.conf.json and web package.json (build-web version gate will fail otherwise).
-- **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update.
-- **Later:** revisit fusion weight clamp [0.5, 2.0] with more representative synthetic data; M6 recovery telemetry; egui diagnostics presentation localization.
+- **Now:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update (no compatible fix as of 2026-07-26).
+- **Next:** nothing open in M0-M8 baselines; pick from the TOP-500 backlog by value.
+- **Later:** egui diagnostics presentation localization. Fusion clamp [0.5, 2.0] revisited in round 10: probe (1933 frame pairs, all strata) shows no measurable gain beyond the clamp; decision documented in `dsp/candidates.rs`.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

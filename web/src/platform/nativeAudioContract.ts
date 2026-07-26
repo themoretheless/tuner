@@ -1,3 +1,7 @@
+import {
+  isDiagnosticCode,
+  type DiagnosticCode,
+} from '../domain/diagnostics';
 import { createDefaultFrameContext } from '../domain/frameContext';
 import {
   createDefaultPipelineConfig,
@@ -14,9 +18,26 @@ import {
 
 export const NATIVE_AUDIO_FRAME_EVENT = 'native-audio-frame';
 export const NATIVE_AUDIO_ERROR_EVENT = 'native-audio-error';
+export const NATIVE_AUDIO_RECOVERY_EVENT = 'native-audio-recovery';
 
 export interface NativeAudioErrorPayload {
   message?: unknown;
+  /** Optional stable diagnostic code for typed failures. */
+  code?: unknown;
+}
+
+export interface NativeAudioRecoveryPayload {
+  code?: unknown;
+  reason?: unknown;
+  attempt?: unknown;
+  maxAttempts?: unknown;
+}
+
+export interface NativeAudioRecovery {
+  code: DiagnosticCode;
+  reason: string | null;
+  attempt: number | null;
+  maxAttempts: number | null;
 }
 
 export interface NativeAudioFramePayload {
@@ -42,10 +63,37 @@ export interface NativeAudioConfiguration {
   range: PitchDetectionRange;
 }
 
-export function normalizeNativeAudioError(payload: NativeAudioErrorPayload = {}) {
-  return typeof payload.message === 'string' && payload.message.trim()
-    ? payload.message
-    : 'Native audio stream failed';
+export interface NativeAudioError {
+  message: string;
+  code: DiagnosticCode | null;
+}
+
+export function normalizeNativeAudioError(payload: NativeAudioErrorPayload = {}): NativeAudioError {
+  return {
+    message: typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message
+      : 'Native audio stream failed',
+    code: isDiagnosticCode(payload.code) ? payload.code : null,
+  };
+}
+
+export function normalizeNativeAudioRecovery(
+  payload: NativeAudioRecoveryPayload = {},
+): NativeAudioRecovery | null {
+  if (!isDiagnosticCode(payload.code)) return null;
+  return {
+    code: payload.code,
+    reason: typeof payload.reason === 'string' && payload.reason.trim()
+      ? payload.reason
+      : null,
+    attempt: positiveInteger(payload.attempt),
+    maxAttempts: positiveInteger(payload.maxAttempts),
+  };
+}
+
+function positiveInteger(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 export function createNativeAudioConfiguration(): NativeAudioConfiguration {

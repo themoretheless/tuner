@@ -1,13 +1,21 @@
 use super::config::SharedNativeAudioSettings;
-use super::frame::{NativeAudioError, NativeFrameProcessor, ERROR_EVENT_NAME, EVENT_NAME};
-use audio_input::{InputConfig, InputStream};
+use super::frame::{
+    NativeAudioError, NativeAudioRecovery, NativeFrameProcessor, ERROR_EVENT_NAME, EVENT_NAME,
+    RECOVERY_EVENT_NAME,
+};
+use audio_input::{InputConfig, RecoveryEvent, RecoveryPolicy, SupervisedInputStream};
 use tauri::{AppHandle, Emitter};
 
 pub(crate) struct NativeAudioRuntime {
-    input: InputStream,
+    input: SupervisedInputStream,
 }
 
 impl NativeAudioRuntime {
+    /// Open the supervised input stream. The stream starts playing inside
+    /// `SupervisedInputStream::open`; on stream loss the supervisor reopens it
+    /// with backoff (bounded attempts) and emits typed recovery telemetry on
+    /// `native-audio-recovery` without restarting the listening session. A
+    /// fatal recovery failure also surfaces as a typed `native-audio-error`.
     pub(crate) fn create(
         app: AppHandle,
         shared_settings: SharedNativeAudioSettings,
@@ -18,8 +26,10 @@ impl NativeAudioRuntime {
             .unwrap_or_default();
         let mut processor = NativeFrameProcessor::new(initial_config);
         let error_app = app.clone();
-        let input = InputStream::open(
+        let recovery_app = app.clone();
+        let input = SupervisedInputStream::open(
             InputConfig::default(),
+            RecoveryPolicy::default(),
             move |samples, sample_rate| {
                 let changed = shared_settings
                     .lock()
@@ -35,12 +45,18 @@ impl NativeAudioRuntime {
             move |error| {
                 let _ = error_app.emit(ERROR_EVENT_NAME, NativeAudioError::new(error));
             },
+            move |event: RecoveryEvent| {
+                if let RecoveryEvent::Failed { reason, .. } = &event {
+                    let _ = recovery_app.emit(
+                        ERROR_EVENT_NAME,
+                        NativeAudioError::recovery_failed(reason.clone()),
+                    );
+                }
+                let _ =
+                    recovery_app.emit(RECOVERY_EVENT_NAME, NativeAudioRecovery::from_event(&event));
+            },
         )?;
         Ok(Self { input })
-    }
-
-    pub(crate) fn play(&self) -> Result<(), String> {
-        self.input.play()
     }
 
     pub(crate) fn stop(&mut self) {

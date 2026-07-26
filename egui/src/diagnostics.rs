@@ -12,6 +12,13 @@ pub(crate) const SIGNAL_CLIPPING: &str = "signal-clipping";
 pub(crate) const SIGNAL_DC_OFFSET: &str = "signal-dc-offset";
 pub(crate) const SIGNAL_HUM: &str = "signal-hum";
 
+// Stream-loss recovery telemetry codes, shared with the native backends
+// (audio-input::recovery) and the web contract.
+pub(crate) const BACKEND_STREAM_LOST: &str = "backend-stream-lost";
+pub(crate) const BACKEND_RECOVERY_ATTEMPTED: &str = "backend-recovery-attempted";
+pub(crate) const BACKEND_RECOVERY_SUCCEEDED: &str = "backend-recovery-succeeded";
+pub(crate) const BACKEND_RECOVERY_FAILED: &str = "backend-recovery-failed";
+
 const HUM_CANDIDATE_FREQUENCIES: [f32; 2] = [50.0, 60.0];
 const HUM_ANALYSIS_MAX_SAMPLES: usize = 16384;
 /// The hum component must carry at least this share of the signal RMS.
@@ -93,6 +100,12 @@ pub(crate) fn diagnostic_hint(code: &str) -> &'static str {
         SIGNAL_CLIPPING => "signal hits full scale — lower the input volume",
         SIGNAL_DC_OFFSET => "DC offset — check the input cable and connector",
         SIGNAL_HUM => "mains hum — move away from hum sources, check grounding",
+        BACKEND_STREAM_LOST => "audio stream lost — reconnecting the input…",
+        BACKEND_RECOVERY_ATTEMPTED => "reconnecting the audio input…",
+        BACKEND_RECOVERY_SUCCEEDED => "audio input reconnected",
+        BACKEND_RECOVERY_FAILED => {
+            "could not restore the audio input — reconnect the device and restart listening"
+        }
         _ => "see diagnostics contract",
     }
 }

@@ -208,6 +208,13 @@ impl App {
                 format!("⚠ {} — {}", code, diagnostic_hint(code)),
             );
         }
+        // Stream-loss recovery telemetry (shared diagnostic contract).
+        for code in &state.backend_diagnostics {
+            ui.colored_label(
+                egui::Color32::from_rgb(234, 179, 8),
+                format!("⚠ {} — {}", code, diagnostic_hint(code)),
+            );
+        }
     }
 
     fn draw_controls(&mut self, ui: &mut egui::Ui, context: &egui::Context) {

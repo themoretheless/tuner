@@ -18,7 +18,9 @@ import {
   createNativeAudioConfiguration,
   NATIVE_AUDIO_ERROR_EVENT,
   NATIVE_AUDIO_FRAME_EVENT,
+  NATIVE_AUDIO_RECOVERY_EVENT,
   normalizeNativeAudioError,
+  normalizeNativeAudioRecovery,
   normalizeNativeFrame,
   withNativeAudioRange,
   withNativeFrameContext,
@@ -26,15 +28,20 @@ import {
   type NativeAudioConfiguration,
   type NativeAudioErrorPayload,
   type NativeAudioFramePayload,
+  type NativeAudioRecoveryPayload,
 } from '../platform/nativeAudioContract';
 
 export interface NativeAudioInputAdapter extends DetectionFrameInputPort {
   available: Ref<boolean>;
   error: Ref<string | null>;
+  /** Stable diagnostic code attached to the current error, when typed. */
+  errorCode: Ref<DiagnosticCode | null>;
   frame: Ref<DetectionFrame | null>;
   isListening: Ref<boolean>;
   /** Signal-quality diagnostic codes reported by the native engine. */
   signalDiagnostics: Ref<DiagnosticCode[]>;
+  /** Stream-loss recovery telemetry codes reported by the native backend. */
+  recoveryDiagnostics: Ref<DiagnosticCode[]>;
   refreshAvailability(): Promise<boolean>;
 }
 
@@ -43,15 +50,18 @@ export function useNativeAudioInput(
 ): NativeAudioInputAdapter {
   const available = ref(false);
   const error = ref<string | null>(null);
+  const errorCode = ref<DiagnosticCode | null>(null);
   const frame = ref<DetectionFrame | null>(null);
   const isListening = ref(false);
   const signalDiagnostics = ref<DiagnosticCode[]>([]);
+  const recoveryDiagnostics = ref<DiagnosticCode[]>([]);
 
   let invokeFn: NativeInvoke | null = null;
   let listenFn: NativeListen | null = null;
   let availabilitySync: Promise<boolean> | null = null;
   let unlistenError: (() => void) | null = null;
   let unlistenFrame: (() => void) | null = null;
+  let unlistenRecovery: (() => void) | null = null;
   let configuration: NativeAudioConfiguration = createNativeAudioConfiguration();
   let configurationSync: Promise<void> | null = null;
   let configurationRevision = 0;
@@ -93,6 +103,7 @@ export function useNativeAudioInput(
 
   async function start() {
     error.value = null;
+    errorCode.value = null;
     const isAvailable = available.value || await refreshAvailability();
     if (!isAvailable || !invokeFn || !listenFn) {
       error.value = 'Native audio backend unavailable';
@@ -105,12 +116,21 @@ export function useNativeAudioInput(
 
     try {
       unlistenError = await listenFn<NativeAudioErrorPayload>(NATIVE_AUDIO_ERROR_EVENT, (event) => {
-        error.value = normalizeNativeAudioError(event.payload);
+        const nativeError = normalizeNativeAudioError(event.payload);
+        error.value = nativeError.message;
+        errorCode.value = nativeError.code;
         frame.value = null;
         signalDiagnostics.value = [];
         isListening.value = false;
         cleanupListeners();
       });
+      unlistenRecovery = await listenFn<NativeAudioRecoveryPayload>(
+        NATIVE_AUDIO_RECOVERY_EVENT,
+        (event) => {
+          const recovery = normalizeNativeAudioRecovery(event.payload);
+          if (recovery) applyRecoveryEvent(recovery.code);
+        },
+      );
       unlistenFrame = await listenFn<NativeAudioFramePayload>(NATIVE_AUDIO_FRAME_EVENT, (event) => {
         frame.value = normalizeNativeFrame(event.payload);
         signalDiagnostics.value = normalizeDiagnosticCodes(event.payload?.signal);
@@ -133,8 +153,29 @@ export function useNativeAudioInput(
       signalDiagnostics.value = [];
       if (!error.value) {
         error.value = nativeError instanceof Error ? nativeError.message : String(nativeError);
+        errorCode.value = null;
       }
       return false;
+    }
+  }
+
+  /** Reduce one recovery telemetry event into the visible diagnostics list. */
+  function applyRecoveryEvent(code: DiagnosticCode) {
+    switch (code) {
+      case 'backend-stream-lost':
+        recoveryDiagnostics.value = ['backend-stream-lost'];
+        break;
+      case 'backend-recovery-attempted':
+        recoveryDiagnostics.value = ['backend-stream-lost', 'backend-recovery-attempted'];
+        break;
+      case 'backend-recovery-succeeded':
+        recoveryDiagnostics.value = ['backend-recovery-succeeded'];
+        break;
+      case 'backend-recovery-failed':
+        recoveryDiagnostics.value = ['backend-recovery-failed'];
+        break;
+      default:
+        break;
     }
   }
 
@@ -153,6 +194,7 @@ export function useNativeAudioInput(
       isListening.value = false;
       frame.value = null;
       signalDiagnostics.value = [];
+      recoveryDiagnostics.value = [];
     }
   }
 
@@ -219,12 +261,15 @@ export function useNativeAudioInput(
   function cleanupListeners() {
     unlistenError?.();
     unlistenFrame?.();
+    unlistenRecovery?.();
     unlistenError = null;
     unlistenFrame = null;
+    unlistenRecovery = null;
   }
 
   function clearError() {
     error.value = null;
+    errorCode.value = null;
   }
 
   void refreshAvailability();
@@ -237,10 +282,12 @@ export function useNativeAudioInput(
     clearError,
     detectorBackend: 'native',
     error,
+    errorCode,
     frame,
     id: 'native',
     isListening,
     output: 'detection-frame',
+    recoveryDiagnostics,
     refreshAvailability,
     setDetectionRange,
     setFrameContext,

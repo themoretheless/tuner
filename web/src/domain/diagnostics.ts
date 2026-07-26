@@ -41,7 +41,12 @@ export type InputProcessingDiagnosticCode =
   | 'input-resampled'
   | 'input-settings-unavailable';
 
-export type BackendDiagnosticCode = 'backend-native-stream-failed';
+export type BackendDiagnosticCode =
+  | 'backend-native-stream-failed'
+  | 'backend-stream-lost'
+  | 'backend-recovery-attempted'
+  | 'backend-recovery-succeeded'
+  | 'backend-recovery-failed';
 
 export type DiagnosticCode =
   | SignalDiagnosticCode
@@ -66,6 +71,10 @@ export const DIAGNOSTIC_CODES: readonly DiagnosticCode[] = [
   'input-resampled',
   'input-settings-unavailable',
   'backend-native-stream-failed',
+  'backend-stream-lost',
+  'backend-recovery-attempted',
+  'backend-recovery-succeeded',
+  'backend-recovery-failed',
 ];
 
 export interface TunerDiagnostic {
@@ -101,6 +110,10 @@ export const DIAGNOSTIC_CATALOG: Readonly<Record<DiagnosticCode, DiagnosticCatal
   'input-resampled': { category: 'input', severity: 'info' },
   'input-settings-unavailable': { category: 'input', severity: 'info' },
   'backend-native-stream-failed': { category: 'backend', severity: 'error' },
+  'backend-stream-lost': { category: 'backend', severity: 'warning' },
+  'backend-recovery-attempted': { category: 'backend', severity: 'info' },
+  'backend-recovery-succeeded': { category: 'backend', severity: 'info' },
+  'backend-recovery-failed': { category: 'backend', severity: 'error' },
 };
 
 const HINT_PREFIX = 'diagnostics.';
@@ -176,6 +189,23 @@ export function diagnosticsFromInputWarnings(
 
 export function nativeStreamFailedDiagnostic(source: DiagnosticSource): TunerDiagnostic {
   return createDiagnostic('backend-native-stream-failed', source);
+}
+
+// --- Native stream recovery -------------------------------------------------
+
+/** Recovery telemetry codes emitted by the native audio backend
+ * (desktop/src-tauri/src/native_audio/stream.rs, audio-input::recovery). */
+export const BACKEND_RECOVERY_CODES: readonly BackendDiagnosticCode[] = [
+  'backend-stream-lost',
+  'backend-recovery-attempted',
+  'backend-recovery-succeeded',
+  'backend-recovery-failed',
+];
+
+export function isBackendRecoveryCode(
+  code: DiagnosticCode,
+): code is BackendDiagnosticCode {
+  return (BACKEND_RECOVERY_CODES as readonly string[]).includes(code);
 }
 
 // --- Signal health ----------------------------------------------------------

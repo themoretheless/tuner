@@ -1,5 +1,6 @@
 use super::config::{NativeAudioConfig, NativeAudioNote};
 use super::signal_health::signal_health_codes;
+use audio_input::{RecoveryEvent, BACKEND_RECOVERY_FAILED};
 use pitch_core::{
     DetectorConfig, EngineConfig, PipelineCandidate, PipelineConfidenceTelemetry,
     PipelineSpectralTelemetry, PipelineTelemetry, TunerEngine, Tuning,
@@ -9,16 +10,83 @@ use std::time::Instant;
 
 pub(crate) const EVENT_NAME: &str = "native-audio-frame";
 pub(crate) const ERROR_EVENT_NAME: &str = "native-audio-error";
+pub(crate) const RECOVERY_EVENT_NAME: &str = "native-audio-recovery";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct NativeAudioError {
     message: String,
+    /// Stable diagnostic code (shared cross-platform contract, see
+    /// web/src/domain/diagnostics.ts) when the failure is a typed one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
 }
 
 impl NativeAudioError {
     pub(crate) fn new(message: String) -> Self {
-        Self { message }
+        Self {
+            message,
+            code: None,
+        }
+    }
+
+    pub(crate) fn recovery_failed(reason: String) -> Self {
+        Self {
+            message: format!(
+                "Audio input stream could not be recovered — reconnect the input device and start listening again ({reason})"
+            ),
+            code: Some(BACKEND_RECOVERY_FAILED),
+        }
+    }
+}
+
+/// Typed recovery telemetry event for the shared diagnostics contract.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct NativeAudioRecovery {
+    /// One of backend-stream-lost / backend-recovery-attempted /
+    /// backend-recovery-succeeded / backend-recovery-failed.
+    code: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attempt: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_attempts: Option<u32>,
+}
+
+impl NativeAudioRecovery {
+    pub(crate) fn from_event(event: &RecoveryEvent) -> Self {
+        let code = event.code();
+        match event {
+            RecoveryEvent::StreamLost { reason } => Self {
+                code,
+                reason: Some(reason.clone()),
+                attempt: None,
+                max_attempts: None,
+            },
+            RecoveryEvent::Attempted {
+                attempt,
+                max_attempts,
+            } => Self {
+                code,
+                reason: None,
+                attempt: Some(*attempt),
+                max_attempts: Some(*max_attempts),
+            },
+            RecoveryEvent::Succeeded { attempt } => Self {
+                code,
+                reason: None,
+                attempt: Some(*attempt),
+                max_attempts: None,
+            },
+            RecoveryEvent::Failed { reason, attempts } => Self {
+                code,
+                reason: Some(reason.clone()),
+                attempt: Some(*attempts),
+                max_attempts: None,
+            },
+        }
     }
 }
 

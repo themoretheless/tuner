@@ -103,12 +103,8 @@ fn run_audio_thread(
         }
     };
 
-    if let Err(error) = runtime.play() {
-        let _ = ready_tx.send(Err(error));
-        runtime.stop();
-        return;
-    }
-
+    // The supervised stream already plays; runtime.create() only fails on
+    // startup errors, so reaching this point means the backend is live.
     let _ = ready_tx.send(Ok(()));
     let _ = stop_rx.recv();
     runtime.stop();

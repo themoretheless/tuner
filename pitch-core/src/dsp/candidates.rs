@@ -14,6 +14,16 @@ const UNGUIDED_RELIABILITY_MARGIN: f32 = 1.3;
 /// Bounds for the fused weight ratio. The calibration curves capture a
 /// stable ~2-2.5x reliability ratio between the detectors; clamping keeps
 /// the calibration from ever dominating the measurements themselves.
+///
+/// Round-10 revisit (representativeness-extended probe: reverb RT60 0.8 s,
+/// SNR down to 8/10 dB, pluck attacks, vocal vibrato, bass E1, >660 Hz —
+/// 1933 agreeing frame pairs): the clamp binds only at the upper edge
+/// (39% of frames, never at the lower edge), and relaxing it — unclamped
+/// or [0.25, 4.0] — changes fused MAE by <= 0.002 cents in EVERY stratum
+/// (SNR, reverb, band, profile, modifier, phase). No stratum showed an
+/// optimal ratio inside a wider range, so the clamp stays [0.5, 2.0]:
+/// it is a safeguard for conditions the calibration has not seen (real
+/// recordings, where fusion measurably helps), not a tuning knob.
 const MIN_FUSION_WEIGHT_RATIO: f32 = 0.5;
 const MAX_FUSION_WEIGHT_RATIO: f32 = 2.0;
 
@@ -432,6 +442,59 @@ mod tests {
         );
         assert!(mpm_weight / yin_weight <= MAX_FUSION_WEIGHT_RATIO + f32::EPSILON);
         assert!(mpm_weight / yin_weight >= MIN_FUSION_WEIGHT_RATIO - f32::EPSILON);
+    }
+
+    #[test]
+    fn fusion_weight_ratio_clamps_at_both_edges() {
+        // Upper edge: YIN 0.70 vs MPM 1.0 → σ ratio 120.5/3.5 ≈ 34 → 2.0.
+        let (yin_weight, mpm_weight) = fusion_weights(
+            &PitchEstimate {
+                confidence: 0.70,
+                frequency: 100.0,
+            },
+            &PitchEstimate {
+                confidence: 1.0,
+                frequency: 100.0,
+            },
+        );
+        assert!((mpm_weight / yin_weight - MAX_FUSION_WEIGHT_RATIO).abs() < f32::EPSILON);
+
+        // Lower edge: YIN 1.0 vs MPM 0.85 → σ ratio 8.5/20.75 ≈ 0.41 → 0.5.
+        // The round-10 probe never hit this edge on synthetic data, but the
+        // clamp must still protect it (real signals can favor YIN).
+        let (yin_weight, mpm_weight) = fusion_weights(
+            &PitchEstimate {
+                confidence: 1.0,
+                frequency: 100.0,
+            },
+            &PitchEstimate {
+                confidence: 0.85,
+                frequency: 100.0,
+            },
+        );
+        assert!((mpm_weight / yin_weight - MIN_FUSION_WEIGHT_RATIO).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn unclamped_calibration_ratio_stays_near_the_documented_bounds() {
+        // Sanity guard for the round-10 decision to keep [0.5, 2.0]: over the
+        // confidence range both detectors actually publish (>= 0.7), the raw
+        // σ_yin/σ_mpm ratio spans roughly [0.22, 16.1] — the clamp trims only
+        // the extreme tails and leaves the bulk of the calibration intact.
+        let mut lowest = f32::INFINITY;
+        let mut highest = 0.0_f32;
+        for yin_confidence in [0.70, 0.80, 0.90, 0.95, 0.99, 1.0] {
+            for mpm_confidence in [0.70, 0.80, 0.90, 0.95, 0.99, 1.0] {
+                let ratio =
+                    predicted_error_yin(yin_confidence) / predicted_error_mpm(mpm_confidence);
+                lowest = lowest.min(ratio);
+                highest = highest.max(ratio);
+            }
+        }
+        assert!(
+            lowest > 0.2 && highest < 17.0,
+            "ratio span {lowest}..{highest}"
+        );
     }
 
     #[test]

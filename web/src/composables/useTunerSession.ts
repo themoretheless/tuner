@@ -155,12 +155,25 @@ export function useTunerSession(options: TunerSessionOptions) {
     const source: DiagnosticSource = backend === 'native' ? 'tauri' : 'web';
     if (backend === 'native') {
       if (nativeAudio.error.value) {
-        result.push(nativeStreamFailedDiagnostic('tauri'));
+        const typedCode = nativeAudio.errorCode.value;
+        result.push(
+          typedCode
+            ? createDiagnostic(typedCode, 'tauri')
+            : nativeStreamFailedDiagnostic('tauri'),
+        );
+      }
+      for (const code of nativeAudio.recoveryDiagnostics.value) {
+        result.push(createDiagnostic(code, 'tauri'));
       }
       for (const code of nativeAudio.signalDiagnostics.value) {
         result.push(createDiagnostic(code, 'tauri'));
       }
-      return result;
+      // A fatal recovery failure is reported both as the typed error and as
+      // the last recovery event; keep a single diagnostic per code.
+      return result.filter(
+        (diagnostic, index) =>
+          result.findIndex((candidate) => candidate.code === diagnostic.code) === index,
+      );
     }
     if (audio.startFailure.value) {
       result.push(...diagnosticsFromMicrophoneFailure(audio.startFailure.value, 'web'));

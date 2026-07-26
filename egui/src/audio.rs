@@ -1,10 +1,10 @@
-use crate::state::SharedTunerState;
+use crate::state::{apply_recovery_code, SharedTunerState};
 use eframe::egui;
 use pitch_core::TunerEngine;
 use std::sync::{Arc, Mutex};
 
 #[cfg(not(target_arch = "wasm32"))]
-use audio_input::{input_device_names, InputConfig, InputStream};
+use audio_input::{input_device_names, InputConfig, RecoveryPolicy, SupervisedInputStream};
 #[cfg(not(target_arch = "wasm32"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 #[cfg(not(target_arch = "wasm32"))]
@@ -15,7 +15,7 @@ pub(crate) struct AudioManager {
     pub(crate) input_devices: Vec<String>,
     pub(crate) selected_input_device: Option<String>,
     #[cfg(not(target_arch = "wasm32"))]
-    input: Option<InputStream>,
+    input: Option<SupervisedInputStream>,
     #[cfg(not(target_arch = "wasm32"))]
     output: Option<Stream>,
     tone_playing: bool,
@@ -39,12 +39,19 @@ impl AudioManager {
     ) -> Result<(), String> {
         self.stop_input();
         let error_state = state.clone();
+        let recovery_state = state.clone();
         let frame_context = context.clone();
-        let input = InputStream::open(
+        let recovery_context = context.clone();
+        // Supervised stream: on device unplug / stream death the supervisor
+        // reopens the input with backoff (bounded attempts) and reports typed
+        // recovery codes into the view state without restarting the session;
+        // on_error fires only when recovery is exhausted.
+        let input = SupervisedInputStream::open(
             InputConfig {
                 device_name: self.selected_input_device.clone(),
                 ..InputConfig::default()
             },
+            RecoveryPolicy::default(),
             move |samples, sample_rate| {
                 let frame = match engine.lock() {
                     Ok(mut engine) => engine.process(samples, sample_rate),
@@ -61,8 +68,13 @@ impl AudioManager {
                 }
                 context.request_repaint();
             },
+            move |event| {
+                if let Ok(mut state) = recovery_state.lock() {
+                    apply_recovery_code(&mut state, event.code());
+                }
+                recovery_context.request_repaint();
+            },
         )?;
-        input.play()?;
         self.input = Some(input);
         Ok(())
     }
