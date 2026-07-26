@@ -317,4 +317,11 @@ impl TunerEngine {
     pub fn reset(&mut self) {
         self.reset_pipeline();
     }
+
+    /// Samples currently held by the fixed-capacity tracking and confidence
+    /// histories. Soak tests assert this stays bounded (at most the sum of
+    /// the two ring capacities) no matter how many frames were processed.
+    pub fn history_sample_count(&self) -> usize {
+        self.tracker.history_len() + self.confidence.history_len()
+    }
 }

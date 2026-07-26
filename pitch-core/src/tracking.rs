@@ -245,6 +245,12 @@ impl PitchTracker {
         self.history_length = 0;
     }
 
+    /// Samples currently held by the fixed-capacity median history. Soak
+    /// tests assert this stays bounded no matter how long the engine runs.
+    pub(crate) fn history_len(&self) -> usize {
+        self.history_length
+    }
+
     fn acquire(&mut self, candidate_log2: f32, confidence: f32) -> Option<TrackedPitch> {
         self.update_pending(candidate_log2, confidence, ACQUIRE_TOLERANCE_CENTS);
         if self.pending_streak < ACQUIRE_CONFIRM_FRAMES {

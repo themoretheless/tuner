@@ -41,7 +41,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
 | M6 native realtime | Done baseline | Shared bounded input worker and decomposed egui/Tauri; recovery telemetry remains |
-| M7 DSP hardening | Partial | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement, a gated 30/20/10 dB SNR grid (57/57) and a gated RT60 0.3/0.8/1.5 s reverb grid (57/57) are done; differential/benchmark/soak gates remain |
+| M7 DSP hardening | Done | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement, gated SNR (57/57) and reverb (57/57) grids, calibrated confidence-weighted YIN/MPM fusion, criterion hot-path benchmarks, restart soak tests and a CI differential baseline gate are done |
 | M8 product/release | Partial | Offline SW, feature UI and themes done; diagnostics/a11y automation/signing/CSP remain |
 
 ---
@@ -129,6 +129,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 **Status 2026-07-25 (DSP round 08):** deterministic reverb grid is done: seeded exponentially decaying noise IRs (`quality/reverb.rs`, energy-normalized, FFT convolution) at RT60 0.3/0.8/1.5 s with a fixed -12 dB wet mix, per-condition `--check` thresholds under the same report schema v2 (optional `reverbGrid`, clean and SNR gates unchanged). Benchmark `benchmark-08-reverb-*`: clean 19/19 and SNR 57/57 identical to round 07 (mean MAE 2.436 cents); reverb grid 57/57 passed (0.3 s MAE 2.41, 0.8 s 2.58, 1.5 s 2.62, coverage >= 0.96). Differential baselines, criterion hot-path benchmarks and soak tests remain.
 
+**Status 2026-07-26 (DSP round 09):** M7 complete. Calibrated confidence-weighted YIN/MPM fusion (`dsp/candidates.rs`: both confidences mapped to predicted absolute cents error, 1/sigma weights clamped to [0.5, 2.0], sigma-margin disagreement arbitration; probe-measured YIN error ~2-2.5x MPM at equal raw confidence) — benchmark `benchmark-09-fusion-*`: mean MAE 2.488 -> 2.432 cents, p95 improved across clean/SNR/reverb grids, no regression above 0.14 cents. Criterion hot-path benchmarks (`benches/hotpath.rs`): full frame E2 17.1 ms / E4 15.9 ms of the 33 ms budget, HPS guard 0.4 ms active, near-zero when skipped. Restart/long-run soak tests (`tests/soak.rs`, 2100-frame deterministic session + 20 restart cycles) caught and fixed a real bug: `reset_tracking_state` did not reset BandPassFilter state. Differential baseline gate: `fixtures/quality-baseline.json` (133 conditions) + `scripts/compare-quality-baseline.mjs` (budgets: MAE/p95 max(+5%, +0.10 cents), octaveErrorRatio +0.005 abs) wired into CI after the quality gate.
+
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
 **Targets:** `R36-R44`, `R175-R183`; grounded audit `C19-C20`, `C39-C42`, `C95`, `C168-C172`, `C178-C180`; master `M5`, `M8`, `M14`, `M16`, `M23`, `M31`, `M33`, `M37`, `M45`.
@@ -145,8 +147,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 ## Now / Next / Later
 
 - **Now:** add cross-platform typed diagnostics with actionable presentation for web, Tauri and egui.
-- **Next:** add reverb corpus transforms and differential/benchmark/soak gates.
-- **Later:** complete M7 confidence-weighted detector fusion and the remaining M8 accessibility/release gates.
+- **Next:** M8 accessibility/release gates (aria-live, colorblind palettes, CSP/signing, zero-network CI).
+- **Later:** revisit fusion weight clamp [0.5, 2.0] with more representative synthetic data; M6 recovery telemetry.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.

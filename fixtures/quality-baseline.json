@@ -1,0 +1,1083 @@
+{
+  "schemaVersion": 1,
+  "description": "Compact differential baseline for the pitch quality corpus. Regenerate from a known-good report with: node scripts/compare-quality-baseline.mjs --update --report <report.json>",
+  "budgets": {
+    "maeCents": "max(baseline * 1.05, baseline + 0.10 cents)",
+    "p95Cents": "max(baseline * 1.05, baseline + 0.10 cents)",
+    "timeToFirstCorrectMs": "max(baseline * 1.10, baseline + 50 ms)",
+    "coverage": "baseline - 0.01 (absolute)",
+    "falseLockRatio": "baseline + 0.02 (absolute)",
+    "octaveErrorRatio": "baseline + 0.005 (absolute)"
+  },
+  "generatedFrom": {
+    "corpus": "real-instruments-v1",
+    "configRevision": "pitch-core-quality-v1",
+    "reportPassed": true
+  },
+  "entries": {
+    "guitar-e2 | clean": {
+      "maeCents": 1.0338,
+      "p95Cents": 2.313,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-e2 | snr:30dB": {
+      "maeCents": 1.2133,
+      "p95Cents": 3.5702,
+      "coverage": 1,
+      "falseLockRatio": 0.0824,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 271.7
+    },
+    "guitar-e2 | snr:20dB": {
+      "maeCents": 1.0177,
+      "p95Cents": 2.2992,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-e2 | snr:10dB": {
+      "maeCents": 0.8696,
+      "p95Cents": 2.4261,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-e2 | reverb:0.3s": {
+      "maeCents": 0.9725,
+      "p95Cents": 2.2811,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-e2 | reverb:0.8s": {
+      "maeCents": 1.0347,
+      "p95Cents": 2.1887,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-e2 | reverb:1.5s": {
+      "maeCents": 1.0982,
+      "p95Cents": 2.448,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 106.7
+    },
+    "guitar-a2 | clean": {
+      "maeCents": 0.9371,
+      "p95Cents": 3.3974,
+      "coverage": 1,
+      "falseLockRatio": 0.0695,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 273.7
+    },
+    "guitar-a2 | snr:30dB": {
+      "maeCents": 1.0232,
+      "p95Cents": 4.0258,
+      "coverage": 1,
+      "falseLockRatio": 0.0973,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 306.7
+    },
+    "guitar-a2 | snr:20dB": {
+      "maeCents": 0.9849,
+      "p95Cents": 4.0143,
+      "coverage": 1,
+      "falseLockRatio": 0.0973,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 306.7
+    },
+    "guitar-a2 | snr:10dB": {
+      "maeCents": 1.058,
+      "p95Cents": 3.4472,
+      "coverage": 1,
+      "falseLockRatio": 0.0695,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 273.7
+    },
+    "guitar-a2 | reverb:0.3s": {
+      "maeCents": 0.925,
+      "p95Cents": 3.0782,
+      "coverage": 1,
+      "falseLockRatio": 0.0695,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 273.7
+    },
+    "guitar-a2 | reverb:0.8s": {
+      "maeCents": 0.9658,
+      "p95Cents": 3.4467,
+      "coverage": 1,
+      "falseLockRatio": 0.0973,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 306.7
+    },
+    "guitar-a2 | reverb:1.5s": {
+      "maeCents": 1.0428,
+      "p95Cents": 4.2792,
+      "coverage": 1,
+      "falseLockRatio": 0.0834,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 306.7
+    },
+    "guitar-d3 | clean": {
+      "maeCents": 0.4058,
+      "p95Cents": 0.9594,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | snr:30dB": {
+      "maeCents": 0.4056,
+      "p95Cents": 0.9555,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | snr:20dB": {
+      "maeCents": 0.4145,
+      "p95Cents": 0.9783,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | snr:10dB": {
+      "maeCents": 0.2899,
+      "p95Cents": 1.0601,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | reverb:0.3s": {
+      "maeCents": 0.4002,
+      "p95Cents": 0.9927,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | reverb:0.8s": {
+      "maeCents": 0.3479,
+      "p95Cents": 0.6406,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-d3 | reverb:1.5s": {
+      "maeCents": 0.4883,
+      "p95Cents": 1.1991,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 98.7
+    },
+    "guitar-g3 | clean": {
+      "maeCents": 2.752,
+      "p95Cents": 2.9703,
+      "coverage": 1,
+      "falseLockRatio": 0.0247,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 131.7
+    },
+    "guitar-g3 | snr:30dB": {
+      "maeCents": 2.7403,
+      "p95Cents": 2.9703,
+      "coverage": 1,
+      "falseLockRatio": 0.0247,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 131.7
+    },
+    "guitar-g3 | snr:20dB": {
+      "maeCents": 2.766,
+      "p95Cents": 3.2759,
+      "coverage": 1,
+      "falseLockRatio": 0.0247,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 131.7
+    },
+    "guitar-g3 | snr:10dB": {
+      "maeCents": 2.5775,
+      "p95Cents": 3.0195,
+      "coverage": 0.9278,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 65.7
+    },
+    "guitar-g3 | reverb:0.3s": {
+      "maeCents": 3.0305,
+      "p95Cents": 4.3906,
+      "coverage": 1,
+      "falseLockRatio": 0.0493,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 197.7
+    },
+    "guitar-g3 | reverb:0.8s": {
+      "maeCents": 2.7385,
+      "p95Cents": 2.9932,
+      "coverage": 0.9561,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 65.7
+    },
+    "guitar-g3 | reverb:1.5s": {
+      "maeCents": 2.7183,
+      "p95Cents": 2.8639,
+      "coverage": 1,
+      "falseLockRatio": 0.037,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 164.7
+    },
+    "guitar-b3 | clean": {
+      "maeCents": 0.4708,
+      "p95Cents": 0.941,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | snr:30dB": {
+      "maeCents": 0.4731,
+      "p95Cents": 0.9485,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | snr:20dB": {
+      "maeCents": 0.4577,
+      "p95Cents": 0.9491,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | snr:10dB": {
+      "maeCents": 0.9935,
+      "p95Cents": 4.131,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | reverb:0.3s": {
+      "maeCents": 0.4559,
+      "p95Cents": 0.6509,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | reverb:0.8s": {
+      "maeCents": 0.5702,
+      "p95Cents": 0.9478,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-b3 | reverb:1.5s": {
+      "maeCents": 0.5508,
+      "p95Cents": 1.1613,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 122.7
+    },
+    "guitar-e4 | clean": {
+      "maeCents": 0.7517,
+      "p95Cents": 1.1347,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | snr:30dB": {
+      "maeCents": 0.7383,
+      "p95Cents": 1.136,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | snr:20dB": {
+      "maeCents": 0.7239,
+      "p95Cents": 1.1336,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | snr:10dB": {
+      "maeCents": 0.667,
+      "p95Cents": 1.1107,
+      "coverage": 0.9901,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | reverb:0.3s": {
+      "maeCents": 0.8107,
+      "p95Cents": 1.1313,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | reverb:0.8s": {
+      "maeCents": 0.7983,
+      "p95Cents": 1.0925,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "guitar-e4 | reverb:1.5s": {
+      "maeCents": 0.8343,
+      "p95Cents": 1.3008,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 115.7
+    },
+    "bass-e1 | clean": {
+      "maeCents": 2.44,
+      "p95Cents": 3.465,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | snr:30dB": {
+      "maeCents": 2.4468,
+      "p95Cents": 3.4439,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | snr:20dB": {
+      "maeCents": 2.4363,
+      "p95Cents": 3.4518,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | snr:10dB": {
+      "maeCents": 2.9819,
+      "p95Cents": 5.8786,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | reverb:0.3s": {
+      "maeCents": 2.6025,
+      "p95Cents": 3.5538,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | reverb:0.8s": {
+      "maeCents": 2.3636,
+      "p95Cents": 3.3929,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-e1 | reverb:1.5s": {
+      "maeCents": 2.3363,
+      "p95Cents": 3.3163,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | clean": {
+      "maeCents": 1.5903,
+      "p95Cents": 2.3112,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | snr:30dB": {
+      "maeCents": 1.595,
+      "p95Cents": 2.3182,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | snr:20dB": {
+      "maeCents": 1.5706,
+      "p95Cents": 2.3932,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | snr:10dB": {
+      "maeCents": 1.4718,
+      "p95Cents": 2.927,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | reverb:0.3s": {
+      "maeCents": 1.9174,
+      "p95Cents": 2.5921,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | reverb:0.8s": {
+      "maeCents": 1.3903,
+      "p95Cents": 2.1138,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-a1 | reverb:1.5s": {
+      "maeCents": 1.4833,
+      "p95Cents": 2.2333,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-d2 | clean": {
+      "maeCents": 1.4545,
+      "p95Cents": 1.7586,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-d2 | snr:30dB": {
+      "maeCents": 1.4633,
+      "p95Cents": 1.7431,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-d2 | snr:20dB": {
+      "maeCents": 1.4705,
+      "p95Cents": 1.7568,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-d2 | snr:10dB": {
+      "maeCents": 1.3415,
+      "p95Cents": 1.6715,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "bass-d2 | reverb:0.3s": {
+      "maeCents": 1.6285,
+      "p95Cents": 1.8792,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-d2 | reverb:0.8s": {
+      "maeCents": 1.3746,
+      "p95Cents": 1.7323,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-d2 | reverb:1.5s": {
+      "maeCents": 1.4696,
+      "p95Cents": 1.9771,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | clean": {
+      "maeCents": 1.0684,
+      "p95Cents": 1.2621,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | snr:30dB": {
+      "maeCents": 1.0672,
+      "p95Cents": 1.2638,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | snr:20dB": {
+      "maeCents": 1.0227,
+      "p95Cents": 1.3073,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | snr:10dB": {
+      "maeCents": 1.2139,
+      "p95Cents": 2.4877,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | reverb:0.3s": {
+      "maeCents": 1.1058,
+      "p95Cents": 1.2878,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | reverb:0.8s": {
+      "maeCents": 1.0413,
+      "p95Cents": 1.2454,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "bass-g2 | reverb:1.5s": {
+      "maeCents": 1.1618,
+      "p95Cents": 1.4164,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-g4 | clean": {
+      "maeCents": 0.8839,
+      "p95Cents": 1.2657,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-g4 | snr:30dB": {
+      "maeCents": 0.8861,
+      "p95Cents": 1.2713,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-g4 | snr:20dB": {
+      "maeCents": 0.8831,
+      "p95Cents": 1.2599,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-g4 | snr:10dB": {
+      "maeCents": 0.9051,
+      "p95Cents": 1.3127,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-g4 | reverb:0.3s": {
+      "maeCents": 0.699,
+      "p95Cents": 0.9681,
+      "coverage": 1,
+      "falseLockRatio": 0.0786,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 119.7
+    },
+    "uke-g4 | reverb:0.8s": {
+      "maeCents": 1.021,
+      "p95Cents": 1.6502,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-g4 | reverb:1.5s": {
+      "maeCents": 0.834,
+      "p95Cents": 1.2175,
+      "coverage": 1,
+      "falseLockRatio": 0.1179,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 152.7
+    },
+    "uke-c4 | clean": {
+      "maeCents": 1.8086,
+      "p95Cents": 2.1869,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-c4 | snr:30dB": {
+      "maeCents": 1.805,
+      "p95Cents": 2.1869,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-c4 | snr:20dB": {
+      "maeCents": 1.8069,
+      "p95Cents": 2.2031,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-c4 | snr:10dB": {
+      "maeCents": 3.4714,
+      "p95Cents": 12.3481,
+      "coverage": 0.933,
+      "falseLockRatio": 0.1299,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-c4 | reverb:0.3s": {
+      "maeCents": 1.7743,
+      "p95Cents": 2.1869,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-c4 | reverb:0.8s": {
+      "maeCents": 1.8627,
+      "p95Cents": 2.1859,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-c4 | reverb:1.5s": {
+      "maeCents": 1.7097,
+      "p95Cents": 2.1938,
+      "coverage": 0.9639,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | clean": {
+      "maeCents": 1.1105,
+      "p95Cents": 1.8372,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | snr:30dB": {
+      "maeCents": 1.1168,
+      "p95Cents": 1.9483,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | snr:20dB": {
+      "maeCents": 1.1266,
+      "p95Cents": 1.9425,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | snr:10dB": {
+      "maeCents": 1.148,
+      "p95Cents": 1.9575,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | reverb:0.3s": {
+      "maeCents": 1.1199,
+      "p95Cents": 1.867,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | reverb:0.8s": {
+      "maeCents": 1.2253,
+      "p95Cents": 2.3318,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-e4 | reverb:1.5s": {
+      "maeCents": 1.2968,
+      "p95Cents": 1.7548,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "uke-a4 | clean": {
+      "maeCents": 1.6496,
+      "p95Cents": 5.4176,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | snr:30dB": {
+      "maeCents": 1.6505,
+      "p95Cents": 5.4201,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | snr:20dB": {
+      "maeCents": 1.6491,
+      "p95Cents": 5.4121,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | snr:10dB": {
+      "maeCents": 1.7906,
+      "p95Cents": 5.4475,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | reverb:0.3s": {
+      "maeCents": 2.6085,
+      "p95Cents": 7.3472,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | reverb:0.8s": {
+      "maeCents": 1.5627,
+      "p95Cents": 5.1236,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "uke-a4 | reverb:1.5s": {
+      "maeCents": 3.1638,
+      "p95Cents": 9.4039,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "violin-g3 | clean": {
+      "maeCents": 0.3037,
+      "p95Cents": 0.9625,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-g3 | snr:30dB": {
+      "maeCents": 0.3024,
+      "p95Cents": 0.9586,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-g3 | snr:20dB": {
+      "maeCents": 0.3013,
+      "p95Cents": 0.9505,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-g3 | snr:10dB": {
+      "maeCents": 0.3125,
+      "p95Cents": 0.9602,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "violin-g3 | reverb:0.3s": {
+      "maeCents": 0.3026,
+      "p95Cents": 0.9406,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-g3 | reverb:0.8s": {
+      "maeCents": 0.3059,
+      "p95Cents": 0.9635,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-g3 | reverb:1.5s": {
+      "maeCents": 0.3,
+      "p95Cents": 0.9454,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | clean": {
+      "maeCents": 0.5856,
+      "p95Cents": 1.2368,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | snr:30dB": {
+      "maeCents": 0.5883,
+      "p95Cents": 1.238,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | snr:20dB": {
+      "maeCents": 0.581,
+      "p95Cents": 1.2358,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 86.7
+    },
+    "violin-d4 | snr:10dB": {
+      "maeCents": 0.6003,
+      "p95Cents": 1.2735,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | reverb:0.3s": {
+      "maeCents": 0.5717,
+      "p95Cents": 1.1498,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | reverb:0.8s": {
+      "maeCents": 0.5882,
+      "p95Cents": 1.2459,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-d4 | reverb:1.5s": {
+      "maeCents": 0.5655,
+      "p95Cents": 1.19,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | clean": {
+      "maeCents": 0.7721,
+      "p95Cents": 1.5917,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | snr:30dB": {
+      "maeCents": 0.7721,
+      "p95Cents": 1.5964,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | snr:20dB": {
+      "maeCents": 0.7686,
+      "p95Cents": 1.5861,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | snr:10dB": {
+      "maeCents": 0.7652,
+      "p95Cents": 1.5734,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | reverb:0.3s": {
+      "maeCents": 0.7896,
+      "p95Cents": 1.6216,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | reverb:0.8s": {
+      "maeCents": 0.7736,
+      "p95Cents": 1.5964,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-a4 | reverb:1.5s": {
+      "maeCents": 0.776,
+      "p95Cents": 1.5734,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | clean": {
+      "maeCents": 0.6003,
+      "p95Cents": 1.7076,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | snr:30dB": {
+      "maeCents": 0.5992,
+      "p95Cents": 1.7076,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | snr:20dB": {
+      "maeCents": 0.6017,
+      "p95Cents": 1.7111,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | snr:10dB": {
+      "maeCents": 0.5874,
+      "p95Cents": 1.7247,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | reverb:0.3s": {
+      "maeCents": 0.598,
+      "p95Cents": 1.6653,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | reverb:0.8s": {
+      "maeCents": 0.6082,
+      "p95Cents": 1.7086,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "violin-e5 | reverb:1.5s": {
+      "maeCents": 0.5924,
+      "p95Cents": 1.7086,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 53.7
+    },
+    "voice-f4 | clean": {
+      "maeCents": 24.5184,
+      "p95Cents": 51.4419,
+      "coverage": 1,
+      "falseLockRatio": 0.0927,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 95.7
+    },
+    "voice-f4 | snr:30dB": {
+      "maeCents": 24.5187,
+      "p95Cents": 51.4352,
+      "coverage": 1,
+      "falseLockRatio": 0.0927,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 95.7
+    },
+    "voice-f4 | snr:20dB": {
+      "maeCents": 24.6643,
+      "p95Cents": 51.8941,
+      "coverage": 1,
+      "falseLockRatio": 0.0927,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 95.7
+    },
+    "voice-f4 | snr:10dB": {
+      "maeCents": 23.4888,
+      "p95Cents": 46.9812,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 62.7
+    },
+    "voice-f4 | reverb:0.3s": {
+      "maeCents": 22.4166,
+      "p95Cents": 45.9546,
+      "coverage": 1,
+      "falseLockRatio": 0,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 62.7
+    },
+    "voice-f4 | reverb:0.8s": {
+      "maeCents": 27.2978,
+      "p95Cents": 52.8233,
+      "coverage": 1,
+      "falseLockRatio": 0.0927,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 95.7
+    },
+    "voice-f4 | reverb:1.5s": {
+      "maeCents": 26.1666,
+      "p95Cents": 52.9045,
+      "coverage": 1,
+      "falseLockRatio": 0.0927,
+      "octaveErrorRatio": 0,
+      "timeToFirstCorrectMs": 95.7
+    }
+  }
+}

@@ -152,6 +152,11 @@ impl HybridPitchDetector {
 
     pub(crate) fn reset_tracking_state(&mut self) {
         self.octave.reset();
+        // The band-pass biquads carry delay state (z1/z2) across frames.
+        // Without clearing it, a reset/restarted engine keeps ringing with
+        // the previous session's tail and its first frames differ in the
+        // last ulp from a truly fresh engine (found by the restart soak).
+        self.band_pass.reset();
     }
 
     pub(crate) fn telemetry(&self) -> PipelineTelemetry {

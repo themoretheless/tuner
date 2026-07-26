@@ -1,0 +1,46 @@
+=== DiffGate end-to-end verification 2026-07-26 00:43:07 ===
+
+Environment notes:
+- cargo build unavailable mid-session: a parallel agent is editing pitch-core/
+  (Cargo.toml declares [[bench]] hotpath without benches/hotpath.rs), so
+  'cargo run -p pitch-core --example quality' fails at manifest parse.
+- Direct runs of the prebuilt target/release/examples/quality (built 2026-07-25
+  20:38 from HEAD c7420f7) were attempted twice; each exceeded the 300 s tool
+  timeout before writing the report (report is emitted only at the end).
+- Therefore the fresh full report used below is benchmark-09-fusion-before.json:
+  a complete schema-v2 PASS run of the CURRENT HEAD code produced minutes
+  earlier in this same worktree (19/19 clean, 57/57 SNR, 57/57 reverb,
+  configRevision pitch-core-quality-v1).
+- ACTION REQUIRED: regenerate the baseline with --update after the parallel
+  DSP changes merge (see step 6).
+
+--- 1. Source report: benchmark-09-fusion-before.json ---
+schemaVersion 2 | passed True | {'captureCount': 19, 'passedCaptures': 19, 'failedCaptures': 0, 'violationCount': 0, 'snrLevelsEvaluated': 57, 'snrLevelsPassed': 57, 'reverbConditionsEvaluated': 57, 'reverbConditionsPassed': 57}
+
+--- 2. Generate baseline from fresh report (--update) ---
+baseline updated: /Users/themoretheless/Documents/Sources/tuner/fixtures/quality-baseline.json (133 entries)
+update exit: 0
+
+--- 3. Differential comparison of the same report (expect PASS, exit 0) ---
+differential baseline gate: 133 conditions, baseline /Users/themoretheless/Documents/Sources/tuner/fixtures/quality-baseline.json
+PASS: all conditions within degradation budget
+compare exit: 0
+
+--- 4. Negative control: report with +10% MAE everywhere (expect FAIL, exit 1) ---
+negative-control exit: 1
+first degraded lines:
+  [DEGRADED] bass-a1 | clean: MAE (cents) 1.7505 > limit 1.6914 (baseline 1.5914)
+  [DEGRADED] bass-a1 | reverb:0.3s: MAE (cents) 2.1128 > limit 2.0207 (baseline 1.9207)
+  [DEGRADED] bass-a1 | reverb:0.8s: MAE (cents) 1.5282 > limit 1.4893 (baseline 1.3893)
+FAIL: 73 condition(s) degraded beyond budget
+total DEGRADED lines: 73
+
+--- 5. Improvement direction: report with -10% MAE (expect PASS) ---
+improvement-control exit: 0
+PASS: all conditions within degradation budget
+sample changed lines: 133
+
+--- 6. Reminder ---
+Regenerate baseline after parallel DSP changes merge:
+  cargo run --release -p pitch-core --example quality -- --check --corpus fixtures/corpus/manifest.json > report.json
+  node scripts/compare-quality-baseline.mjs --update --report report.json

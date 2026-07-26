@@ -51,6 +51,13 @@ jobs:
         env:
           CARGO_INCREMENTAL: 0
 
+      # Differential gate: the --check above only enforces absolute thresholds,
+      # so degradation within the threshold would pass silently. Compare the
+      # fresh report against fixtures/quality-baseline.json; refresh the
+      # baseline intentionally via scripts/compare-quality-baseline.mjs --update.
+      - name: Differential pitch quality gate
+        run: node scripts/compare-quality-baseline.mjs --report pitch-quality-report.json
+
       - name: Upload pitch quality report
         if: always()
         uses: actions/upload-artifact@v4

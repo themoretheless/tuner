@@ -107,6 +107,12 @@ impl ConfidenceEstimator {
         self.last = PipelineConfidenceTelemetry::default();
     }
 
+    /// Samples currently held by the fixed-capacity raw-frequency history.
+    /// Soak tests assert this stays bounded over long runs.
+    pub(crate) fn history_len(&self) -> usize {
+        self.history_length
+    }
+
     fn push_frequency(&mut self, frequency: f32) {
         self.history[self.history_cursor] = frequency.log2();
         self.history_cursor = (self.history_cursor + 1) % HISTORY_CAPACITY;

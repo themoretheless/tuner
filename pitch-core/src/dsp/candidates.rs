@@ -5,8 +5,17 @@ const GUIDED_IMPROVEMENT_CENTS: f32 = 80.0;
 const GUIDED_RAW_DISTANCE_CENTS: f32 = 300.0;
 const SELECTED_RESOLVED_DISTANCE_CENTS: f32 = 350.0;
 const TUNING_RESOLVED_DISTANCE_CENTS: f32 = 450.0;
-const UNGUIDED_CONFIDENCE_MARGIN: f32 = 0.12;
 const UNGUIDED_STRONG_CONFIDENCE: f32 = 0.90;
+/// Reliability margin required to publish one side of an unresolved
+/// disagreement: the winner's predicted error must be at least this factor
+/// below the loser's. Replaces the old raw-confidence margin, which compared
+/// incomparable scales (YIN 1−CMNDF vs raw MPM NSDF peak).
+const UNGUIDED_RELIABILITY_MARGIN: f32 = 1.3;
+/// Bounds for the fused weight ratio. The calibration curves capture a
+/// stable ~2-2.5x reliability ratio between the detectors; clamping keeps
+/// the calibration from ever dominating the measurements themselves.
+const MIN_FUSION_WEIGHT_RATIO: f32 = 0.5;
+const MAX_FUSION_WEIGHT_RATIO: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CandidateSelectionReason {
@@ -148,13 +157,28 @@ pub(crate) fn select_pitch_candidate_with_reason(
                 }
             }
 
-            let (stronger, weaker, reason) = if yin.confidence >= mpm.confidence {
-                (yin, mpm, CandidateSelectionReason::ConfidenceYin)
+            // Unguided disagreement: prefer the detector predicted to be more
+            // accurate on this frame, not the one with the higher raw score
+            // — the raw scales are not comparable (C82).
+            let yin_error = predicted_error_yin(yin.confidence);
+            let mpm_error = predicted_error_mpm(mpm.confidence);
+            let (stronger, stronger_error, weaker_error, reason) = if yin_error <= mpm_error {
+                (
+                    yin,
+                    yin_error,
+                    mpm_error,
+                    CandidateSelectionReason::ConfidenceYin,
+                )
             } else {
-                (mpm, yin, CandidateSelectionReason::ConfidenceSecondary)
+                (
+                    mpm,
+                    mpm_error,
+                    yin_error,
+                    CandidateSelectionReason::ConfidenceSecondary,
+                )
             };
             let estimate = (stronger.confidence >= UNGUIDED_STRONG_CONFIDENCE
-                && stronger.confidence - weaker.confidence >= UNGUIDED_CONFIDENCE_MARGIN)
+                && weaker_error / stronger_error >= UNGUIDED_RELIABILITY_MARGIN)
                 .then_some(stronger);
             CandidateSelection {
                 estimate,
@@ -212,14 +236,46 @@ pub(crate) fn prefer_guided_harmonic(
         .or(Some(primary))
 }
 
-fn fuse(left: PitchEstimate, right: PitchEstimate) -> PitchEstimate {
-    let left_weight = left.confidence.max(0.01);
-    let right_weight = right.confidence.max(0.01);
-    let frequency = ((left.frequency.log2() * left_weight + right.frequency.log2() * right_weight)
-        / (left_weight + right_weight))
+/// Predicted absolute error (cents) of a raw YIN score.
+///
+/// Both detectors emit a proxy for the lag-domain correlation at the chosen
+/// period (YIN: 1−CMNDF, MPM: raw NSDF peak), but the proxies are not on the
+/// same scale (C82). A synthetic probe grid (3 harmonic profiles × 8
+/// fundamentals × SNR ∞/25/15/8 dB × pluck decay × vibrato × inharmonicity —
+/// deliberately disjoint from the evaluation corpus) shows that at equal raw
+/// confidence the YIN estimate errs ~2-2.5x more than the MPM estimate, and
+/// that this ratio is stable across condition families. These affine curves
+/// capture only that robust ratio; their absolute values encode the probe's
+/// conditions and are never used as an absolute error claim.
+fn predicted_error_yin(confidence: f32) -> f32 {
+    8.5 + 160.0 * (1.0 - confidence).max(0.0)
+}
+
+/// Predicted absolute error (cents) of a raw MPM score; see
+/// [`predicted_error_yin`].
+fn predicted_error_mpm(confidence: f32) -> f32 {
+    3.5 + 115.0 * (1.0 - confidence).max(0.0)
+}
+
+/// Reliability weights for fusing a YIN/MPM pair. Each weight is the inverse
+/// predicted error; the ratio is clamped to
+/// [`MIN_FUSION_WEIGHT_RATIO`]..=[`MAX_FUSION_WEIGHT_RATIO`] so the
+/// calibration can tilt the fusion toward the more reliable detector but can
+/// never silence the other one.
+fn fusion_weights(yin: &PitchEstimate, mpm: &PitchEstimate) -> (f32, f32) {
+    let yin_weight = predicted_error_yin(yin.confidence).recip();
+    let mpm_weight = predicted_error_mpm(mpm.confidence).recip();
+    let ratio = (mpm_weight / yin_weight).clamp(MIN_FUSION_WEIGHT_RATIO, MAX_FUSION_WEIGHT_RATIO);
+    (yin_weight, yin_weight * ratio)
+}
+
+fn fuse(yin: PitchEstimate, mpm: PitchEstimate) -> PitchEstimate {
+    let (yin_weight, mpm_weight) = fusion_weights(&yin, &mpm);
+    let frequency = ((yin.frequency.log2() * yin_weight + mpm.frequency.log2() * mpm_weight)
+        / (yin_weight + mpm_weight))
         .exp2();
     PitchEstimate {
-        confidence: ((left.confidence + right.confidence) * 0.5).clamp(0.0, 1.0),
+        confidence: ((yin.confidence + mpm.confidence) * 0.5).clamp(0.0, 1.0),
         frequency,
     }
 }
@@ -305,5 +361,123 @@ mod tests {
         )
         .expect("harmonic alternative");
         assert!((selected.frequency - 82.38).abs() < 0.01);
+    }
+
+    #[test]
+    fn calibration_is_monotone_and_penalizes_the_inflated_yin_scale() {
+        for confidence in [0.70, 0.80, 0.90, 0.95, 0.99, 1.0] {
+            assert!(predicted_error_yin(confidence) > predicted_error_mpm(confidence));
+        }
+        assert!(predicted_error_yin(0.90) > predicted_error_yin(0.95));
+        assert!(predicted_error_mpm(0.90) > predicted_error_mpm(0.95));
+    }
+
+    #[test]
+    fn fusion_at_equal_raw_confidence_tilts_toward_mpm_not_yin() {
+        // Equal raw scores: the probe shows MPM is ~2x more reliable here, so
+        // the fused frequency must sit at or closer to the MPM candidate —
+        // never biased toward the systematically inflated YIN scale.
+        let fused = fuse(
+            PitchEstimate {
+                confidence: 0.95,
+                frequency: 82.20,
+            },
+            PitchEstimate {
+                confidence: 0.95,
+                frequency: 82.60,
+            },
+        );
+        let log_midpoint = (82.20_f32 * 82.60).sqrt();
+        assert!(fused.frequency >= log_midpoint);
+        assert!(fused.frequency <= 82.60);
+    }
+
+    #[test]
+    fn fusion_is_unbiased_when_calibrated_reliability_matches() {
+        // σ_yin(0.97) = 13.3 equals σ_mpm(~0.9148); the fusion must then land
+        // on the log-space midpoint instead of favoring either detector.
+        let yin_confidence = 0.97;
+        let mpm_confidence = 1.0 - (predicted_error_yin(yin_confidence) - 3.5) / 115.0;
+        assert!((0.0..=1.0).contains(&mpm_confidence));
+        let fused = fuse(
+            PitchEstimate {
+                confidence: yin_confidence,
+                frequency: 110.0,
+            },
+            PitchEstimate {
+                confidence: mpm_confidence,
+                frequency: 110.4,
+            },
+        );
+        let log_midpoint = (110.0_f32 * 110.4).sqrt();
+        assert!(
+            (fused.frequency - log_midpoint).abs() < 0.01,
+            "fused {} must equal log-midpoint {}",
+            fused.frequency,
+            log_midpoint
+        );
+    }
+
+    #[test]
+    fn fusion_weight_ratio_is_clamped() {
+        let (yin_weight, mpm_weight) = fusion_weights(
+            &PitchEstimate {
+                confidence: 0.70,
+                frequency: 100.0,
+            },
+            &PitchEstimate {
+                confidence: 1.0,
+                frequency: 100.0,
+            },
+        );
+        assert!(mpm_weight / yin_weight <= MAX_FUSION_WEIGHT_RATIO + f32::EPSILON);
+        assert!(mpm_weight / yin_weight >= MIN_FUSION_WEIGHT_RATIO - f32::EPSILON);
+    }
+
+    #[test]
+    fn disagreement_prefers_the_more_reliable_detector_over_the_higher_score() {
+        // YIN holds the higher raw score, but its scale is inflated: MPM at
+        // 0.97 is predicted ~1.45x more accurate than YIN at 0.99, so the
+        // arbitration must publish MPM.
+        let selection = select_pitch_candidate_with_reason(
+            estimate(55.0, 0.99),
+            estimate(82.4, 0.97),
+            PitchGuidance::none(),
+        );
+        assert_eq!(
+            selection.reason,
+            CandidateSelectionReason::ConfidenceSecondary
+        );
+        let selected = selection.estimate.expect("reliable side published");
+        assert!((selected.frequency - 82.4).abs() < 0.01);
+    }
+
+    #[test]
+    fn disagreement_without_a_clear_reliability_margin_is_still_rejected() {
+        // 0.85 (YIN) vs 0.80 (MPM): predicted errors 32.5 vs 26.5 — the ratio
+        // stays below the 1.3 margin, so nothing may be published.
+        let unresolved = select_pitch_candidate_with_reason(
+            estimate(55.0, 0.85),
+            estimate(82.4, 0.80),
+            PitchGuidance::none(),
+        );
+        assert_eq!(
+            unresolved.reason,
+            CandidateSelectionReason::RejectedDisagreement
+        );
+        assert!(unresolved.estimate.is_none());
+    }
+
+    #[test]
+    fn disagreement_can_still_resolve_for_yin_when_its_lead_is_decisive() {
+        // YIN 1.0 vs MPM 0.90: predicted errors 8.5 vs 15.0 — YIN is both the
+        // higher score and the predicted-more-accurate side here.
+        let selection = select_pitch_candidate_with_reason(
+            estimate(82.4, 1.0),
+            estimate(55.0, 0.90),
+            PitchGuidance::none(),
+        );
+        assert_eq!(selection.reason, CandidateSelectionReason::ConfidenceYin);
+        assert!(selection.estimate.is_some());
     }
 }
