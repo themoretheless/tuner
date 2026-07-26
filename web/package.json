@@ -1,7 +1,7 @@
 {
   "name": "guitar-tuner-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.13",
   "type": "module",
   "scripts": {
     "codegen:note-math": "node ../scripts/generate-note-math.mjs",
