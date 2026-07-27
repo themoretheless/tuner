@@ -1,3 +1,4 @@
+use crate::one_euro::OneEuroFilter;
 use crate::{get_cents, Note, PitchEstimate};
 
 const ACQUIRE_CONFIRM_FRAMES: u8 = 2;
@@ -12,6 +13,32 @@ const PRIOR_MAX_DISTANCE_CENTS: f32 = 80.0;
 const PRIOR_MIN_DIRECT_DISTANCE_CENTS: f32 = 120.0;
 const PRIOR_MIN_IMPROVEMENT_CENTS: f32 = 50.0;
 const HISTORY_CAPACITY: usize = 3;
+
+// One-euro filter parameters for the inlier track (log2 domain, ~30 Hz
+// detection cadence).
+/// Rest-state cutoff. Detector jitter on a held note is a few cents, so a
+/// sub-hertz cutoff suppresses it harder than the legacy fixed alpha of
+/// 0.20 (alpha at 0.9 Hz / 30 fps is ~0.17 at rest, less once the median-3
+/// pre-filter calms the derivative estimate) without audible lag, because
+/// the adaptation term below opens the filter the moment the pitch moves.
+const ONE_EURO_MIN_CUTOFF_HZ: f32 = 0.9;
+/// Speed sensitivity: cutoff gain in Hz per cent/sec of filtered derivative.
+/// A fast in-tolerance slide (~30 cents/frame ≈ 900 cents/sec) pushes the
+/// cutoff toward ~19 Hz (alpha ≈ 0.8), tracking faster than the legacy top
+/// tier of 0.55, while ±5-cent jitter after the median-3 pre-filter
+/// (|dx| under ~15 cents/sec after the derivative low-pass) adds well under
+/// 0.3 Hz and stays near mincutoff. Tuned on the quality corpus: higher
+/// values reduce vibrato/drift lag but let SNR-10dB inlier spikes through
+/// (p95 grows); lower values lag sustained vibrato (MAE grows).
+/// Stored scaled by 1200 because the filter is fed log2 values.
+const ONE_EURO_BETA_HZ_PER_CENT_SEC: f32 = 0.02;
+/// Cutoff of the derivative low-pass. ~1 Hz is the value recommended by
+/// Casiez et al. for human-scale input; it keeps frame-to-frame jitter out
+/// of the speed estimate while reacting to a real slide within ~2 frames.
+const ONE_EURO_D_CUTOFF_HZ: f32 = 1.2;
+/// Detection cadence: frames arrive every ~33 ms (see DETECTION_HOLD_FRAMES
+/// docs in engine.rs).
+const ONE_EURO_FRAME_PERIOD_S: f32 = 1.0 / 30.0;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct PitchPrior {
@@ -146,6 +173,7 @@ pub(crate) struct PitchTracker {
     history: [f32; HISTORY_CAPACITY],
     history_cursor: usize,
     history_length: usize,
+    one_euro: OneEuroFilter,
 }
 
 impl Default for PitchTracker {
@@ -166,6 +194,12 @@ impl PitchTracker {
             history: [0.0; HISTORY_CAPACITY],
             history_cursor: 0,
             history_length: 0,
+            one_euro: OneEuroFilter::new(
+                ONE_EURO_MIN_CUTOFF_HZ,
+                ONE_EURO_BETA_HZ_PER_CENT_SEC * 1_200.0,
+                ONE_EURO_D_CUTOFF_HZ,
+                ONE_EURO_FRAME_PERIOD_S,
+            ),
         }
     }
 
@@ -190,15 +224,10 @@ impl PitchTracker {
             self.unstable_streak = 0;
             self.push_history(candidate_log2);
             let median = self.history_median();
-            let residual = cents_between_logs(median, stable_log2).abs();
-            let alpha = if residual < 12.0 {
-                0.20
-            } else if residual < 35.0 {
-                0.35
-            } else {
-                0.55
-            };
-            self.stable_log2 = Some(stable_log2 + alpha * (median - stable_log2));
+            // One-euro replaces the legacy stepped alpha (0.20/0.35/0.55):
+            // the cutoff adapts continuously to how fast the pitch actually
+            // moves instead of jumping between three fixed tiers.
+            self.stable_log2 = Some(self.one_euro.filter(median));
             self.stable_confidence = 0.25 * estimate.confidence + 0.75 * self.stable_confidence;
             return self.current();
         }
@@ -243,6 +272,7 @@ impl PitchTracker {
         self.unstable_streak = 0;
         self.history_cursor = 0;
         self.history_length = 0;
+        self.one_euro.reset();
     }
 
     /// Samples currently held by the fixed-capacity median history. Soak
@@ -287,6 +317,9 @@ impl PitchTracker {
         self.history_cursor = 0;
         self.history_length = 0;
         self.push_history(value);
+        // A committed note change must be published as a jump, never blended
+        // through the filter: re-seed the one-euro state at the new note.
+        self.one_euro.seed(value);
         self.clear_pending();
         self.unstable_streak = 0;
     }
@@ -427,6 +460,73 @@ mod tests {
         assert!((prior.correct_octave(164.9) - 82.45).abs() < 0.2);
         assert!((prior.correct_octave(160.0) - 80.0).abs() < 0.01);
         assert!((prior.correct_octave(111.0) - 111.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn one_euro_suppresses_detector_jitter_below_the_legacy_stepped_alpha() {
+        // ±5-cent peak detector jitter on a constant note. Compare against a
+        // simulation of the legacy stepped-alpha update (same median input,
+        // alpha tiers 0.20/0.35/0.55 by residual).
+        let base = 110.0_f32;
+        let mut tracker = PitchTracker::new();
+        let mut legacy_stable: Option<f32> = None;
+        let mut legacy_history: Vec<f32> = Vec::new();
+        let mut new_outputs = Vec::new();
+        let mut legacy_outputs = Vec::new();
+        for frame in 0..90 {
+            let jitter_cents = (((frame % 4) as f32) - 1.5) / 1.5 * 5.0;
+            let freq = base * 2f32.powf(jitter_cents / 1_200.0);
+            let out = tracker.update(estimate(freq), &PitchPrior::default());
+            // Legacy simulation mirrors the old inlier branch.
+            let log2 = freq.log2();
+            legacy_history.push(log2);
+            if legacy_history.len() > 3 {
+                legacy_history.remove(0);
+            }
+            let mut sorted = legacy_history.clone();
+            sorted.sort_by(f32::total_cmp);
+            let median = if sorted.len() % 2 == 1 {
+                sorted[sorted.len() / 2]
+            } else {
+                (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) * 0.5
+            };
+            let legacy = match legacy_stable {
+                None => median,
+                Some(stable) => {
+                    let residual = (median - stable).abs() * 1_200.0;
+                    let alpha = if residual < 12.0 {
+                        0.20
+                    } else if residual < 35.0 {
+                        0.35
+                    } else {
+                        0.55
+                    };
+                    stable + alpha * (median - stable)
+                }
+            };
+            legacy_stable = Some(legacy);
+            if frame >= 30 {
+                if let Some(tracked) = out {
+                    new_outputs.push(tracked.frequency.log2());
+                }
+                legacy_outputs.push(legacy);
+            }
+        }
+        let base_log2 = base.log2();
+        let spread = |values: &[f32]| {
+            values
+                .iter()
+                .map(|v| (v - base_log2).abs())
+                .fold(0.0_f32, f32::max)
+                * 1_200.0
+        };
+        let new_jitter = spread(&new_outputs);
+        let legacy_jitter = spread(&legacy_outputs);
+        assert!(
+            new_jitter < legacy_jitter,
+            "one-euro jitter {new_jitter:.3}c should beat legacy {legacy_jitter:.3}c"
+        );
+        assert!(new_jitter < 2.0, "jitter {new_jitter:.3}c");
     }
 
     #[test]

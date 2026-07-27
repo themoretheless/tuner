@@ -6,6 +6,8 @@
 
 Status note 2026-07-12: verified closures are M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26, M29, M32, M39, M40, M41, M44, M48, M49, M50, M51, M59, M64, M65, M68, M70, M71 and M177. All other rows are open, partial, optional or not yet revalidated; ranking is intentionally stable until a measured re-score.
 
+Status note 2026-07-26: rounds 01-10 closed M4, M9, M10, M14, M15, M20, M31, M33, M36, M37, M61, M67, M103, M138; M8/M16/M30/M85/M94/M104 partially advanced.
+
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
 | M# | Item | Tier | Val | Source | Note |
@@ -13,23 +15,23 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 1 | move DSP off cpal realtime callback | P1 | 78 | r1:review | [DONE 2026-07-11] |
 | 2 | remove blocking Mutex in audio callback | P1 | 76 | r1:review | [DONE 2026-07-11] |
 | 3 | unify tunings and note math into pitch-core | P2 | 74 | r1:review | Registry plus one generated formula owner feed Rust and TypeScript facades. [DONE 2026-07-11] |
-| 4 | octave-error guard subharmonic/NSDF | P2 | 73 | r1:review |  |
+| 4 | octave-error guard subharmonic/NSDF | P2 | 73 | r1:review | dsp/octave.rs Goertzel fold. [DONE 2026-07-26] |
 | 5 | real service worker / offline PWA | P2 | 72 | r1:review | [DONE 2026-07-11] |
 | 6 | eliminate per-callback heap allocations | P2 | 70 | r1:review | [DONE 2026-07-11] |
 | 7 | check Rust and TS tuning tables match | P2 | 66 | r1:review | [DONE 2026-07-11] |
-| 8 | code-sign and notarize macOS/Windows | P2 | 66 | r1:review |  |
-| 9 | Harmonic Product Spectrum octave disambiguator from the existing 2048 FFT | P2 | 66 | r2:algorithms | Reuses current FFT to kill octave errors with minimal code. |
-| 10 | high-pass filter rumble/mains | P2 | 64 | r1:review |  |
+| 8 | code-sign and notarize macOS/Windows | P2 | 66 | r1:review | [PARTIAL 2026-07-26] Remaining: real certificates + notarization. |
+| 9 | Harmonic Product Spectrum octave disambiguator from the existing 2048 FFT | P2 | 66 | r2:algorithms | Reuses current FFT to kill octave errors with minimal code. [DONE 2026-07-26] |
+| 10 | high-pass filter rumble/mains | P2 | 64 | r1:review | dsp/biquad.rs HP+LP. [DONE 2026-07-26] |
 | 11 | reconcile Rust/TS frequency-to-MIDI rounding | P2 | 64 | r1:review | Both targets use the generated nearest-MIDI contract. [DONE 2026-07-11] |
 | 12 | Multi-resolution dual-window analysis: long window for low strings, short for high | P2 | 64 | r2:algorithms | Fixes low-E resolution vs high-string latency tradeoff. |
 | 13 | stop resizeCanvas every frame | P2 | 62 | r1:review | [DONE 2026-07-11] |
-| 14 | Tauri CSP | P2 | 62 | r1:review |  |
-| 15 | adaptive noise-floor gate | P2 | 62 | r1:review |  |
-| 16 | Verifiable '100% local, no network' privacy badge backed by CI zero-fetch test | P2 | 62 | r2:distribution | Strong trust signal with a cheap CI assertion; differentiates from cloud tuners. |
+| 14 | Tauri CSP | P2 | 62 | r1:review | tauri.conf.json strict CSP. [DONE 2026-07-26] |
+| 15 | adaptive noise-floor gate | P2 | 62 | r1:review | dsp/gate.rs adaptive noise floor. [DONE 2026-07-26] |
+| 16 | Verifiable '100% local, no network' privacy badge backed by CI zero-fetch test | P2 | 62 | r2:distribution | Strong trust signal with a cheap CI assertion; differentiates from cloud tuners. [PARTIAL 2026-07-26] Remaining: the README badge itself; CI zero-network exists. |
 | 17 | Adaptive per-string tau search bounds derived from the selected target | P2 | 62 | r2:algorithms | Faster, fewer-error search when string known. |
 | 18 | consolidate five rAF loops into one | P2 | 60 | r1:review |  |
 | 19 | decouple detection cadence from rAF | P2 | 60 | r1:review |  |
-| 20 | CI hygiene clippy/rustfmt/deploy-freshness | P2 | 60 | r1:review |  |
+| 20 | CI hygiene clippy/rustfmt/deploy-freshness | P2 | 60 | r1:review | test-core.yml fmt+clippy. [DONE 2026-07-26] |
 | 21 | Dedicated SEO landing page at /tuner/ targeting 'online guitar tuner' with schema.org FAQ + HowTo | P2 | 60 | r2:distribution | Primary organic-discovery lever for a web tuner. |
 | 22 | WASM/native numeric-equivalence harness over a shared fixture manifest | P2 | 60 | r2:dx-quality | Native Rust, full-frame browser WASM and TS fallback share B0-E5 cents/confidence fixtures. [DONE 2026-07-12] |
 | 23 | Graceful-degradation matrix: explicit WASM-down / mic-down fallback states | P2 | 60 | r3:observability-reliability | Defines deterministic UX for every failure mode instead of blank screens. |
@@ -39,14 +41,14 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 27 | one-euro filter | P2 | 58 | r1:review |  |
 | 28 | WebKitGTK media backend AppImage | P2 | 58 | r1:review |  |
 | 29 | hardcoded 44100 in egui harmonic overlay | P2 | 58 | r1:review | [DONE 2026-07-11] |
-| 30 | Confidence-weighted late fusion of YIN, MPM, HPS and Goertzel into one estimate | P2 | 58 | r2:algorithms | Single fused estimate from existing detectors cuts octave/jitter errors cheaply. |
-| 31 | Shape/texture redundancy so in-tune state never relies on color alone | P2 | 58 | r2:a11y-deep | WCAG non-color-reliance; trivial and broadly useful. |
+| 30 | Confidence-weighted late fusion of YIN, MPM, HPS and Goertzel into one estimate | P2 | 58 | r2:algorithms | Single fused estimate from existing detectors cuts octave/jitter errors cheaply. [PARTIAL 2026-07-26] Remaining: HPS/Goertzel as fusion voices; only guards so far. |
+| 31 | Shape/texture redundancy so in-tune state never relies on color alone | P2 | 58 | r2:a11y-deep | WCAG non-color-reliance; trivial and broadly useful. CentsGauge non-color cues. [DONE 2026-07-26] |
 | 32 | Property-based test for frequencyToNote round-trip across A4 sweep | P2 | 58 | r2:dx-quality | Deterministic Rust/TS sweeps cover A4, MIDI, cents, temperament and transpose. [DONE 2026-07-11] |
-| 33 | cargo-deny + npm audit supply-chain gate with committed advisory baseline | P2 | 58 | r2:dx-quality | Blocks vulnerable deps in CI cheaply. |
+| 33 | cargo-deny + npm audit supply-chain gate with committed advisory baseline | P2 | 58 | r2:dx-quality | Blocks vulnerable deps in CI cheaply. deny.toml + security.yml. [DONE 2026-07-26] |
 | 34 | "Test My Mic" self-diagnostic wizard with pass/fail panel | P2 | 58 | r3:observability-reliability | Cuts the #1 support cause (no signal) before it becomes a bug report. |
 | 35 | Vitest fake-mic harness driving useTuner via scripted AnalyserNode stub | P2 | 57 | r2:dx-quality | Deterministic frontend tuner-logic testing. |
-| 36 | Mic-signal sanity watchdog (silent / clipping / DC-stuck warnings) | P2 | 57 | r3:observability-reliability | Proactively tells users why detection is wrong before they blame the app. |
-| 37 | aria-live for note and cents | P2 | 56 | r1:review |  |
+| 36 | Mic-signal sanity watchdog (silent / clipping / DC-stuck warnings) | P2 | 57 | r3:observability-reliability | Proactively tells users why detection is wrong before they blame the app. domain/diagnostics.ts signal-health. [DONE 2026-07-26] |
+| 37 | aria-live for note and cents | P2 | 56 | r1:review | utils/tuneA11y.ts. [DONE 2026-07-26] |
 | 38 | auto-advance string-by-string guided tuning | P2 | 56 | r1:review |  |
 | 39 | fix CentsHistory deep watcher | P2 | 56 | r1:review | [DONE 2026-07-11] |
 | 40 | bound MPM NSDF tau range | P2 | 56 | r1:review | [DONE 2026-07-11] |
@@ -70,13 +72,13 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 58 | collapsible settings sidebar on mobile | P3 | 52 | r1:review |  |
 | 59 | build script copies WASM to unserved dir | P3 | 52 | r1:review | [DONE 2026-07-11] |
 | 60 | Colorblind palette presets (deuteran/protan/tritan) replacing red/green coding | P3 | 52 | r2:a11y-deep | Red/green in-tune coding fails ~8% of male users. |
-| 61 | Golden-trace differential runner: flag any fixture moving >1 cent | P3 | 52 | r2:dx-quality | [PARTIAL 2026-07-18] Replay envelopes exist; differential baselines and the 1-cent rule remain. |
+| 61 | Golden-trace differential runner: flag any fixture moving >1 cent | P3 | 52 | r2:dx-quality | [PARTIAL 2026-07-18] Replay envelopes exist; differential baselines and the 1-cent rule remain. compare-quality-baseline.mjs + fixtures/quality-baseline.json. [DONE 2026-07-26] |
 | 62 | Adjustable in-tune tolerance + detection smoothing as accessibility controls | P3 | 52 | r2:a11y-deep | Lets tremor/motor users widen the target. |
 | 63 | Locale-correct A4 decimal parsing accepting comma and period keypads | P3 | 52 | r3:i18n-breadth | Prevents broken A4 entry for half the world; trivial fix. |
 | 64 | Configurable in-tune tolerance band in cents | P3 | 52 | r4:settings-personalization | Slider 1-10 cents controls green-zone width directly. [DONE 2026-07-11] |
 | 65 | Lazy-load Waveform and Spectrum via defineAsyncComponent | P3 | 52 | r4:perf-bundle | App.vue statically imports both; split each into its own chunk. [DONE 2026-07-11] |
 | 66 | spectrogram allocation and full redraw | P3 | 50 | r1:review |  |
-| 67 | pin toolchain and wasm-pack version | P3 | 50 | r1:review |  |
+| 67 | pin toolchain and wasm-pack version | P3 | 50 | r1:review | rust-toolchain.toml. [DONE 2026-07-26] |
 | 68 | custom/editable tuning builder | P3 | 50 | r1:review | [DONE 2026-07-11] |
 | 69 | web AudioWorklet detection | P3 | 50 | r1:review |  |
 | 70 | strengthen TARGET vs detected note hierarchy | P3 | 50 | r1:review | [DONE 2026-07-11] |
@@ -94,7 +96,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 82 | Sample-rate / device-mismatch reconciliation warning | P3 | 50 | r3:observability-reliability | Explains a subtle, common cause of detection error. |
 | 83 | Versioned settings schema with migration runner | P3 | 50 | r4:settings-personalization | Stamp schemaVersion; migrate old keys on load, no data loss. |
 | 84 | Gate visualizer chunk fetch behind showWaveform/showSpectrum toggles | P3 | 50 | r4:perf-bundle | Only download viz code when user enables that visualizer. |
-| 85 | Decimate input to fixed 22050Hz before YIN loop | P3 | 50 | r4:perf-bundle | Guitar max 400Hz needs no 44.1k; halves tau-search cost. |
+| 85 | Decimate input to fixed 22050Hz before YIN loop | P3 | 50 | r4:perf-bundle | Guitar max 400Hz needs no 44.1k; halves tau-search cost. [PARTIAL 2026-07-26] Remaining: fixed 22050 Hz pipeline. |
 | 86 | header wrap/shrink at 320px | P3 | 48 | r1:review |  |
 | 87 | bass 4/5-string tunings | P3 | 48 | r1:review |  |
 | 88 | A4 clamp on commit not keystroke | P3 | 48 | r1:review |  |
@@ -103,7 +105,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 91 | per-instrument detection frequency range | P3 | 48 | r1:review |  |
 | 92 | split useTuner god-composable | P3 | 48 | r1:review | [DONE 2026-07-19] |
 | 93 | Kalman filter on (log-f0, df0/dt) replacing EMA+median smoother | P3 | 48 | r2:algorithms | Predictive smoothing tracks vibrato/glide better than EMA. |
-| 94 | Detection-accuracy report artifact: cents-error histogram per SNR bucket | P3 | 48 | r2:dx-quality | [PARTIAL 2026-07-18] CI uploads per-capture JSON metrics; SNR buckets and histograms remain. |
+| 94 | Detection-accuracy report artifact: cents-error histogram per SNR bucket | P3 | 48 | r2:dx-quality | [PARTIAL 2026-07-26] CI uploads per-capture JSON metrics; cents-error histogram per SNR bucket remains. |
 | 95 | Version/build-info panel (git SHA, build date, WASM hash, platform) | P3 | 48 | r3:observability-reliability | Makes bug reports actionable with exact build identity. |
 | 96 | Brotli + gzip precompress dist with vite-plugin-compression | P3 | 48 | r4:perf-bundle | Static GitHub Pages host can serve .br/.gz for JS/WASM/CSS. |
 | 97 | Throttle visualizer redraw to 30fps decoupled from detection | P3 | 48 | r4:perf-bundle | Waveform/Spectrum at 30fps saves canvas work, detection stays fast. |
@@ -112,8 +114,8 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 100 | redesign StringSelector for narrow column | P3 | 46 | r1:review |  |
 | 101 | refactor egui App::update god method | P3 | 46 | r1:review |  |
 | 102 | needle color gradient and directional arrow | P3 | 46 | r1:review |  |
-| 103 | forced-colors mode mapping with SystemColor keywords for canvas needle/spectrum | P3 | 46 | r2:a11y-deep | Windows High Contrast support for canvas elements. |
-| 104 | Phase-vocoder instantaneous-frequency refinement of the FFT peak bin | P3 | 46 | r2:algorithms | Higher precision than parabolic interpolation. |
+| 103 | forced-colors mode mapping with SystemColor keywords for canvas needle/spectrum | P3 | 46 | r2:a11y-deep | Windows High Contrast support for canvas elements. style.css forced-colors. [DONE 2026-07-26] |
+| 104 | Phase-vocoder instantaneous-frequency refinement of the FFT peak bin | P3 | 46 | r2:algorithms | Higher precision than parabolic interpolation. [PARTIAL 2026-07-26] phase.rs closes the spirit; FFT-bin phase-vocoder not implemented. |
 | 105 | Open Graph + Twitter Card meta with per-tuning dynamic preview image | P3 | 46 | r2:distribution | Better share-link previews for SEO/social. |
 | 106 | Pseudo-localization CI check flagging hardcoded strings before merge | P3 | 46 | r3:observability-reliability | Stops untranslated strings regressing into releases. |
 | 107 | Skip getByteFrequencyData when Spectrum component unmounted | P3 | 46 | r4:perf-bundle | Stop analyser frequency reads entirely when spectrum hidden. |
@@ -147,7 +149,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 135 | Cache-version manifest with stale-cache purge on boot | P3 | 42 | r4:offline-storage | Compare baked CACHE_VERSION, delete old caches.keys() entries at startup. |
 | 136 | CONTRIBUTING.md with WASM build prerequisites | P3 | 42 | r4:docs-dx | List wasm-pack, Rust toolchain, npm steps before first run. |
 | 137 | High-contrast pro theme for bright-stage readability | P3 | 42 | r4:theming-identity | Max luminance separation on note-letter, gauge, cents bar. |
-| 138 | anti-aliased decimation | P3 | 40 | r1:review |  |
+| 138 | anti-aliased decimation | P3 | 40 | r1:review | dsp/signal.rs anti-aliased decimation. [DONE 2026-07-26] |
 | 139 | ukulele/violin/mandolin/banjo tunings | P3 | 40 | r1:review |  |
 | 140 | announce listening status to SR | P3 | 40 | r1:review |  |
 | 141 | redesign PerStringCents | P3 | 40 | r1:review |  |

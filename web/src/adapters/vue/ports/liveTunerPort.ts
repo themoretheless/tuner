@@ -4,6 +4,7 @@ import type { DetectionCapability } from '../capabilities/detection';
 import type { DisplayCapability } from '../capabilities/display';
 import type {
   AudioSettingsCapability,
+  FeedbackSettingsCapability,
   ListeningCapability,
   ReferenceToneCapability,
   SessionCapability,
@@ -16,7 +17,7 @@ interface Dependencies {
   listening: ListeningCapability;
   referenceTone: ReferenceToneCapability;
   session: SessionCapability;
-  settings: AudioSettingsCapability;
+  settings: AudioSettingsCapability & FeedbackSettingsCapability;
   tuning: TuningCapability;
 }
 
@@ -40,6 +41,9 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     displayMode: display.displayMode,
     error: session.error,
     exactPcmCaptureAvailable: session.exactPcmCaptureAvailable,
+    feedbackFlash: settings.feedbackFlash,
+    feedbackSound: settings.feedbackSound,
+    feedbackVibrate: settings.feedbackVibrate,
     fileAudioDuration: session.fileAudioDuration,
     fileAudioName: session.fileAudioName,
     fileAudioProgress: session.fileAudioProgress,
@@ -51,6 +55,7 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     isListening: session.isListening,
     leftHanded: display.leftHanded,
     nativeAudioAvailable: session.nativeAudioAvailable,
+    readoutStability: settings.readoutStability,
     referencePlaying: referenceTone.referencePlaying,
     selectedInputDeviceId: session.selectedInputDeviceId,
     selectedString: tuning.selectedString,

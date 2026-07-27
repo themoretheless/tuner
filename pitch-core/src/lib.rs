@@ -8,6 +8,7 @@ mod engine;
 mod frames;
 mod gate;
 mod generated_note_math;
+mod one_euro;
 mod pipeline;
 pub mod quality;
 mod resolution;

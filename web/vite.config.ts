@@ -72,6 +72,11 @@ function offlineServiceWorker(version: string): Plugin {
       )
 
       this.emitFile({ type: 'asset', fileName: 'sw.js', source })
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: `${JSON.stringify({ version }, null, 2)}\n`,
+      })
     },
   }
 }

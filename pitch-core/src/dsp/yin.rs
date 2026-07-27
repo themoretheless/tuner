@@ -5,6 +5,11 @@ pub struct YinDetector {
     config: DetectorConfig,
     difference: Vec<f32>,
     normalized: Vec<f32>,
+    /// Optional per-frame narrowing of the lag search (min/max frequency),
+    /// set by the hybrid detector when a single target string is selected.
+    /// Only the tau search window shrinks; the analysis buffer itself is
+    /// untouched, so spectral guards keep the full frame.
+    search_range: Option<(f32, f32)>,
 }
 
 impl Default for YinDetector {
@@ -20,6 +25,28 @@ impl YinDetector {
             config,
             difference: Vec::new(),
             normalized: Vec::new(),
+            search_range: None,
+        }
+    }
+
+    pub(crate) fn set_search_range(&mut self, search_range: Option<(f32, f32)>) {
+        self.search_range = search_range;
+    }
+
+    fn effective_frequency_range(&self) -> (f32, f32) {
+        let full = (self.config.min_frequency, self.config.max_frequency);
+        let Some((low, high)) = self.search_range else {
+            return full;
+        };
+        let min_frequency = full.0.max(low);
+        let max_frequency = full.1.min(high);
+        // A degenerate intersection (selected target far outside the
+        // instrument range) falls back to the full configured range instead
+        // of producing an empty tau window.
+        if max_frequency > min_frequency * 1.05 {
+            (min_frequency, max_frequency)
+        } else {
+            full
         }
     }
 
@@ -33,8 +60,9 @@ impl YinDetector {
             return None;
         }
 
-        let min_tau = (sample_rate / self.config.max_frequency).floor() as usize;
-        let max_tau = half.min((sample_rate / self.config.min_frequency).floor() as usize);
+        let (min_frequency, max_frequency) = self.effective_frequency_range();
+        let min_tau = (sample_rate / max_frequency).floor() as usize;
+        let max_tau = half.min((sample_rate / min_frequency).floor() as usize);
         if max_tau <= min_tau + 2 {
             return None;
         }

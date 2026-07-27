@@ -32,6 +32,9 @@ export interface PersistedSettings {
   customTemperaments: Temperament[];
   customTunings: Tuning[];
   displayMode: DisplayMode;
+  feedbackFlash: boolean;
+  feedbackSound: boolean;
+  feedbackVibrate: boolean;
   inTuneTolerance: number;
   lastTuningId: string;
   layoutMode: LayoutMode;
@@ -41,6 +44,7 @@ export interface PersistedSettings {
   metronomeSubdivision: number;
   pipelineConfig: PipelineConfig;
   practiceHistory: PracticeHistoryEntry[];
+  readoutStability: number;
   selectedInputDeviceId: string;
   showSpectrogram: boolean;
   showSpectrum: boolean;
@@ -112,6 +116,9 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
       customTemperaments: await s.get<Temperament[]>('customTemperaments') ?? undefined,
       customTunings: await s.get<Tuning[]>('customTunings') ?? undefined,
       displayMode: await s.get<DisplayMode>('displayMode') ?? undefined,
+      feedbackFlash: await s.get<boolean>('feedbackFlash') ?? undefined,
+      feedbackSound: await s.get<boolean>('feedbackSound') ?? undefined,
+      feedbackVibrate: await s.get<boolean>('feedbackVibrate') ?? undefined,
       inTuneTolerance: await s.get<number>('inTuneTolerance') ?? undefined,
       lastTuningId: await s.get<string>('lastTuningId') ?? undefined,
       layoutMode: await s.get<LayoutMode>('layoutMode') ?? undefined,
@@ -121,6 +128,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
       metronomeSubdivision: await s.get<number>('metronomeSubdivision') ?? undefined,
       pipelineConfig: await s.get<PipelineConfig>('pipelineConfig') ?? undefined,
       practiceHistory: await s.get<PracticeHistoryEntry[]>('practiceHistory') ?? undefined,
+      readoutStability: await s.get<number>('readoutStability') ?? undefined,
       selectedInputDeviceId: await s.get<string>('selectedInputDeviceId') ?? undefined,
       showSpectrogram: await s.get<boolean>('showSpectrogram') ?? undefined,
       showSpectrum: await s.get<boolean>('showSpectrum') ?? undefined,
@@ -139,7 +147,11 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
 
   const savedA4 = readLocal('a4');
   const savedChromatic = readLocal('chromatic');
+  const savedFeedbackFlash = readLocal('feedbackFlash');
+  const savedFeedbackSound = readLocal('feedbackSound');
+  const savedFeedbackVibrate = readLocal('feedbackVibrate');
   const savedInTuneTolerance = readLocal('inTuneTolerance');
+  const savedReadoutStability = readLocal('readoutStability');
   const savedShowSpectrogram = readLocal('showSpectrogram');
   const savedShowSpectrum = readLocal('showSpectrum');
   const savedShowWaveform = readLocal('showWaveform');
@@ -154,6 +166,9 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
     customTemperaments: readJson<Temperament[]>('customTemperaments'),
     customTunings: readJson<Tuning[]>('customTunings'),
     displayMode: readLocal('displayMode') as DisplayMode | undefined,
+    feedbackFlash: savedFeedbackFlash != null ? savedFeedbackFlash === 'true' : undefined,
+    feedbackSound: savedFeedbackSound != null ? savedFeedbackSound === 'true' : undefined,
+    feedbackVibrate: savedFeedbackVibrate != null ? savedFeedbackVibrate === 'true' : undefined,
     inTuneTolerance: savedInTuneTolerance ? Number(savedInTuneTolerance) : undefined,
     lastTuningId: readLocal('lastTuningId'),
     layoutMode: readLocal('layoutMode') as LayoutMode | undefined,
@@ -165,6 +180,7 @@ export async function loadPersistedSettings(): Promise<Partial<PersistedSettings
     metronomeSubdivision: readLocal('metronomeSubdivision') ? Number(readLocal('metronomeSubdivision')) : undefined,
     pipelineConfig: readJson<PipelineConfig>('pipelineConfig'),
     practiceHistory: readJson<PracticeHistoryEntry[]>('practiceHistory'),
+    readoutStability: savedReadoutStability ? Number(savedReadoutStability) : undefined,
     selectedInputDeviceId: readLocal('selectedInputDeviceId'),
     showSpectrogram: savedShowSpectrogram != null
       ? savedShowSpectrogram === 'true'

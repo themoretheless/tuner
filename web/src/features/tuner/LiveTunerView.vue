@@ -3,6 +3,12 @@ import { computed, ref, watch } from 'vue';
 import { useLiveTunerPort } from '../../app/featurePorts';
 import { useL10n } from '../../stores/l10n';
 import { TuneAnnouncer, snapshotOf, type TuneSnapshot } from '../../utils/tuneA11y';
+import {
+  CentsStabilizer,
+  InTuneConfirmation,
+  fireInTuneFeedback,
+} from '../../utils/inTuneFeedback';
+import { parseA4Input } from '../../utils/a4Input';
 import CentsGauge from '../../components/CentsGauge.vue';
 import AudioFileInput from '../../components/AudioFileInput.vue';
 import DebugOverlay from '../../components/DebugOverlay.vue';
@@ -18,6 +24,20 @@ import TuningSelector from '../../components/TuningSelector.vue';
 
 const tuner = useLiveTunerPort();
 const { t } = useL10n();
+
+// M63: A4 принимает точку или запятую как десятичный разделитель.
+// Мусор отклоняется, поле откатывается к текущему значению;
+// кламп диапазона 420–460 остаётся на стороне tuner.setA4.
+function onA4Change(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const parsed = parseA4Input(input.value);
+  if (parsed === null) {
+    input.value = String(tuner.a4);
+    return;
+  }
+  tuner.setA4(parsed);
+  input.value = String(tuner.a4);
+}
 
 // Diagnostic overlay (raw vs smoothed detector output + signal recorder),
 // enabled with ?debug=1 so it never shows up in normal use.
@@ -52,6 +72,49 @@ function formatAnnouncement(s: TuneSnapshot): string {
 watch(tuneSnapshot, (snapshot) => {
   const accepted = announcer.push(snapshot);
   if (accepted) liveAnnouncement.value = formatAnnouncement(accepted);
+});
+
+// M73: one-shot "in tune" confirmation. Fires only on the transition INTO
+// in-tune (re-arms after the note leaves the tolerance band), never per
+// frame. Channels are user-toggleable in display preferences; the flash is
+// additionally suppressed by prefers-reduced-motion inside fireInTuneFeedback.
+const confirmation = new InTuneConfirmation();
+const inTuneFlash = ref(false);
+let flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(tuneSnapshot, (snapshot) => {
+  if (!confirmation.push(snapshot.state)) return;
+  const fired = fireInTuneFeedback({
+    sound: tuner.feedbackSound,
+    vibrate: tuner.feedbackVibrate,
+    flash: tuner.feedbackFlash,
+  });
+  if (!fired.flashed) return;
+  if (flashTimer != null) clearTimeout(flashTimer);
+  inTuneFlash.value = true;
+  flashTimer = setTimeout(() => {
+    flashTimer = null;
+    inTuneFlash.value = false;
+  }, 450);
+});
+
+// M62: readout stability ("needle steadiness") — display-only EMA on the
+// cents value shown on the gauge. The detection pipeline, in-tune hysteresis
+// and announcements are untouched; null detection resets the filter.
+const stabilizer = new CentsStabilizer();
+const displayCents = ref(tuner.cents);
+
+watch(() => tuner.readoutStability, (stability) => {
+  stabilizer.setStability(stability);
+}, { immediate: true });
+
+watch(() => [tuner.cents, tuner.hasDetection] as const, ([cents, detected]) => {
+  if (!detected) {
+    stabilizer.reset();
+    displayCents.value = cents;
+    return;
+  }
+  displayCents.value = stabilizer.add(cents) ?? cents;
 });
 </script>
 
@@ -105,12 +168,18 @@ watch(tuneSnapshot, (snapshot) => {
         :target-freq="tuner.targetNote.frequency"
         :format-freq="tuner.formatFreq"
       />
-      <CentsGauge
-        :cents="tuner.cents"
-        :mode="tuner.displayMode"
-        :is-in-tune="tuner.isInTune"
-        :is-detected="tuner.hasDetection"
-      />
+      <div
+        class="gauge-stage"
+        :class="{ 'in-tune-flash': inTuneFlash }"
+        data-testid="gauge-stage"
+      >
+        <CentsGauge
+          :cents="displayCents"
+          :mode="tuner.displayMode"
+          :is-in-tune="tuner.isInTune"
+          :is-detected="tuner.hasDetection"
+        />
+      </div>
       <HzGauge
         :detected="tuner.detectionFrame.freq"
         :target="tuner.targetNote.frequency"
@@ -144,12 +213,10 @@ watch(tuneSnapshot, (snapshot) => {
         <label class="option-field">
           <span>{{ t('a4.label') }}</span>
           <input
-            type="number"
+            type="text"
+            inputmode="decimal"
             :value="tuner.a4"
-            min="420"
-            max="460"
-            step="1"
-            @change="tuner.setA4(Number(($event.target as HTMLInputElement).value))"
+            @change="onA4Change($event)"
           />
         </label>
         <label v-if="tuner.nativeAudioAvailable" class="option-field">
@@ -201,3 +268,32 @@ watch(tuneSnapshot, (snapshot) => {
     </aside>
   </section>
 </template>
+
+<style scoped>
+/* M73: brief halo pulse on the gauge when the note locks into tune. The
+   pulse is purely visual; screen readers already get the polite announcement
+   via the live region, and fireInTuneFeedback skips the flash entirely when
+   the user prefers reduced motion. */
+.gauge-stage {
+  border-radius: 12px;
+}
+
+.gauge-stage.in-tune-flash {
+  animation: in-tune-confirm-pulse 450ms ease-out;
+}
+
+@keyframes in-tune-confirm-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(16 185 129 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 22px rgb(16 185 129 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge-stage.in-tune-flash {
+    animation: none;
+  }
+}
+</style>

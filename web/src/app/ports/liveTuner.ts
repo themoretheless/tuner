@@ -21,6 +21,9 @@ export interface LiveTunerPort {
   readonly displayMode: DisplayMode;
   readonly error: string | null;
   readonly exactPcmCaptureAvailable: boolean;
+  readonly feedbackFlash: boolean;
+  readonly feedbackSound: boolean;
+  readonly feedbackVibrate: boolean;
   readonly fileAudioDuration: number;
   readonly fileAudioName: string | null;
   readonly fileAudioProgress: number;
@@ -34,6 +37,7 @@ export interface LiveTunerPort {
   readonly leftHanded: boolean;
   loadAudioFile(file: File): Promise<boolean>;
   readonly nativeAudioAvailable: boolean;
+  readonly readoutStability: number;
   readonly referencePlaying: boolean;
   refreshInputDevices(): Promise<void>;
   readonly selectedInputDeviceId: string;

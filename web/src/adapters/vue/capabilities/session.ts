@@ -59,3 +59,10 @@ export interface AnalysisSettingsCapability {
 export interface AudioSettingsCapability {
   audioBackend: Ref<AudioBackend>;
 }
+
+export interface FeedbackSettingsCapability {
+  feedbackFlash: Ref<boolean>;
+  feedbackSound: Ref<boolean>;
+  feedbackVibrate: Ref<boolean>;
+  readoutStability: Ref<number>;
+}

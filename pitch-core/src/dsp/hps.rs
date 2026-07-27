@@ -20,6 +20,7 @@
 //! reaches the guard; frames whose confidence clears
 //! [`HPS_SKIP_CONFIDENCE`] skip the FFT entirely.
 
+use super::spectral;
 use rustfft::{num_complex::Complex, Fft};
 use std::sync::Arc;
 
@@ -29,9 +30,9 @@ use std::sync::Arc;
 const HPS_STAGES: usize = 3;
 
 /// Octave agreement tolerance between the HPS peak and the estimate's
-/// double/half. 60 cents absorbs the HPS peak's bin quantization and
-/// parabolic interpolation error without admitting non-octave relationships
-/// (the nearest non-octave ratio, 3x, is 1902 cents away).
+/// double/half. 60 cents absorbs the HPS peak's bin quantization and the
+/// residual sub-bin interpolation error without admitting non-octave
+/// relationships (the nearest non-octave ratio, 3x, is 1902 cents away).
 const OCTAVE_MATCH_CENTS: f32 = 60.0;
 
 /// Frames at or above this confidence never run the guard: their periodicity
@@ -133,18 +134,17 @@ impl HpsGuard {
             return HpsVerdict::Neutral;
         }
 
-        // Parabolic interpolation on the product curve for a sub-bin peak
-        // frequency; the OCTAVE_MATCH_CENTS tolerance is wide enough that
-        // the residual interpolation error does not matter.
-        let left = self.hps[peak_bin - 1];
-        let center = self.hps[peak_bin];
-        let right = self.hps[peak_bin + 1];
-        let denominator = 2.0 * center - left - right;
-        let offset = if denominator.abs() > 1e-12 {
-            ((right - left) / (2.0 * denominator)).clamp(-1.0, 1.0)
-        } else {
-            0.0
-        };
+        // Sub-bin peak frequency via the Jacobsen complex-ratio estimator on
+        // the raw FFT bins at the HPS product peak: for a Hann window it is
+        // essentially exact where the magnitude parabola carried up to ~0.07
+        // bin of bias, which at low fundamentals is several cents of octave
+        // verdict tolerance. The product curve itself has no phase, but the
+        // fundamental's complex bins sit at the same index.
+        let offset = spectral::jacobsen_hann_offset(
+            self.input[peak_bin - 1],
+            self.input[peak_bin],
+            self.input[peak_bin + 1],
+        );
         let peak_frequency = (peak_bin as f32 + offset) * bin_width;
 
         let dominance = if confidence >= DOMINANCE_CONFIDENCE_SPLIT {

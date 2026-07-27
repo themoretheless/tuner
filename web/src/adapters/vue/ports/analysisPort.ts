@@ -8,6 +8,7 @@ import type {
 import type { DisplayCapability } from '../capabilities/display';
 import type {
   AnalysisSettingsCapability,
+  FeedbackSettingsCapability,
   ListeningCapability,
   SessionCapability,
 } from '../capabilities/session';
@@ -19,7 +20,7 @@ interface Dependencies {
   history: HistoryCapability;
   listening: ListeningCapability;
   session: Pick<SessionCapability, 'error' | 'isListening' | 'status' | 'usingNativeAudio'>;
-  settings: AnalysisSettingsCapability;
+  settings: AnalysisSettingsCapability & FeedbackSettingsCapability;
   tuning: Pick<TuningCapability, 'formatFreq'>;
   visualization: VisualizationCapability;
 }
@@ -31,10 +32,14 @@ export function createAnalysisPort(services: Dependencies): AnalysisPort {
     detectionFrame: detection.frame,
     displayMode: display.displayMode,
     error: session.error,
+    feedbackFlash: settings.feedbackFlash,
+    feedbackSound: settings.feedbackSound,
+    feedbackVibrate: settings.feedbackVibrate,
     formatFreq: tuning.formatFreq,
     isListening: session.isListening,
     layoutMode: display.layoutMode,
     leftHanded: display.leftHanded,
+    readoutStability: settings.readoutStability,
     sessionStatus: session.status,
     showSpectrogram: settings.showSpectrogram,
     showSpectrum: settings.showSpectrum,
@@ -49,8 +54,15 @@ export function createAnalysisPort(services: Dependencies): AnalysisPort {
     clearError: listening.clearError,
     deactivate: visualization.deactivate,
     setDisplayMode: display.setDisplayMode,
+    setFeedbackFlash: (value: boolean) => { settings.feedbackFlash.value = value; },
+    setFeedbackSound: (value: boolean) => { settings.feedbackSound.value = value; },
+    setFeedbackVibrate: (value: boolean) => { settings.feedbackVibrate.value = value; },
     setLayoutMode: display.setLayoutMode,
     setLeftHanded: display.setLeftHanded,
+    setReadoutStability: (value: number) => {
+      if (!Number.isFinite(value)) return;
+      settings.readoutStability.value = Math.max(0, Math.min(1, value));
+    },
     setShowSpectrogram: (value: boolean) => { settings.showSpectrogram.value = value; },
     setShowSpectrum: (value: boolean) => { settings.showSpectrum.value = value; },
     setShowWaveform: (value: boolean) => { settings.showWaveform.value = value; },

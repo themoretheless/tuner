@@ -41,6 +41,9 @@ export function createDefaultSettings(): PersistedSettings {
     customTemperaments: [],
     customTunings: [],
     displayMode: 'gauge',
+    feedbackFlash: true,
+    feedbackSound: false,
+    feedbackVibrate: false,
     inTuneTolerance: 5,
     lastTuningId: 'standard',
     layoutMode: 'default',
@@ -50,6 +53,7 @@ export function createDefaultSettings(): PersistedSettings {
     metronomeSubdivision: 1,
     pipelineConfig: createDefaultPipelineConfig(),
     practiceHistory: [],
+    readoutStability: 0.5,
     selectedInputDeviceId: '',
     showSpectrogram: false,
     showSpectrum: true,
@@ -115,6 +119,9 @@ export function normalizePersistedSettings(
     customTemperaments,
     customTunings,
     displayMode: normalizeDisplayMode(value.displayMode),
+    feedbackFlash: normalizeBoolean(value.feedbackFlash, defaults.feedbackFlash),
+    feedbackSound: normalizeBoolean(value.feedbackSound, defaults.feedbackSound),
+    feedbackVibrate: normalizeBoolean(value.feedbackVibrate, defaults.feedbackVibrate),
     inTuneTolerance: normalizeInteger(value.inTuneTolerance, 1, 25, defaults.inTuneTolerance),
     lastTuningId,
     layoutMode: normalizeLayoutMode(value.layoutMode),
@@ -129,6 +136,7 @@ export function normalizePersistedSettings(
     ),
     pipelineConfig: normalizePipelineConfig(value.pipelineConfig),
     practiceHistory: normalizePracticeHistory(value.practiceHistory),
+    readoutStability: normalizeRatio(value.readoutStability, defaults.readoutStability),
     selectedInputDeviceId: boundedString(
       value.selectedInputDeviceId,
       defaults.selectedInputDeviceId,
@@ -166,6 +174,13 @@ function normalizeInteger(value: unknown, min: number, max: number, fallback: nu
 
 function normalizeBoolean(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+/** Clamp to 0..1 (three-decimal precision) — used for ratio-style a11y controls. */
+function normalizeRatio(value: unknown, fallback: number) {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return fallback;
+  return Math.round(Math.max(0, Math.min(1, next)) * 1000) / 1000;
 }
 
 function normalizeOffsets(value: unknown): number[] {

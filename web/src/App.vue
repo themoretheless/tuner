@@ -3,8 +3,10 @@ import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } fr
 import { Minimize2 } from '@lucide/vue';
 import { provideFeaturePorts } from './app/featurePorts';
 import { useTuner } from './composables/useTuner';
+import { useAppUpdate } from './composables/useAppUpdate';
 import { useL10n } from './stores/l10n';
 import DiagnosticsStrip from './features/diagnostics/DiagnosticsStrip.vue';
+import UpdateBanner from './components/UpdateBanner.vue';
 import LiveTunerView from './features/tuner/LiveTunerView.vue';
 
 const AnalysisView = defineAsyncComponent(() => import('./features/analysis/AnalysisView.vue'));
@@ -19,6 +21,7 @@ const tuner = application.shell;
 provideFeaturePorts(application.featurePorts);
 
 const { lang, t, toggleLang } = useL10n();
+const appUpdate = useAppUpdate();
 const activeView = ref<AppView>('tuner');
 const views: AppView[] = ['tuner', 'pipeline', 'library', 'practice', 'analysis'];
 const appClasses = computed(() => [
@@ -126,5 +129,10 @@ onUnmounted(() => window.removeEventListener('keydown', handleKey));
       <span>{{ t('quiet.room') }}</span>
       <span>{{ t('keyboard.hint') }}</span>
     </footer>
+    <UpdateBanner
+      :visible="appUpdate.updateAvailable.value && !appUpdate.dismissed.value"
+      @update="appUpdate.applyUpdate"
+      @dismiss="appUpdate.dismiss"
+    />
   </div>
 </template>

@@ -21,8 +21,8 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pitch_core::{
-    BandPassFilter, DetectorConfig, HybridPitchDetector, MpmDetector, OctaveDisambiguator,
-    PhaseRefiner, PitchDetector, PitchEstimate, YinDetector,
+    BandPassFilter, DetectorConfig, FrameContext, HybridPitchDetector, MpmDetector, Note,
+    OctaveDisambiguator, PhaseRefiner, PitchDetector, PitchEstimate, TunerEngine, YinDetector,
 };
 use std::f32::consts::TAU;
 
@@ -80,6 +80,50 @@ fn bench_mpm(c: &mut Criterion) {
     for (name, frequency) in [("e2", E2), ("e4", E4)] {
         let buffer = guitar_tone(frequency);
         let mut detector = MpmDetector::new(DetectorConfig::default());
+        black_box(detector.detect(black_box(&buffer), SAMPLE_RATE));
+        group.bench_function(name, |bencher| {
+            bencher.iter(|| black_box(detector.detect(black_box(&buffer), SAMPLE_RATE)));
+        });
+    }
+    group.finish();
+}
+
+fn bench_full_frame_guided(c: &mut Criterion) {
+    let mut group = c.benchmark_group("full_frame_guided");
+    for (name, frequency, note_name, octave) in [("e2", E2, "E", 2), ("e4", E4, "E", 4)] {
+        let buffer = guitar_tone(frequency);
+        let note = Note {
+            name: note_name,
+            octave,
+            frequency,
+        };
+        let mut engine = TunerEngine::new(440.0);
+        // Selected-string context: narrows the detector tau search to a
+        // −800/+600-cent window around the target.
+        engine.set_frame_context(Some(FrameContext {
+            tuning_targets: vec![note.clone()],
+            selected_target: Some(note),
+            ..FrameContext::default()
+        }));
+        black_box(engine.process(black_box(&buffer), SAMPLE_RATE));
+        group.bench_function(name, |bencher| {
+            bencher.iter(|| black_box(engine.process(black_box(&buffer), SAMPLE_RATE)));
+        });
+    }
+    group.finish();
+}
+
+fn bench_yin_windowed(c: &mut Criterion) {
+    let mut group = c.benchmark_group("yin_windowed");
+    for (name, frequency) in [("e2", E2), ("e4", E4)] {
+        let buffer = guitar_tone(frequency);
+        // Same −800/+600-cent window the guided path applies around a
+        // selected target; isolates the tau-loop savings in YIN itself.
+        let down = 2.0_f32.powf(800.0 / 1_200.0);
+        let up = 2.0_f32.powf(600.0 / 1_200.0);
+        let config =
+            DetectorConfig::default().with_frequency_range(frequency / down, frequency * up);
+        let mut detector = YinDetector::new(config);
         black_box(detector.detect(black_box(&buffer), SAMPLE_RATE));
         group.bench_function(name, |bencher| {
             bencher.iter(|| black_box(detector.detect(black_box(&buffer), SAMPLE_RATE)));
@@ -175,7 +219,9 @@ fn bench_phase_refine(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_full_frame,
+    bench_full_frame_guided,
     bench_yin,
+    bench_yin_windowed,
     bench_mpm,
     bench_biquad_preprocess,
     bench_hps_guard,

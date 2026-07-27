@@ -102,10 +102,18 @@ onUnmounted(analysis.deactivate);
           :layout-mode="analysis.layoutMode"
           :left-handed="analysis.leftHanded"
           :theme-mode="analysis.themeMode"
+          :feedback-flash="analysis.feedbackFlash"
+          :feedback-sound="analysis.feedbackSound"
+          :feedback-vibrate="analysis.feedbackVibrate"
+          :readout-stability="analysis.readoutStability"
           @fullscreen="analysis.toggleFullscreen"
           @layout-change="analysis.setLayoutMode"
           @left-handed-change="analysis.setLeftHanded"
           @theme-change="analysis.setThemeMode"
+          @feedback-flash-change="analysis.setFeedbackFlash"
+          @feedback-sound-change="analysis.setFeedbackSound"
+          @feedback-vibrate-change="analysis.setFeedbackVibrate"
+          @readout-stability-change="analysis.setReadoutStability"
         />
       </div>
       <IntonationSetupPanel

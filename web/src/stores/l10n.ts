@@ -1,10 +1,34 @@
 import { ref } from 'vue'
 
-function initialLang(): 'ru' | 'en' {
-  try { return localStorage.getItem('lang') === 'en' ? 'en' : 'ru' } catch { return 'ru' }
+const SUPPORTED_LANGS = ['ru', 'en'] as const
+export type SupportedLang = typeof SUPPORTED_LANGS[number]
+const DEFAULT_LANG: SupportedLang = 'ru'
+
+export function resolveInitialLang(
+  saved: string | null,
+  navigatorLangs: readonly string[],
+): SupportedLang {
+  if (saved === 'ru' || saved === 'en') return saved
+  for (const entry of navigatorLangs) {
+    const base = entry.toLowerCase().split('-')[0]
+    if (base === 'ru' || base === 'en') return base
+  }
+  return DEFAULT_LANG
 }
 
-const lang = ref<'ru' | 'en'>(initialLang())
+function initialLang(): SupportedLang {
+  let saved: string | null = null
+  try { saved = localStorage.getItem('lang') } catch { saved = null }
+  let navigatorLangs: readonly string[] = []
+  try {
+    navigatorLangs = typeof navigator !== 'undefined' && navigator.languages?.length
+      ? navigator.languages
+      : (typeof navigator !== 'undefined' && navigator.language ? [navigator.language] : [])
+  } catch { navigatorLangs = [] }
+  return resolveInitialLang(saved, navigatorLangs)
+}
+
+const lang = ref<SupportedLang>(initialLang())
 
 const ru: Record<string, string> = {
   'app.title': 'Гитарный Тюнер',
@@ -470,6 +494,23 @@ const ru: Record<string, string> = {
   'diagnostics.backend-recovery-attempted': 'Попытка восстановить аудиовход…',
   'diagnostics.backend-recovery-succeeded': 'Аудиовход восстановлен — прослушивание продолжается',
   'diagnostics.backend-recovery-failed': 'Не удалось восстановить аудиовход — переподключите устройство и начните прослушивание заново',
+  // i18n (M43): автодетект языка
+  'i18n.auto': 'Авто (язык браузера)',
+  // pwa (M54): уведомление о доступном обновлении приложения
+  'pwa.update.available': 'Доступна новая версия приложения',
+  'pwa.update.reload': 'Обновить',
+  'pwa.update.dismiss': 'Скрыть уведомление об обновлении',
+
+  // feedback (M73/M62): подтверждение «в строю» и стабильность стрелки
+  'feedback.confirm': 'Подтверждение «в строю»',
+  'feedback.flash': 'Вспышка',
+  'feedback.sound': 'Звук',
+  'feedback.vibrate': 'Вибрация',
+  'feedback.stability': 'Стабильность стрелки',
+  'feedback.stability.low': 'Низкая',
+  'feedback.stability.medium': 'Средняя',
+  'feedback.stability.high': 'Высокая',
+  'feedback.stability.hint': 'Высокая стабильность сглаживает дрожание стрелки — удобно при треморе рук.',
 }
 
 const en: Record<string, string> = {
@@ -936,6 +977,23 @@ const en: Record<string, string> = {
   'diagnostics.backend-recovery-attempted': 'Trying to recover the audio input…',
   'diagnostics.backend-recovery-succeeded': 'Audio input recovered — listening continues',
   'diagnostics.backend-recovery-failed': 'Could not recover the audio input — reconnect the device and start listening again',
+  // i18n (M43): browser language auto-detect
+  'i18n.auto': 'Auto (browser language)',
+  // pwa (M54): app update available notification
+  'pwa.update.available': 'A new version of the app is available',
+  'pwa.update.reload': 'Update',
+  'pwa.update.dismiss': 'Dismiss the update notification',
+
+  // feedback (M73/M62): "in tune" confirmation and needle steadiness
+  'feedback.confirm': '"In tune" confirmation',
+  'feedback.flash': 'Flash',
+  'feedback.sound': 'Sound',
+  'feedback.vibrate': 'Vibration',
+  'feedback.stability': 'Needle steadiness',
+  'feedback.stability.low': 'Low',
+  'feedback.stability.medium': 'Medium',
+  'feedback.stability.high': 'High',
+  'feedback.stability.hint': 'Higher steadiness smooths needle jitter — helpful if your hands tremble.',
 }
 
 export function useL10n() {
@@ -943,9 +1001,12 @@ export function useL10n() {
     if (lang.value === 'en' && en[key]) return en[key]
     return ru[key] ?? key
   }
-  const toggleLang = () => {
-    lang.value = lang.value === 'ru' ? 'en' : 'ru'
-    try { localStorage.setItem('lang', lang.value) } catch { /* ignore */ }
+  const setLang = (value: SupportedLang) => {
+    lang.value = value
+    try { localStorage.setItem('lang', value) } catch { /* ignore */ }
   }
-  return { lang, t, toggleLang }
+  const toggleLang = () => {
+    setLang(lang.value === 'ru' ? 'en' : 'ru')
+  }
+  return { lang, t, toggleLang, setLang }
 }

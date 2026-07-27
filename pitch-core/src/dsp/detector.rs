@@ -29,6 +29,38 @@ pub const FIXED_GATE_RMS: f32 = 0.0025;
 pub const FIXED_GATE_PEAK: f32 = 0.012;
 pub const DEFAULT_YIN_THRESHOLD: f32 = 0.12;
 
+/// Half-widths of the tau search window applied around a selected target
+/// string, in cents. The window is deliberately asymmetric.
+///
+/// Up (+600 cents, a tritone): the next string up sits a perfect fourth
+/// (+500 cents, or +400 for G–B) above the selected one, and the guided
+/// pipeline must still SEE that adjacent string as a measured candidate so
+/// it can reject it as competing-string evidence instead of going blind.
+/// 600 cents adds ±100 cents of detune headroom on top.
+///
+/// Down (−800 cents): detuning while tuning rarely exceeds −100 cents, but
+/// time-domain false candidates — mains hum (50/60 Hz) and subharmonic
+/// leakage under low-string targets — land well below the target, and the
+/// harmonic-rescue path only engages when a (possibly false) candidate was
+/// measured. Keeping roughly −700…−800 cents visible preserves that
+/// evidence; a true octave-down subharmonic (−1200 cents) stays excluded,
+/// which is the point of the window.
+///
+/// Only the tau search is windowed: the analysis buffer fed to the HPS
+/// guard and the octave probes is unchanged, so spectral evidence keeps
+/// access to the full frame.
+const SELECTED_TARGET_TAU_WINDOW_DOWN_CENTS: f32 = 800.0;
+const SELECTED_TARGET_TAU_WINDOW_UP_CENTS: f32 = 600.0;
+
+/// Lag search window around a selected target frequency, or `None` when no
+/// single string is selected (chromatic mode / full tuning view).
+fn selected_target_tau_window(selected_target: Option<f32>) -> Option<(f32, f32)> {
+    let target = selected_target.filter(|target| target.is_finite() && *target > 0.0)?;
+    let down = 2.0_f32.powf(SELECTED_TARGET_TAU_WINDOW_DOWN_CENTS / 1_200.0);
+    let up = 2.0_f32.powf(SELECTED_TARGET_TAU_WINDOW_UP_CENTS / 1_200.0);
+    Some((target / down, target * up))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PitchEstimate {
     pub confidence: f32,
@@ -205,6 +237,13 @@ impl HybridPitchDetector {
             return None;
         }
         let cleaned = std::mem::take(&mut self.cleaned);
+        // With a single selected string the tau search narrows to a
+        // −800/+600-cent window around the target (see
+        // SELECTED_TARGET_TAU_WINDOW_*); the window is per-frame state,
+        // cleared again before any other caller could observe it.
+        let tau_window = selected_target_tau_window(guidance.selected_target());
+        self.yin.set_search_range(tau_window);
+        self.mpm.set_search_range(tau_window);
         let yin = self
             .pipeline
             .yin_enabled
@@ -215,6 +254,8 @@ impl HybridPitchDetector {
             .secondary_detector_enabled
             .then(|| self.mpm.detect_centered(&cleaned, sample_rate))
             .flatten();
+        self.yin.set_search_range(None);
+        self.mpm.set_search_range(None);
         self.telemetry.yin = yin.map(pipeline_candidate);
         self.telemetry.secondary = mpm.map(pipeline_candidate);
         let selection = select_pitch_candidate_with_reason(yin, mpm, guidance);
@@ -376,6 +417,121 @@ fn normalize_confidence(value: f32, fallback: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn selected_target_window_helper(
+        fundamental: f32,
+        sample_rate: f32,
+        length: usize,
+    ) -> Vec<f32> {
+        let amplitudes = [0.4_f32, 0.22, 0.12, 0.06];
+        (0..length)
+            .map(|index| {
+                let t = index as f32 / sample_rate;
+                amplitudes
+                    .iter()
+                    .enumerate()
+                    .map(|(harmonic, amplitude)| {
+                        amplitude
+                            * (std::f32::consts::TAU * fundamental * (harmonic + 1) as f32 * t)
+                                .sin()
+                    })
+                    .sum()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn selected_target_window_detects_the_in_tune_target() {
+        let sample_rate = 48_000.0;
+        let target = 82.41; // guitar E2
+        let samples = selected_target_window_helper(target, sample_rate, 4096);
+        let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+
+        let estimate = detector
+            .detect_guided(&samples, sample_rate, Some(target), &[target])
+            .expect("in-tune target inside the tau window must be detected");
+        let cents = 1_200.0 * (estimate.frequency / target).log2().abs();
+        assert!(
+            cents < 15.0,
+            "target must resolve within 15 cents, got {} Hz ({cents} cents)",
+            estimate.frequency
+        );
+    }
+
+    #[test]
+    fn selected_target_window_detects_150_cents_of_detune() {
+        let sample_rate = 48_000.0;
+        let target = 82.41;
+        for cents_detune in [-150.0_f32, 150.0] {
+            let played = target * 2.0_f32.powf(cents_detune / 1_200.0);
+            let samples = selected_target_window_helper(played, sample_rate, 4096);
+            let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+
+            let estimate = detector
+                .detect_guided(&samples, sample_rate, Some(target), &[target])
+                .unwrap_or_else(|| {
+                    panic!("{cents_detune} cents of detune stays inside the tau window")
+                });
+            let cents = 1_200.0 * (estimate.frequency / played).log2().abs();
+            assert!(
+                cents < 20.0,
+                "{cents_detune} cents detune must resolve within 20 cents, got {} Hz ({cents} cents)",
+                estimate.frequency
+            );
+        }
+    }
+
+    #[test]
+    fn selected_target_window_rejects_notes_far_outside_the_window() {
+        let sample_rate = 48_000.0;
+        let target = 82.41;
+        // 700 cents above the selected target: outside the −800/+600-cent
+        // tau window, so the lag search cannot see the period. This must be
+        // a clean rejection — no panic, no garbage frequency.
+        let played = target * 2.0_f32.powf(700.0 / 1_200.0);
+        let samples = selected_target_window_helper(played, sample_rate, 4096);
+        let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+
+        let estimate = detector.detect_guided(&samples, sample_rate, Some(target), &[target]);
+        // The first frame may surface a provisional subharmonic that the
+        // octave disambiguator is still confirming; it must never be near
+        // the target (no false lock), and once the correction settles the
+        // out-of-window note is rejected outright.
+        if let Some(estimate) = estimate {
+            let cents = 1_200.0 * (estimate.frequency / target).log2().abs();
+            assert!(
+                cents > 350.0,
+                "no estimate may lock onto the target region, got {} Hz ({cents} cents)",
+                estimate.frequency
+            );
+        }
+        let settled = (0..4)
+            .find_map(|_| detector.detect_guided(&samples, sample_rate, Some(target), &[target]));
+        assert!(
+            settled.is_none(),
+            "a note 700 cents from the selected target must settle to rejection, got {settled:?}"
+        );
+    }
+
+    #[test]
+    fn without_a_selected_target_the_full_range_is_searched() {
+        let sample_rate = 48_000.0;
+        // Same 129.9 Hz signal as the rejection test above: unguided
+        // detection keeps the old full-range behavior.
+        let played = 82.41 * 2.0_f32.powf(700.0 / 1_200.0);
+        let samples = selected_target_window_helper(played, sample_rate, 4096);
+        let mut detector = HybridPitchDetector::new(DetectorConfig::default());
+
+        let estimate = detector
+            .detect(&samples, sample_rate)
+            .expect("unguided detection keeps the full frequency range");
+        let cents = 1_200.0 * (estimate.frequency / played).log2().abs();
+        assert!(
+            cents < 15.0,
+            "unguided detection must resolve within 15 cents, got {} Hz ({cents} cents)",
+            estimate.frequency
+        );
+    }
 
     #[test]
     fn dc_removal_changes_the_fixed_gate_input() {
