@@ -1,3 +1,4 @@
+use crate::windows::{select_chromatic_lane, select_lane_for_frequency, AnalysisWindowSet};
 use crate::{
     confidence::{ConfidenceEstimator, ConfidenceObservation},
     gate::AdaptiveSignalGate,
@@ -30,6 +31,11 @@ pub struct EngineConfig {
     pub tuning: Option<Tuning>,
     pub spectrum_fft_size: usize,
     pub spectrum_bins: usize,
+    /// Analysis window lengths, one detector lane each (see
+    /// [`AnalysisWindowSet`]). The host frame size is unchanged; a lane
+    /// shorter than the frame analyzes the frame's tail. The default single
+    /// 8192-sample lane reproduces the historical behavior bit-for-bit.
+    pub analysis_windows: AnalysisWindowSet,
 }
 
 impl Default for EngineConfig {
@@ -42,12 +48,21 @@ impl Default for EngineConfig {
             tuning: None,
             spectrum_fft_size: DEFAULT_SPECTRUM_FFT_SIZE,
             spectrum_bins: DEFAULT_SPECTRUM_BINS,
+            analysis_windows: AnalysisWindowSet::default(),
         }
     }
 }
 
 pub struct TunerEngine {
-    detector: HybridPitchDetector,
+    /// One detector per analysis window, in the set's ascending order. Each
+    /// lane owns its band-pass state and HPS FFT plan, so switching lanes
+    /// never triggers a replan and per-lane filter tails never mix.
+    detectors: Vec<HybridPitchDetector>,
+    /// Lane windows, ascending; `detectors[i]` analyzes `lanes[i]` samples.
+    lanes: Vec<usize>,
+    /// Lane used for the most recent frame; the chromatic hysteresis starts
+    /// from here. Index into `lanes`/`detectors`.
+    active_lane: usize,
     confidence: ConfidenceEstimator,
     gate: AdaptiveSignalGate,
     resolver: FrameResolver,
@@ -79,6 +94,7 @@ impl TunerEngine {
             tuning,
             spectrum_fft_size,
             spectrum_bins,
+            analysis_windows,
         } = config;
         let configured_spectrum_bins = if spectrum_bins == 0 {
             DEFAULT_SPECTRUM_BINS
@@ -90,10 +106,25 @@ impl TunerEngine {
             strings: Vec::new(),
         });
         let pipeline = pipeline.normalized();
-        let mut pitch_detector = HybridPitchDetector::new(detector);
-        pitch_detector.set_pipeline_config(pipeline);
+        // Every lane is constructed here, up front: no allocation or FFT
+        // planning ever happens on the streaming hot path.
+        let detectors = analysis_windows
+            .windows()
+            .iter()
+            .map(|_| {
+                let mut lane = HybridPitchDetector::new(detector);
+                lane.set_pipeline_config(pipeline);
+                lane
+            })
+            .collect::<Vec<_>>();
+        let lanes = analysis_windows.windows().to_vec();
+        let longest_lane = lanes.len() - 1;
         Self {
-            detector: pitch_detector,
+            detectors,
+            lanes,
+            // Until the first lock the longest lane runs: it has the deepest
+            // low-frequency reach and no track exists to follow yet.
+            active_lane: longest_lane,
             confidence: ConfidenceEstimator::default(),
             gate: AdaptiveSignalGate::new(detector.rms_gate, detector.peak_gate),
             resolver: FrameResolver::new(a4, tuning, frame_context),
@@ -119,7 +150,10 @@ impl TunerEngine {
 
     fn reset_pipeline(&mut self) {
         self.clear_tracking();
-        self.detector.reset_tracking_state();
+        for detector in &mut self.detectors {
+            detector.reset_tracking_state();
+        }
+        self.active_lane = self.lanes.len() - 1;
         self.gate.reset();
     }
 
@@ -139,8 +173,9 @@ impl TunerEngine {
     }
 
     pub fn set_detection_range(&mut self, min_frequency: f32, max_frequency: f32) {
-        self.detector
-            .set_frequency_range(min_frequency, max_frequency);
+        for detector in &mut self.detectors {
+            detector.set_frequency_range(min_frequency, max_frequency);
+        }
         self.reset_pipeline();
     }
 
@@ -150,7 +185,9 @@ impl TunerEngine {
             return;
         }
         self.pipeline = pipeline;
-        self.detector.set_pipeline_config(pipeline);
+        for detector in &mut self.detectors {
+            detector.set_pipeline_config(pipeline);
+        }
         self.reset_pipeline();
     }
 
@@ -172,13 +209,64 @@ impl TunerEngine {
         let signal_stats = signal::compute_centered_signal_stats(buffer);
         let level = signal::normalize_level(rms);
         let prior = self.resolver.tracking_prior();
-        let mut estimate = self.detector.detect_guided(
-            buffer,
+        // Lane selection happens once per frame, before detection. With a
+        // single configured lane this collapses to lane 0 on the full
+        // buffer — the historical path, bit-for-bit.
+        if self.lanes.len() > 1 {
+            self.active_lane = if let Some(selected) = prior.selected_frequency() {
+                // Guided: the target string is known, so the smallest lane
+                // that fits ten of its periods is always the right one.
+                select_lane_for_frequency(&self.lanes, selected, sample_rate)
+            } else if let Some(tracked) = self.tracker.current() {
+                // Chromatic: follow the settled track with a hysteresis
+                // band so boundary notes cannot flap the lane.
+                select_chromatic_lane(
+                    &self.lanes,
+                    self.active_lane,
+                    tracked.frequency,
+                    sample_rate,
+                )
+            } else {
+                // No lock yet: the longest lane has the deepest reach.
+                self.lanes.len() - 1
+            };
+        }
+        let lane = self.active_lane;
+        let longest_lane = self.lanes.len() - 1;
+        let window = self.lanes[lane].min(buffer.len());
+        let analysis = &buffer[buffer.len() - window..];
+        let mut estimate = self.detectors[lane].detect_guided(
+            analysis,
             sample_rate,
             prior.selected_frequency(),
             prior.target_frequencies(),
         );
-        let mut pipeline_telemetry = self.detector.telemetry();
+        // Short-lane miss fallback. A decaying note drops below the short
+        // lane's fixed gate while the full frame still holds enough energy
+        // (found on the corpus: ukulele sustain lost ~130 ms of published
+        // track, gutting coverage). When the chosen short lane produced no
+        // estimate, retry once on the longest lane with the full frame.
+        // The retry costs a second detection pass only on frames the short
+        // lane already lost, and the active lane is unchanged, so the next
+        // frame still prefers the fast lane. Single-lane configs never
+        // enter this branch.
+        let mut used_lane = lane;
+        if estimate.is_none() && lane != longest_lane {
+            let window = self.lanes[longest_lane].min(buffer.len());
+            let analysis = &buffer[buffer.len() - window..];
+            let retry = self.detectors[longest_lane].detect_guided(
+                analysis,
+                sample_rate,
+                prior.selected_frequency(),
+                prior.target_frequencies(),
+            );
+            if retry.is_some() {
+                estimate = retry;
+                used_lane = longest_lane;
+            }
+        }
+        let detector = &mut self.detectors[used_lane];
+        let mut pipeline_telemetry = detector.telemetry();
         let interference_candidate = [pipeline_telemetry.yin, pipeline_telemetry.secondary]
             .into_iter()
             .flatten()
@@ -197,8 +285,8 @@ impl TunerEngine {
         // Diagnostic: what the detector itself said this frame, before any
         // suppression, gating, or tracking touches it.
         let raw_freq = estimate.map(|estimate| estimate.frequency);
-        let octave_correction_pending = self.detector.has_unconfirmed_octave_correction();
-        let octave_correction_started = self.detector.take_octave_correction_started();
+        let octave_correction_pending = detector.has_unconfirmed_octave_correction();
+        let octave_correction_started = detector.take_octave_correction_started();
         let gate_estimate = estimate;
         if octave_correction_pending {
             // Confirmation deliberately costs one frame. Publishing the
@@ -227,7 +315,9 @@ impl TunerEngine {
         let (freq_opt, detector_confidence) = if !gate_open {
             pipeline_telemetry.decision = PipelineDecision::AdaptiveGateRejected;
             self.clear_tracking();
-            self.detector.reset_tracking_state();
+            for lane in &mut self.detectors {
+                lane.reset_tracking_state();
+            }
             (None, 0.0)
         } else if let Some(estimate) = estimate {
             if octave_correction_started {
@@ -265,7 +355,9 @@ impl TunerEngine {
             (Some(frequency), held_confidence)
         } else {
             self.clear_tracking();
-            self.detector.reset_tracking_state();
+            for lane in &mut self.detectors {
+                lane.reset_tracking_state();
+            }
             (None, 0.0)
         };
 

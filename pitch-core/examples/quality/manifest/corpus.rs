@@ -153,6 +153,10 @@ pub struct CorpusScenarioDefaults {
     pub min_frequency: Option<f32>,
     pub max_frequency: Option<f32>,
     pub guidance: Option<GuidanceMode>,
+    /// Optional multi-window lane set applied to every capture in the
+    /// corpus (e.g. [2048, 8192] for dual-window mode). Absent keeps the
+    /// historical single-window evaluation byte-identical.
+    pub analysis_windows: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -315,6 +319,7 @@ impl CorpusScenarioDefaults {
             min_frequency: self.min_frequency,
             max_frequency: self.max_frequency,
             guidance: scenario.guidance.or(self.guidance),
+            analysis_windows: self.analysis_windows.clone(),
             thresholds: scenario.thresholds,
             segments: vec![scenario.segment.clone()],
         }

@@ -108,7 +108,6 @@ fn parabolic_magnitude_offset(left: f32, center: f32, right: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rustfft::Fft;
 
     /// Complex FFT bins around the spectral peak of a Hann-windowed tone at
     /// `frequency`, returned as `(true_offset, [left, center, right])` where

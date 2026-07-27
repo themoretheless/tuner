@@ -18,6 +18,7 @@ mod spectrum;
 mod tracking;
 #[cfg(feature = "wasm")]
 mod wasm;
+mod windows;
 pub use biquad::{BandPassFilter, Biquad, BiquadCoefficients};
 pub use domain::*;
 pub use dsp::*;
@@ -32,3 +33,4 @@ pub use smoother::*;
 pub use spectrum::*;
 #[cfg(feature = "wasm")]
 pub use wasm::*;
+pub use windows::{AnalysisWindowSet, DEFAULT_WINDOW_SAMPLES, MIN_LANE_WINDOW_SAMPLES};

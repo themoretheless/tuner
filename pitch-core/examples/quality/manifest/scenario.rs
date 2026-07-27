@@ -30,6 +30,10 @@ pub struct ScenarioDefinition {
     pub min_frequency: Option<f32>,
     pub max_frequency: Option<f32>,
     pub guidance: Option<GuidanceMode>,
+    /// Optional multi-window lane set (e.g. [2048, 8192]). When present the
+    /// engine keeps one detector lane per window and shorter lanes analyze
+    /// the frame tail; absent means the historical single full window.
+    pub analysis_windows: Option<Vec<usize>>,
     pub thresholds: Option<ThresholdManifest>,
     pub segments: Vec<ScenarioSegment>,
 }
@@ -78,6 +82,18 @@ impl ScenarioDefinition {
             return Err(invalid_input(
                 "hopSeconds must resolve inside one analysis window",
             ));
+        }
+        if let Some(windows) = &self.analysis_windows {
+            if windows.is_empty()
+                || windows.iter().any(|window| {
+                    *window < pitch_core::MIN_LANE_WINDOW_SAMPLES || *window > window_samples
+                })
+            {
+                return Err(invalid_input(format!(
+                    "analysisWindows entries must be at least {} and fit inside windowSamples",
+                    pitch_core::MIN_LANE_WINDOW_SAMPLES
+                )));
+            }
         }
 
         self.validate_segments(sample_count)?;

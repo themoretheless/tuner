@@ -131,6 +131,8 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 **Status 2026-07-26 (DSP round 09):** M7 complete. Calibrated confidence-weighted YIN/MPM fusion (`dsp/candidates.rs`: both confidences mapped to predicted absolute cents error, 1/sigma weights clamped to [0.5, 2.0], sigma-margin disagreement arbitration; probe-measured YIN error ~2-2.5x MPM at equal raw confidence) — benchmark `benchmark-09-fusion-*`: mean MAE 2.488 -> 2.432 cents, p95 improved across clean/SNR/reverb grids, no regression above 0.14 cents. Criterion hot-path benchmarks (`benches/hotpath.rs`): full frame E2 17.1 ms / E4 15.9 ms of the 33 ms budget, HPS guard 0.4 ms active, near-zero when skipped. Restart/long-run soak tests (`tests/soak.rs`, 2100-frame deterministic session + 20 restart cycles) caught and fixed a real bug: `reset_tracking_state` did not reset BandPassFilter state. Differential baseline gate: `fixtures/quality-baseline.json` (133 conditions) + `scripts/compare-quality-baseline.mjs` (budgets: MAE/p95 max(+5%, +0.10 cents), octaveErrorRatio +0.005 abs) wired into CI after the quality gate.
 
+**Status 2026-07-27 (rounds 10-12):** M6 closed with supervised native input recovery (stall watchdog + typed backend-* codes, session survives device unplug). Round 11 quick wins: browser-language auto-detect, comma A4 input, PWA update banner + maskable icons, in-tune confirmation (flash/beep/vibrate), readout stability slider; accuracy core: per-string tau bounds (guided frame E4 1.87 ms, -85%), one-euro filter in PitchTracker (held-note jitter -21%, sum dMAE -20.6 cents), Jacobsen sub-bin interpolation in the HPS guard. Round 12 dual-window (M12): `AnalysisWindowSet` lane architecture (per-lane detector/biquad/HPS plan, shared tracker/gate, tail-slice of the host frame, chromatic lane hysteresis ~345/326 Hz, longest-lane fallback on short-lane miss); corpus runner emits observations at lane-window timestamps with monotonic clamping; dual mode [2048, 8192] is the CI gate. Benchmark `benchmark-14-dualwindow-*`: guided E4 445 us (4.2x), uke-g4 TTFC 152.7 -> 53.7 ms, voice-f4 MAE 21.5 -> 4.6 cents clean, coverage 1.0 everywhere, diff-gate PASS.
+
 ## M8 - Platform / PWA / a11y / release polish
 **Goal:** ship-quality cross-platform surface. Phases 5-7 (P2/P3).
 **Targets:** `R36-R44`, `R175-R183`; grounded audit `C19-C20`, `C39-C42`, `C95`, `C168-C172`, `C178-C180`; master `M5`, `M8`, `M14`, `M16`, `M23`, `M31`, `M33`, `M37`, `M45`.
@@ -148,9 +150,9 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update (no compatible fix as of 2026-07-26).
-- **Next:** nothing open in M0-M8 baselines; pick from the TOP-500 backlog by value.
-- **Later:** egui diagnostics presentation localization. Fusion clamp [0.5, 2.0] revisited in round 10: probe (1933 frame pairs, all strata) shows no measurable gain beyond the clamp; decision documented in `dsp/candidates.rs`.
+- **Now:** web sync for dual-window lanes (propagate `EngineConfig.analysis_windows`, optional faster hop on the short lane); newcomer batch B (M34 mic wizard, M56 onboarding, M38 guided tuning, M77 simple mode).
+- **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update.
+- **Later:** egui diagnostics presentation localization; extend the window set (16384 for bass, adaptive per-target windows) now that lanes are a set, not a pair.
 
 ## Working conventions
 - One concept = one module/file; new modules target < ~200 LOC.
