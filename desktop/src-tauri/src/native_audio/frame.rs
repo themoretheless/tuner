@@ -2,8 +2,8 @@ use super::config::{NativeAudioConfig, NativeAudioNote};
 use super::signal_health::signal_health_codes;
 use audio_input::{RecoveryEvent, BACKEND_RECOVERY_FAILED};
 use pitch_core::{
-    DetectorConfig, EngineConfig, PipelineCandidate, PipelineConfidenceTelemetry,
-    PipelineSpectralTelemetry, PipelineTelemetry, TunerEngine, Tuning,
+    AnalysisWindowSet, DetectorConfig, EngineConfig, PipelineCandidate,
+    PipelineConfidenceTelemetry, PipelineSpectralTelemetry, PipelineTelemetry, TunerEngine, Tuning,
 };
 use serde::Serialize;
 use std::time::Instant;
@@ -251,6 +251,9 @@ impl NativeFrameProcessor {
         Self {
             engine: TunerEngine::with_config(EngineConfig {
                 a4: config.context.a4,
+                // Canonical dual-lane layout (fast 2048 + full-frame 8192),
+                // same as every other shipped host.
+                analysis_windows: AnalysisWindowSet::standard(),
                 detector,
                 frame_context: Some(config.context.to_core()),
                 pipeline: config.pipeline.to_core(),

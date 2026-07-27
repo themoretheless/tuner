@@ -52,6 +52,20 @@ pub const MIN_LANE_WINDOW_SAMPLES: usize = 512;
 /// the historical fixed engine window.
 pub const DEFAULT_WINDOW_SAMPLES: usize = 8192;
 
+/// Canonical lane set every shipped host runs: a fast 2048-sample lane plus
+/// the full-frame 8192-sample lane. This is the single source of truth —
+/// hosts pass it explicitly via [`AnalysisWindowSet`], the WASM module
+/// exposes it through `standardAnalysisWindows()`, and the TypeScript
+/// fallback mirrors it via `web/src/generated/analysisWindows.ts` (kept in
+/// lockstep by `scripts/generate-analysis-windows.mjs --check`). The engine
+/// *default* deliberately stays the single 8192 lane so the Rust/TS parity
+/// fixtures keep their historical bit-for-bit baseline.
+///
+/// Note: the host hop (~33 ms detection cadence) is intentionally unchanged
+/// on the short lane. Shortening the hop for the 2048 lane is a separate
+/// later task; do not couple it to this constant.
+pub const STANDARD_ANALYSIS_WINDOWS: [usize; 2] = [2_048, 8_192];
+
 /// Ordered (ascending), deduplicated set of analysis window lengths. One
 /// detector lane is constructed per entry.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,6 +82,12 @@ impl Default for AnalysisWindowSet {
 }
 
 impl AnalysisWindowSet {
+    /// The canonical lane set every shipped host runs
+    /// ([`STANDARD_ANALYSIS_WINDOWS`]): fast 2048 + full-frame 8192.
+    pub fn standard() -> Self {
+        Self::new(STANDARD_ANALYSIS_WINDOWS)
+    }
+
     /// Normalizes `windows`: drops entries below [`MIN_LANE_WINDOW_SAMPLES`],
     /// sorts ascending, dedups. Falls back to the default single lane when
     /// nothing valid remains, so construction never fails and the hot path
@@ -176,6 +196,14 @@ mod tests {
         let set = AnalysisWindowSet::default();
         assert_eq!(set.windows(), &[8_192]);
         assert!(set.is_single());
+    }
+
+    #[test]
+    fn standard_is_the_canonical_dual_lane_set() {
+        assert_eq!(STANDARD_ANALYSIS_WINDOWS, [2_048, 8_192]);
+        let set = AnalysisWindowSet::standard();
+        assert_eq!(set.windows(), &[2_048, 8_192]);
+        assert!(!set.is_single());
     }
 
     #[test]

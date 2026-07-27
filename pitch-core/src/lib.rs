@@ -33,4 +33,6 @@ pub use smoother::*;
 pub use spectrum::*;
 #[cfg(feature = "wasm")]
 pub use wasm::*;
-pub use windows::{AnalysisWindowSet, DEFAULT_WINDOW_SAMPLES, MIN_LANE_WINDOW_SAMPLES};
+pub use windows::{
+    AnalysisWindowSet, DEFAULT_WINDOW_SAMPLES, MIN_LANE_WINDOW_SAMPLES, STANDARD_ANALYSIS_WINDOWS,
+};

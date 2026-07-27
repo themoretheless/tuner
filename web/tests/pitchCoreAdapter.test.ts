@@ -38,12 +38,14 @@ describe('PitchCoreAdapter', () => {
     const setFrameContext = vi.fn();
     const setFrequencyRange = vi.fn();
     const setPipelineConfig = vi.fn();
+    const setAnalysisWindows = vi.fn();
 
     class FakeProcessor {
       clear_frame_context() {}
       free = processorFree;
       process = process;
       reset = resetProcessor;
+      set_analysis_windows = setAnalysisWindows;
       set_frame_context = setFrameContext;
       set_frequency_range = setFrequencyRange;
       set_pipeline_config = setPipelineConfig;
@@ -105,6 +107,10 @@ describe('PitchCoreAdapter', () => {
 
     expect(loadModule).toHaveBeenCalledOnce();
     expect(init).toHaveBeenCalledOnce();
+    // The adapter re-asserts the canonical dual-lane set (from the generated
+    // mirror of pitch-core STANDARD_ANALYSIS_WINDOWS) on every new processor.
+    expect(setAnalysisWindows).toHaveBeenCalledOnce();
+    expect(setAnalysisWindows).toHaveBeenCalledWith(new Uint32Array([2_048, 8_192]));
     expect(setFrequencyRange).toHaveBeenCalledOnce();
     expect(setFrequencyRange).toHaveBeenCalledWith(60, 1_200);
     expect(setFrameContext).toHaveBeenCalledOnce();
@@ -241,6 +247,7 @@ describe('PitchCoreAdapter', () => {
       free = processorFree;
       process = process;
       reset() {}
+      set_analysis_windows() {}
       set_frame_context() {}
       set_frequency_range() {}
       set_pipeline_config() {}

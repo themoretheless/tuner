@@ -178,6 +178,15 @@ export class StreamingPitchTracker {
     return this.current();
   }
 
+  /**
+   * Settled track frequency from the previous frames (pre-update), or null
+   * before the first lock. Mirrors the Rust `PitchTracker::current`; the
+   * chromatic lane selector follows this value.
+   */
+  currentFrequency(): number | null {
+    return this.stableLog == null ? null : 2 ** this.stableLog;
+  }
+
   telemetry() {
     return {
       adaptiveGateOpen: this.lastAdaptiveGateOpen,

@@ -3,7 +3,10 @@ use crate::diagnostics::diagnostic_hint;
 use crate::state::{SharedTunerState, TunerViewState};
 use crate::visualization::VisualizationHistory;
 use eframe::egui;
-use pitch_core::{format_freq, get_note_display, get_tunings, EngineConfig, TunerEngine, Tuning};
+use pitch_core::{
+    format_freq, get_note_display, get_tunings, AnalysisWindowSet, EngineConfig, TunerEngine,
+    Tuning,
+};
 use std::sync::{Arc, Mutex};
 
 pub(crate) struct App {
@@ -25,6 +28,9 @@ impl Default for App {
             a4: 440.0,
             audio: AudioManager::default(),
             engine: Arc::new(Mutex::new(TunerEngine::with_config(EngineConfig {
+                // Canonical dual-lane layout (fast 2048 + full-frame 8192),
+                // same as every other shipped host.
+                analysis_windows: AnalysisWindowSet::standard(),
                 spectrum_bins: 0,
                 tuning: tunings.first().cloned(),
                 ..EngineConfig::default()

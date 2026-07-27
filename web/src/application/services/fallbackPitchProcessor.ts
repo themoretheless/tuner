@@ -9,6 +9,7 @@ import {
   createDefaultPipelineConfig,
   normalizePipelineConfig,
   pipelineConfigFingerprint,
+  pipelineConfigsEqual,
   type PipelineConfig,
 } from '../../domain/pipelineConfig';
 import type { DetectionFrame, FrameContext } from '../../types/frames';
@@ -16,11 +17,11 @@ import {
   normalizeLevel,
   type PitchAnalysis,
   type PitchDetectionRange,
-  type PitchGuidance,
   type SignalStats,
 } from '../../utils/pitch';
 import { PipelineSpectralAnalyzer } from '../../utils/pipelineSpectralAnalyzer';
 import { StreamingPitchTracker } from '../../utils/pitchTracking';
+import { FallbackLanePlanner } from './fallbackLanePlanner';
 
 interface FallbackFrameInput {
   analysis: PitchAnalysis | null;
@@ -29,22 +30,28 @@ interface FallbackFrameInput {
   sampleRate: number;
   startedAt?: number;
   stats: SignalStats;
+  windowSamples?: number; // lane window actually analyzed (tail slice)
 }
 
 export class FallbackPitchProcessor {
   private readonly confidence = new ConfidenceEvidenceEstimator();
-  private guidance: PitchGuidance | undefined;
+  private readonly lanePlanner = new FallbackLanePlanner();
   private lastRange: PitchDetectionRange | null = null;
   private pipelineConfig = createDefaultPipelineConfig();
   private readonly spectralAnalyzer = new PipelineSpectralAnalyzer();
   private readonly tracker = new StreamingPitchTracker();
 
   get pitchGuidance() {
-    return this.guidance;
+    return this.lanePlanner.pitchGuidance;
+  }
+
+  /** Lane for the next frame; call before the tracker consumes the frame. */
+  selectAnalysisLane(sampleRate: number, frameSamples: number) {
+    return this.lanePlanner.select(sampleRate, frameSamples, this.tracker.currentFrequency());
   }
 
   setContext(context?: FrameContext) {
-    this.guidance = context ? guidanceFromContext(context) : undefined;
+    this.lanePlanner.setContext(context);
     this.tracker.setContext(context ?? createDefaultFrameContext());
     this.confidence.reset();
   }
@@ -55,18 +62,23 @@ export class FallbackPitchProcessor {
     if (!changed) return false;
     this.lastRange = { ...range };
     this.tracker.setDetectionRange(range);
+    this.lanePlanner.reset();
     this.confidence.reset();
     return true;
   }
 
   setPipelineConfig(config: PipelineConfig) {
-    this.pipelineConfig = normalizePipelineConfig(config);
+    const normalized = normalizePipelineConfig(config);
+    if (pipelineConfigsEqual(this.pipelineConfig, normalized)) return;
+    this.pipelineConfig = normalized;
     this.tracker.setPipelineConfig(this.pipelineConfig);
+    this.lanePlanner.reset();
     this.confidence.reset();
   }
 
   reset() {
     this.tracker.reset();
+    this.lanePlanner.reset();
     this.confidence.reset();
   }
 
@@ -77,13 +89,12 @@ export class FallbackPitchProcessor {
     sampleRate,
     startedAt = nowMs(),
     stats,
+    windowSamples,
   }: FallbackFrameInput): DetectionFrame {
     const tracked = this.tracker.update(analysis?.estimate ?? null, stats);
     const trackerTelemetry = this.tracker.telemetry();
     const fixedGateOpen = analysis?.fixedGateOpen ?? false;
-    const decision = !fixedGateOpen && !tracked
-      ? 'fixed-gate-rejected'
-      : trackerTelemetry.decision;
+    const decision = !fixedGateOpen && !tracked ? 'fixed-gate-rejected' : trackerTelemetry.decision;
     const confidence = this.confidence.observe({
       decision,
       noiseFloor: trackerTelemetry.noiseFloor,
@@ -109,23 +120,18 @@ export class FallbackPitchProcessor {
         held: decision === 'held',
         interference: detectCompetingTarget(
           strongestCandidateFrequency(analysis?.yin, analysis?.secondary),
-          this.guidance?.selectedFrequency,
-          this.guidance?.targetFrequencies ?? [],
+          this.pitchGuidance?.selectedFrequency,
+          this.pitchGuidance?.targetFrequencies ?? [],
         ),
         noiseFloor: trackerTelemetry.noiseFloor,
         sampleRate,
         secondary: analysis?.secondary ?? null,
         selected: trackerTelemetry.selected,
         spectral: this.pipelineConfig.octaveEnabled && buffer
-          ? this.spectralAnalyzer.analyze(
-            buffer,
-            sampleRate,
-            analysis?.estimate?.frequency,
-            range,
-          )
+          ? this.spectralAnalyzer.analyze(buffer, sampleRate, analysis?.estimate?.frequency, range)
           : null,
         tracked: this.pipelineConfig.trackingEnabled && decision === 'published',
-        windowSamples: buffer?.length ?? 0,
+        windowSamples: windowSamples ?? buffer?.length ?? 0,
         yin: analysis?.yin ?? null,
       },
       rms: stats.rms,
@@ -133,13 +139,6 @@ export class FallbackPitchProcessor {
     frame.pipeline.processingMs = Math.max(0, nowMs() - startedAt);
     return frame;
   }
-}
-
-function guidanceFromContext(context: FrameContext): PitchGuidance {
-  return {
-    selectedFrequency: context.selectedTarget?.frequency,
-    targetFrequencies: context.tuningTargets.map((target) => target.frequency),
-  };
 }
 
 function nowMs() {

@@ -43,6 +43,21 @@ pub struct CoreGateThresholds {
     pub adaptive_noise_floor_cap_factor: f32,
 }
 
+/// Canonical analysis window lanes (ascending sample counts) every shipped
+/// host runs. Single source of truth:
+/// [`crate::STANDARD_ANALYSIS_WINDOWS`]; the TypeScript fallback mirrors the
+/// same value through `web/src/generated/analysisWindows.ts` (kept in
+/// lockstep by `scripts/generate-analysis-windows.mjs --check`), and hosts
+/// with the WASM module loaded can read it here at runtime instead of
+/// hard-coding their own lane list.
+#[wasm_bindgen(js_name = standardAnalysisWindows)]
+pub fn standard_analysis_windows() -> Vec<u32> {
+    crate::STANDARD_ANALYSIS_WINDOWS
+        .iter()
+        .map(|&window| window as u32)
+        .collect()
+}
+
 #[wasm_bindgen(js_name = coreGateThresholds)]
 pub fn core_gate_thresholds() -> CoreGateThresholds {
     let config = DetectorConfig::default();
@@ -216,5 +231,10 @@ mod tests {
         assert_eq!(thresholds.peak_gate, config.peak_gate);
         assert_eq!(thresholds.min_usable_confidence, config.min_confidence);
         assert_eq!(thresholds.yin_threshold, config.yin_threshold);
+    }
+
+    #[test]
+    fn exported_standard_windows_match_the_canonical_set() {
+        assert_eq!(standard_analysis_windows(), vec![2_048, 8_192]);
     }
 }

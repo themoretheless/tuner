@@ -150,7 +150,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 
 ## Now / Next / Later
 
-- **Now:** web sync for dual-window lanes (propagate `EngineConfig.analysis_windows`, optional faster hop on the short lane); newcomer batch B (M34 mic wizard, M56 onboarding, M38 guided tuning, M77 simple mode).
+- **Now:** newcomer batch B (M34 mic wizard, M56 onboarding, M38 guided tuning, M77 simple mode); optional faster hop on the short lane (cadence still 33 ms everywhere).
 - **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update.
 - **Later:** egui diagnostics presentation localization; extend the window set (16384 for bass, adaptive per-target windows) now that lanes are a set, not a pair.
 

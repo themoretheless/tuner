@@ -7,7 +7,7 @@ mod visualization;
 use app::App;
 
 #[cfg(target_arch = "wasm32")]
-use pitch_core::{TunerEngine, TunerUpdate};
+use pitch_core::{AnalysisWindowSet, EngineConfig, TunerEngine, TunerUpdate};
 #[cfg(target_arch = "wasm32")]
 use state::{SharedTunerState, TunerViewState};
 #[cfg(target_arch = "wasm32")]
@@ -65,7 +65,18 @@ fn main() -> eframe::Result<()> {
 pub fn start() {
     console_error_panic_hook::set_once();
     let engine = WEB_ENGINE
-        .get_or_init(|| Arc::new(Mutex::new(TunerEngine::new(440.0))))
+        .get_or_init(|| {
+            Arc::new(Mutex::new(TunerEngine::with_config(EngineConfig {
+                a4: 440.0,
+                // Canonical dual-lane layout, same as every other shipped
+                // host. This feed delivers 2048-sample frames, so both lanes
+                // analyze the same tail here; the configuration still matches
+                // the canonical set for cross-host parity.
+                analysis_windows: AnalysisWindowSet::standard(),
+                tuning: pitch_core::get_tunings().into_iter().next(),
+                ..EngineConfig::default()
+            })))
+        })
         .clone();
     let state = WEB_STATE
         .get_or_init(|| Arc::new(Mutex::new(TunerViewState::default())))

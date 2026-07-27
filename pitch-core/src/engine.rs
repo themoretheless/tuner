@@ -64,6 +64,9 @@ pub struct TunerEngine {
     /// from here. Index into `lanes`/`detectors`.
     active_lane: usize,
     confidence: ConfidenceEstimator,
+    /// Detector prototype each lane is built from; kept so lanes can be
+    /// rebuilt when the analysis window set changes at runtime.
+    detector: DetectorConfig,
     gate: AdaptiveSignalGate,
     resolver: FrameResolver,
     spectrum: Option<SpectrumAnalyzer>,
@@ -126,6 +129,7 @@ impl TunerEngine {
             // low-frequency reach and no track exists to follow yet.
             active_lane: longest_lane,
             confidence: ConfidenceEstimator::default(),
+            detector,
             gate: AdaptiveSignalGate::new(detector.rms_gate, detector.peak_gate),
             resolver: FrameResolver::new(a4, tuning, frame_context),
             spectrum: (spectrum_bins > 0)
@@ -173,9 +177,32 @@ impl TunerEngine {
     }
 
     pub fn set_detection_range(&mut self, min_frequency: f32, max_frequency: f32) {
+        self.detector
+            .set_frequency_range(min_frequency, max_frequency);
         for detector in &mut self.detectors {
             detector.set_frequency_range(min_frequency, max_frequency);
         }
+        self.reset_pipeline();
+    }
+
+    /// Replaces the analysis window set, rebuilding one detector lane per
+    /// window from the stored detector prototype. Hosts that adopt the
+    /// canonical dual-lane layout at runtime call this with
+    /// [`AnalysisWindowSet::standard`]; a no-op when the set is unchanged.
+    pub fn set_analysis_windows(&mut self, windows: AnalysisWindowSet) {
+        if windows.windows() == self.lanes.as_slice() {
+            return;
+        }
+        self.lanes = windows.windows().to_vec();
+        self.detectors = self
+            .lanes
+            .iter()
+            .map(|_| {
+                let mut lane = HybridPitchDetector::new(self.detector);
+                lane.set_pipeline_config(self.pipeline);
+                lane
+            })
+            .collect();
         self.reset_pipeline();
     }
 

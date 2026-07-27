@@ -92,6 +92,7 @@ export interface StatefulWasmTunerProcessor {
     inTuneEnterCents: number,
     inTuneExitCents: number,
   ): void;
+  set_analysis_windows(windows: Uint32Array): void;
   set_frequency_range(minFrequency: number, maxFrequency: number): void;
   set_pipeline_config(
     adaptiveGateEnabled: boolean,

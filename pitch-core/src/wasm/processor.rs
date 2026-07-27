@@ -1,13 +1,19 @@
 use super::WasmDetectionFrame;
 use crate::{
-    note_name_from_midi, octave_from_midi, EngineConfig, FrameContext, Note, PipelineConfig,
-    TunerEngine,
+    note_name_from_midi, octave_from_midi, AnalysisWindowSet, EngineConfig, FrameContext, Note,
+    PipelineConfig, TunerEngine,
 };
 use wasm_bindgen::prelude::*;
 
 /// High-level browser processor. It owns the same detector, smoother and frame
 /// resolver as native consumers, so JavaScript receives an already-resolved
 /// frame instead of rebuilding tuner policy around raw pitch estimates.
+///
+/// Lane layout: the processor starts on the canonical
+/// [`crate::STANDARD_ANALYSIS_WINDOWS`] dual-lane set. The web adapter
+/// re-asserts the same set from its generated mirror
+/// (`web/src/generated/analysisWindows.ts`) via `set_analysis_windows`, so
+/// the WASM and TypeScript fallback paths always run identical lanes.
 #[wasm_bindgen(js_name = TunerProcessor)]
 pub struct WasmTunerProcessor {
     inner: TunerEngine,
@@ -19,10 +25,20 @@ impl WasmTunerProcessor {
     pub fn new() -> Self {
         Self {
             inner: TunerEngine::with_config(EngineConfig {
+                analysis_windows: AnalysisWindowSet::standard(),
                 spectrum_bins: 0,
                 ..EngineConfig::default()
             }),
         }
+    }
+
+    /// Replaces the analysis window lanes (ascending sample counts). The web
+    /// adapter passes the generated mirror of
+    /// [`crate::STANDARD_ANALYSIS_WINDOWS`] here right after construction.
+    pub fn set_analysis_windows(&mut self, windows: &[u32]) {
+        self.inner.set_analysis_windows(AnalysisWindowSet::new(
+            windows.iter().map(|&window| window as usize),
+        ));
     }
 
     pub fn set_frequency_range(&mut self, min_frequency: f32, max_frequency: f32) {
@@ -170,6 +186,22 @@ mod tests {
         assert_eq!(silent.note(), "—");
         assert_eq!(silent.target_midi(), 69);
         assert!(!silent.in_tune());
+    }
+
+    #[test]
+    fn tuner_processor_accepts_runtime_lane_updates() {
+        // The web adapter re-asserts the canonical lane set right after
+        // construction; switching lanes at runtime must rebuild detectors in
+        // place and keep processing without panics.
+        let mut processor = WasmTunerProcessor::new();
+        let sample_rate = 48_000.0;
+        let samples = vec![0.0_f32; 8_192];
+        processor.process(&samples, sample_rate);
+        processor.set_analysis_windows(&[8_192]);
+        processor.process(&samples, sample_rate);
+        processor.set_analysis_windows(&[2_048, 8_192]);
+        processor.process(&samples, sample_rate);
+        assert!(processor.inner.history_sample_count() <= 12);
     }
 
     #[test]
