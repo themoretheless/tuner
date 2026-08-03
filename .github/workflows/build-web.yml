@@ -97,14 +97,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: themoretheless/.github/.github/actions/setup-rust@eb557370f9aae2547ddbbdce8bf2a8798e68dad2 # v1
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ". -> target"
 
       - name: Install pinned wasm-pack
         uses: taiki-e/install-action@v2
