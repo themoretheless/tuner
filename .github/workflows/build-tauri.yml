@@ -48,14 +48,11 @@ jobs:
             desktop/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: themoretheless/.github/.github/actions/setup-rust@eb557370f9aae2547ddbbdce8bf2a8798e68dad2 # v1
         with:
           targets: ${{ matrix.target }}
+          cargo-workspaces: desktop/src-tauri -> target
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "desktop/src-tauri"
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
