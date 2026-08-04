@@ -108,6 +108,18 @@ describe('SpectrogramMetrics', () => {
     expect(metrics.snapshot.lifecycle).toBe('disposed');
   });
 
+  it('uses the last finite duration bound for overflow percentiles', () => {
+    const metrics = new SpectrogramMetrics(true);
+    metrics.endDraw(performance.now() - 40);
+
+    metrics.refreshSummary();
+
+    expect(metrics.snapshot.cpuDispatchP95Ms).toBe(33);
+    expect(metrics.snapshot.cpuDispatchP99Ms).toBe(33);
+    expect(Number.isFinite(metrics.snapshot.cpuDispatchP95Ms)).toBe(true);
+    expect(Number.isFinite(metrics.snapshot.cpuDispatchP99Ms)).toBe(true);
+  });
+
   it('does not carry sequence gaps or dispatch intervals across an ended run', () => {
     const metrics = new SpectrogramMetrics(true);
     let startedAt = metrics.beginDraw(true, 1);

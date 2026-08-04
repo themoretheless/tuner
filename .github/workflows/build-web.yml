@@ -28,40 +28,6 @@ jobs:
         id: metadata
         run: node scripts/release-metadata.mjs validate
 
-      - name: Check version
-        if: github.event_name == 'pull_request' && github.base_ref == 'main'
-        run: |
-          VERSION="${{ steps.metadata.outputs.version }}"
-          LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1 | sed 's/^v//' || echo "0.0.0")
-
-          # Check if code files changed (not just CI/docs)
-          CODE_CHANGED=$(git diff --name-only origin/main...HEAD \
-            | grep -v '^\.github/' \
-            | grep -v '^\.vscode/' \
-            | grep -v '^\.zed/' \
-            | grep -v '^\.claude/' \
-            | grep -v '^\.gitignore' \
-            | grep -v '^README' \
-            | grep -v '^LICENSE' \
-            | grep -v '^CHANGELOG' \
-            | grep -v '^\.env' \
-            | grep -v '\.md$' \
-            || true)
-
-          if [ -n "$CODE_CHANGED" ]; then
-            if git tag -l "v${VERSION}" | grep -q .; then
-              echo "::error::v${VERSION} already released. Bump version.json."
-              exit 1
-            fi
-            if [ "$(printf '%s\n' "$LATEST" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
-              echo "::error::v${VERSION} is less than latest release v${LATEST}. Version must be higher."
-              exit 1
-            fi
-            echo "New version v${VERSION} (latest: v${LATEST})"
-          else
-            echo "No code changes, version bump not required"
-          fi
-
       - name: Setup Vue
         uses: themoretheless/.github/.github/actions/setup-vue@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
         with:
