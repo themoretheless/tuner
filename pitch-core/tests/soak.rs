@@ -238,7 +238,13 @@ fn sign_frame(frame: &DetectionFrame) -> FrameSignature {
 fn run_segments(engine: &mut TunerEngine, segments: &[Segment]) -> Vec<FrameSignature> {
     let mut signatures = Vec::new();
     for segment in segments {
-        for (offset, chunk) in segment.samples.chunks_exact(SOAK_FRAME_SIZE).enumerate() {
+        for (offset, chunk) in segment
+            .samples
+            .as_chunks::<SOAK_FRAME_SIZE>()
+            .0
+            .iter()
+            .enumerate()
+        {
             let context = format!("segment {} frame {}", segment.name, offset);
             let frame = engine.process(chunk, SOAK_SAMPLE_RATE);
             assert_frame_sane(&frame, &context);
@@ -300,8 +306,10 @@ fn build_restart_scenario() -> Vec<Vec<f32>> {
     let tone_samples = tone(RESTART_FRAMES / 2 * SOAK_FRAME_SIZE, 196.0, sr, 0.5);
     let silence = vec![0.0; (RESTART_FRAMES - RESTART_FRAMES / 2) * SOAK_FRAME_SIZE];
     tone_samples
-        .chunks_exact(SOAK_FRAME_SIZE)
-        .chain(silence.chunks_exact(SOAK_FRAME_SIZE))
+        .as_chunks::<SOAK_FRAME_SIZE>()
+        .0
+        .iter()
+        .chain(silence.as_chunks::<SOAK_FRAME_SIZE>().0.iter())
         .map(|chunk| chunk.to_vec())
         .collect()
 }
@@ -368,7 +376,7 @@ fn production_rate_smoke_soak() {
     let mut first_pass = Vec::new();
     for (note_index, frequency) in notes.iter().enumerate() {
         let samples = tone(per_note * SMOKE_FRAME_SIZE, *frequency, sr, 0.5);
-        for (offset, chunk) in samples.chunks_exact(SMOKE_FRAME_SIZE).enumerate() {
+        for (offset, chunk) in samples.as_chunks::<SMOKE_FRAME_SIZE>().0.iter().enumerate() {
             let frame = engine.process(chunk, sr);
             assert_frame_sane(&frame, &format!("smoke note {note_index} frame {offset}"));
             first_pass.push(sign_frame(&frame));
