@@ -136,7 +136,7 @@ function percentileBound(buckets: number[], bounds: number[], percentile: number
     seen += buckets[index];
     if (seen >= target) {
       const bound = bounds[index];
-      return Number.isFinite(bound) ? bound : (bounds[index - 1] ?? 0);
+      return Number.isFinite(bound) ? bound : (index > 0 ? bounds[index - 1] : 0);
     }
   }
   return 0;
