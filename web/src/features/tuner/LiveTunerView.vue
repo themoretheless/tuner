@@ -219,20 +219,10 @@ watch(() => [tuner.cents, tuner.hasDetection] as const, ([cents, detected]) => {
             @change="onA4Change($event)"
           />
         </label>
-        <label v-if="tuner.nativeAudioAvailable" class="option-field">
-          <span>{{ t('audio.backend') }}</span>
-          <select
-            :value="tuner.audioBackend"
-            @change="tuner.setAudioBackend(($event.target as HTMLSelectElement).value as 'web' | 'native')"
-          >
-            <option value="web">{{ t('audio.backend.web') }}</option>
-            <option value="native">{{ t('audio.backend.native') }}</option>
-          </select>
-        </label>
       </div>
 
       <InputDeviceSelector
-        v-if="!tuner.usingNativeAudio && !tuner.usingFileAudio && !tuner.usingSyntheticAudio"
+        v-if="!tuner.usingFileAudio && !tuner.usingSyntheticAudio"
         :devices="tuner.inputDevices"
         :selected-device-id="tuner.selectedInputDeviceId"
         @refresh="tuner.refreshInputDevices"

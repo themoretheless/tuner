@@ -4,7 +4,6 @@ members = [
     "audio-input",
     "pitch-core",
     "egui",
-    "desktop/src-tauri",
     "test-support",
 ]
 

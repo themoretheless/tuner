@@ -34,8 +34,6 @@ jobs:
           const expected = JSON.parse(readFileSync('version.json', 'utf8')).version;
           const jsonFiles = [
             'web/package.json',
-            'desktop/package.json',
-            'desktop/src-tauri/tauri.conf.json',
           ];
           const cargoFiles = [
             'Cargo.toml',
@@ -89,27 +87,20 @@ jobs:
             echo "No code changes, version bump not required"
           fi
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Vue
+        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          node-version: "22"
+          npm-cache-dependency-path: web/package-lock.json
+          working-directory: web
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@bb3377f2f424201379ab4e47e147f164f4014b38 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
+          rust-toolchain: beta
           targets: wasm32-unknown-unknown
-
-
-      - name: Install pinned wasm-pack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack@0.15.0
-
-      - name: Install dependencies
-        working-directory: web
-        run: npm ci
+          tools: wasm-pack@0.15.0
+          cargo-workspaces: ". -> target"
 
       - name: Check generated note math
         working-directory: web

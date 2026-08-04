@@ -3,7 +3,6 @@ import type { LiveTunerPort } from '../../../app/ports/liveTuner';
 import type { DetectionCapability } from '../capabilities/detection';
 import type { DisplayCapability } from '../capabilities/display';
 import type {
-  AudioSettingsCapability,
   FeedbackSettingsCapability,
   ListeningCapability,
   ReferenceToneCapability,
@@ -17,7 +16,7 @@ interface Dependencies {
   listening: ListeningCapability;
   referenceTone: ReferenceToneCapability;
   session: SessionCapability;
-  settings: AudioSettingsCapability & FeedbackSettingsCapability;
+  settings: FeedbackSettingsCapability;
   tuning: TuningCapability;
 }
 
@@ -26,7 +25,6 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
   return reactive({
     a4: tuning.a4,
     allTunings: tuning.allTunings,
-    audioBackend: settings.audioBackend,
     cents: computed(() => detection.presentationFrame.value.cents),
     currentNoteDisplay: computed(() => (
       detection.presentationFrame.value.freq == null
@@ -54,7 +52,6 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     isInTune: computed(() => detection.presentationFrame.value.inTune),
     isListening: session.isListening,
     leftHanded: display.leftHanded,
-    nativeAudioAvailable: session.nativeAudioAvailable,
     readoutStability: settings.readoutStability,
     referencePlaying: referenceTone.referencePlaying,
     selectedInputDeviceId: session.selectedInputDeviceId,
@@ -64,7 +61,6 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     strings: tuning.strings,
     targetNote: detection.targetNote,
     usingFileAudio: session.usingFileAudio,
-    usingNativeAudio: session.usingNativeAudio,
     usingSyntheticAudio: session.usingSyntheticAudio,
     volume: detection.volume,
     beginExactPcmCapture: session.beginExactPcmCapture,
@@ -73,7 +69,6 @@ export function createLiveTunerPort(services: Dependencies): LiveTunerPort {
     loadAudioFile: session.loadAudioFile,
     refreshInputDevices: session.refreshInputDevices,
     setA4: tuning.setA4,
-    setAudioBackend: listening.setAudioBackend,
     setDisplayMode: display.setDisplayMode,
     setInputDevice: session.setInputDevice,
     setTuning: tuning.setTuning,

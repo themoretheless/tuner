@@ -10,23 +10,21 @@
     "codegen:check": "node ../scripts/generate-note-math.mjs --check && node ../scripts/generate-gate-thresholds.mjs --check && node ../scripts/generate-analysis-windows.mjs --check",
     "dev": "npm run codegen:check && npm run build:wasm && vite",
     "build": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build",
-    "build:tauri": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build --base ./",
+    "build:e2e": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build --base /",
     "build:wasm": "node ./scripts/build-wasm.mjs",
     "test": "npm run codegen:check && vitest run src tests",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
+    "benchmark:spectrogram": "npm run benchmark:spectrogram:typecheck && vite build --config benchmarks/spectrogram/vite.config.ts && playwright test --config benchmarks/spectrogram/playwright.config.ts",
+    "benchmark:spectrogram:typecheck": "tsc -p benchmarks/spectrogram/tsconfig.json",
     "test:core:legacy": "node ./scripts/test-core.mjs",
-    "preview": "vite preview",
-    "tauri:dev": "cd ../desktop && npm run dev",
-    "tauri:build": "npm run build:tauri && cd ../desktop && npm run tauri build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@lucide/vue": "^1.24.0",
-    "@tauri-apps/plugin-store": "^2.4.3",
     "vue": "^3.5.34"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.2",
     "@playwright/test": "^1.61.1",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",

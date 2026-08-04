@@ -9,6 +9,7 @@ export interface PracticeCapability {
   beat: Readonly<Ref<number>>;
   beats: Ref<number>;
   bpm: Ref<number>;
+  canMark: Readonly<Ref<boolean>>;
   clearHistory(): void;
   correct: Readonly<Ref<number>>;
   exportStats(): string;

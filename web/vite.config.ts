@@ -9,29 +9,11 @@ export default defineConfig({
   plugins: [vue(), offlineServiceWorker(ver.version)],
   define: { __PKG_VERSION__: JSON.stringify(ver.version) },
 
-  // Tauri expects a fixed port in development
   server: {
-    port: 5173,
-    strictPort: true,
-    // Allow Tauri to access the dev server
-    host: '0.0.0.0',
+    // The generated music registry lives at the repository root.
     fs: {
       allow: [fileURLToPath(new URL('..', import.meta.url))],
     },
-  },
-
-  // When building for Tauri, make sure assets work
-  build: {
-    target: 'esnext',
-    // Tauri supports es2021
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    // produce sourcemaps for debug builds
-    sourcemap: !!process.env.TAURI_DEBUG,
-  },
-
-  // Support for WASM files
-  optimizeDeps: {
-    exclude: [],
   },
 })
 
@@ -45,8 +27,6 @@ function offlineServiceWorker(version: string): Plugin {
       base = config.base
     },
     generateBundle(_options, bundle) {
-      if (base === './' || base === '') return
-
       const bundleFiles = Object.keys(bundle)
         .filter((file) => !file.endsWith('.map') && file !== 'sw.js')
         .sort()

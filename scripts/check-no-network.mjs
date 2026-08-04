@@ -6,14 +6,11 @@
 //     вне явного allowlist.
 //  2. В исходниках web/src нет внешних URL вне allowlist и нет сетевых
 //     API (fetch / WebSocket / EventSource / sendBeacon / XMLHttpRequest).
-//  3. Прод-CSP в desktop/src-tauri/tauri.conf.json строгий: без localhost,
-//     127.0.0.1 и ws://. (Dev-оверрайд живёт отдельно — tauri.conf.dev.json,
-//     и в прод-сборку не попадает.)
-//  4. В Rust-части desktop/src-tauri не используются сетевые API и не
-//     подключены tauri-plugin-http / tauri-plugin-updater.
+//  3. В native egui-клиенте не используются сетевые API. Native-приложение
+//     работает напрямую с audio-input/pitch-core и не содержит webview.
 //
 // Запуск: node scripts/check-no-network.mjs [--dist-only]
-// Требование: web/dist уже собран (`npm run build:tauri` в web/).
+// Требование: web/dist уже собран (`npm run build` в web/).
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
@@ -78,7 +75,7 @@ function scanNetworkApis(dir, label) {
 // --- 1. web/dist -------------------------------------------------------------
 const distDir = join(ROOT, 'web', 'dist');
 if (!existsSync(distDir)) {
-  failures.push('web/dist не найден — сначала соберите фронтенд (npm run build:tauri в web/)');
+  failures.push('web/dist не найден — сначала соберите фронтенд (npm run build в web/)');
 } else {
   scanUrls(distDir, 'dist');
 }
@@ -89,30 +86,19 @@ scanNetworkApis(join(ROOT, 'web', 'src'), 'src');
 scanUrls(join(ROOT, 'web', 'public'), 'public');
 scanNetworkApis(join(ROOT, 'web', 'public'), 'public');
 
-// --- 3. Прод-CSP ---------------------------------------------------------------
-const tauriConf = JSON.parse(readFileSync(join(ROOT, 'desktop', 'src-tauri', 'tauri.conf.json'), 'utf8'));
-const csp = tauriConf?.app?.security?.csp ?? '';
-if (!csp) {
-  failures.push('tauri.conf.json: app.security.csp отсутствует');
-} else if (/:\/\/localhost|:\/\/127\.0\.0\.1|:\/\/0\.0\.0\.0|\bws:\/\//i.test(csp)) {
-  failures.push(`tauri.conf.json: прод-CSP содержит dev-origin'ы (localhost/127.0.0.1/ws): ${csp}`);
-} else {
-  notes.push('прод-CSP строгий (без localhost/ws)');
-}
-
-// --- 4. Rust-часть desktop -----------------------------------------------------
-const cargoToml = readFileSync(join(ROOT, 'desktop', 'src-tauri', 'Cargo.toml'), 'utf8');
-for (const banned of ['tauri-plugin-http', 'tauri-plugin-updater']) {
-  if (cargoToml.includes(banned)) {
-    failures.push(`desktop/src-tauri/Cargo.toml: запрещённый сетевой плагин ${banned}`);
-  }
-}
-scanNetworkApis(join(ROOT, 'desktop', 'src-tauri', 'src'), 'rust-src');
-for (const file of walk(join(ROOT, 'desktop', 'src-tauri', 'src'))) {
-  if (!['.rs'].includes(extname(file))) continue;
-  const text = readFileSync(file, 'utf8');
-  if (/\b(TcpStream|TcpListener|UdpSocket|reqwest|hyper::|tokio::net|std::net)\b/.test(text)) {
-    failures.push(`rust-src: сетевой API в ${relative(ROOT, file)}`);
+// --- 3. Rust-часть shipped native graph ---------------------------------------
+// Scan every first-party crate linked into the native executable, not only the
+// UI crate. This keeps the offline claim true when code moves across boundaries.
+const nativeSourceDirs = ['egui', 'audio-input', 'pitch-core']
+  .map((crate) => join(ROOT, crate, 'src'));
+for (const sourceDir of nativeSourceDirs) {
+  scanNetworkApis(sourceDir, 'native-rust-src');
+  for (const file of walk(sourceDir)) {
+    if (extname(file) !== '.rs') continue;
+    const text = readFileSync(file, 'utf8');
+    if (/\b(TcpStream|TcpListener|UdpSocket|reqwest|hyper::|tokio::net|std::net)\b/.test(text)) {
+      failures.push(`native-rust-src: сетевой API в ${relative(ROOT, file)}`);
+    }
   }
 }
 

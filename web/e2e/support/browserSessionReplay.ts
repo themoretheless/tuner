@@ -36,6 +36,7 @@ interface WasmFrame {
 interface WasmProcessor {
   free(): void;
   process(buffer: Float32Array, sampleRate: number): WasmFrame;
+  set_analysis_windows(windows: Uint32Array): void;
   set_frame_context(
     a4: number,
     displayMidis: Int32Array,
@@ -70,6 +71,8 @@ export function runBrowserSessionReplay(
       const processor = new pitchCore.TunerProcessor();
       const frames: ReplayFrame[] = [];
       try {
+        // The host trace uses EngineConfig's single-window default.
+        processor.set_analysis_windows(new Uint32Array([windowSamples]));
         processor.set_frequency_range(range.minFrequency, range.maxFrequency);
         const midis = new Int32Array([replayCase.target.midi]);
         const frequencies = new Float32Array([replayCase.target.frequency]);
@@ -79,8 +82,9 @@ export function runBrowserSessionReplay(
           frequencies,
           midis,
           frequencies,
-          replayCase.target.midi,
-          replayCase.target.frequency,
+          // The trace configures a tuning target, not a selected string.
+          -1,
+          0,
           -1,
           0,
           5,

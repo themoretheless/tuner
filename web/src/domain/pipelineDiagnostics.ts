@@ -11,7 +11,7 @@ import {
 } from './pipelineConfig';
 import type { DetectionFrame } from '../types/frames';
 
-export type PipelineRuntimeBackend = 'native' | 'typescript' | 'wasm';
+export type PipelineRuntimeBackend = 'typescript' | 'wasm';
 export type DiagnosticBypass =
   | 'adaptiveGateEnabled'
   | 'fixedGateEnabled'

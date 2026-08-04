@@ -1,12 +1,8 @@
-import type { DetectionFrame, FrameContext } from '../types/frames';
-import type { PipelineConfig } from '../domain/pipelineConfig';
-import type { PitchDetectionRange } from '../utils/pitch';
 import type { AudioInputDiagnostics } from '../domain/audioInputDiagnostics';
 import type { ReadableValue } from '../application/ports/value';
-import type { DetectorBackend } from '../types/detectorBackend';
 
 export type { ReadableValue } from '../application/ports/value';
-export type AudioInputId = 'web' | 'native' | 'synthetic' | 'file';
+export type AudioInputId = 'web' | 'synthetic' | 'file';
 
 export interface AudioFrame {
   buffer: Float32Array<ArrayBuffer>;
@@ -62,27 +58,13 @@ export interface DiagnosableAudioInputPort extends AudioFrameInputPort {
   readonly inputDiagnostics: ReadableValue<AudioInputDiagnostics | null>;
 }
 
-export interface DetectionFrameInputPort extends AudioInputPortBase {
-  readonly detectorBackend: DetectorBackend;
-  readonly frame: ReadableValue<DetectionFrame | null>;
-  readonly output: 'detection-frame';
-  setDetectionRange(range: PitchDetectionRange): Promise<void>;
-  setFrameContext(context: FrameContext): Promise<void>;
-  setPipelineConfig(config: PipelineConfig): Promise<void>;
-}
-
-export type AudioInputPort = AudioFrameInputPort | DetectionFrameInputPort;
+export type AudioInputPort = AudioFrameInputPort;
 export type AudioInputPortRegistry = Readonly<Record<AudioInputId, AudioInputPort>>;
-
-export function isAudioFrameInputPort(port: AudioInputPort): port is AudioFrameInputPort {
-  return port.output === 'audio-frame';
-}
 
 export function isExactPcmCaptureInputPort(
   port: AudioInputPort,
 ): port is ExactPcmCaptureInputPort {
-  return isAudioFrameInputPort(port)
-    && 'beginExactPcmCapture' in port
+  return 'beginExactPcmCapture' in port
     && 'finishExactPcmCapture' in port
     && 'exactPcmCaptureAvailable' in port;
 }
@@ -90,8 +72,7 @@ export function isExactPcmCaptureInputPort(
 export function isDeviceSelectableAudioInputPort(
   port: AudioInputPort,
 ): port is DeviceSelectableAudioInputPort {
-  return isAudioFrameInputPort(port)
-    && 'inputDevices' in port
+  return 'inputDevices' in port
     && 'refreshInputDevices' in port
     && 'selectInputDevice' in port
     && 'selectedInputDeviceId' in port;
@@ -100,9 +81,5 @@ export function isDeviceSelectableAudioInputPort(
 export function isDiagnosableAudioInputPort(
   port: AudioInputPort,
 ): port is DiagnosableAudioInputPort {
-  return isAudioFrameInputPort(port) && 'inputDiagnostics' in port;
-}
-
-export function isDetectionFrameInputPort(port: AudioInputPort): port is DetectionFrameInputPort {
-  return port.output === 'detection-frame';
+  return 'inputDiagnostics' in port;
 }

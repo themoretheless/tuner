@@ -6,6 +6,7 @@ export interface PracticePort {
   clearPracticeHistory(): void;
   earTrainingAccuracy: number;
   earTrainingAttempts: number;
+  earTrainingCanMark: boolean;
   earTrainingCorrect: number;
   earTrainingRevealed: boolean;
   earTrainingStreak: number;

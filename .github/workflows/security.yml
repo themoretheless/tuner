@@ -1,6 +1,6 @@
 name: Security Gates
 
-# Релизные гейты M8: zero-network, cargo-deny, npm audit, signing scaffold.
+# Релизные гейты M8: zero-network, cargo-deny и npm audit.
 # Вызывается из release.yml как обязательный гейт релиза и гоняется на каждый PR.
 
 env:
@@ -29,31 +29,24 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Vue
+        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: web/package-lock.json
+          node-version: "22"
+          npm-cache-dependency-path: web/package-lock.json
+          working-directory: web
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@bb3377f2f424201379ab4e47e147f164f4014b38 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
+          rust-toolchain: beta
           targets: wasm32-unknown-unknown
+          tools: wasm-pack@0.15.0
+          cargo-workspaces: ". -> target"
 
-
-      - name: Install pinned wasm-pack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack@0.15.0
-
-      - name: Install dependencies
+      - name: Build web (production)
         working-directory: web
-        run: npm ci
-
-      - name: Build web (production, tauri base)
-        working-directory: web
-        run: npm run build:tauri
+        run: npm run build
 
       - name: Zero-network gate
         run: node scripts/check-no-network.mjs
@@ -68,20 +61,16 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@bb3377f2f424201379ab4e47e147f164f4014b38 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
-          cargo-workspaces: desktop/src-tauri -> target
-
-
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deny
+          rust-toolchain: beta
+          tools: cargo-deny
+          cargo-workspaces: ". -> target"
 
       - name: cargo deny check
         run: cargo deny check
 
-  # 3. npm audit для web/ и desktop/ (severity high и выше).
+  # 3. npm audit для web/ (severity high и выше).
   npm-audit:
     runs-on: ubuntu-latest
     steps:
@@ -90,47 +79,15 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
           persist-credentials: false
 
-      - name: Setup Node
-        uses: actions/setup-node@v6
+      - name: Setup Vue
+        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            web/package-lock.json
-            desktop/package-lock.json
-
-      - name: Install dependencies (web)
-        working-directory: web
-        run: npm ci
+          node-version: "22"
+          npm-cache-dependency-path: web/package-lock.json
+          working-directory: web
 
       - name: npm audit (web)
         working-directory: web
         # high+ = падение. Известные исключения фиксируются ТОЛЬКО через
         # overrides в package.json с комментарием, не через --audit-level=none.
         run: npm audit --audit-level=high
-
-      - name: Install dependencies (desktop)
-        working-directory: desktop
-        run: npm ci
-
-      - name: npm audit (desktop)
-        working-directory: desktop
-        run: npm audit --audit-level=high
-
-  # 4. Signing scaffold: plist/entitlements на месте, права минимальны,
-  #    секреты подписи не закоммичены, RELEASE-SIGNING.md существует.
-  release-signing-scaffold:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-          persist-credentials: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-
-      - name: Release-signing scaffold gate
-        run: node scripts/check-release-signing.mjs

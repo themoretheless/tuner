@@ -8,6 +8,12 @@ Status note 2026-07-12: verified closures are M1, M2, M3, M5, M6, M7, M11, M13, 
 
 Status note 2026-07-26: rounds 01-10 closed M4, M9, M10, M14, M15, M20, M31, M33, M36, M37, M61, M67, M103, M138; M8/M16/M30/M85/M94/M104 partially advanced.
 
+Status note 2026-08-04: shipped topology is Vue web/PWA plus native egui/wgpu.
+The former webview desktop shell and all of its code were deleted. Every item
+specific only to that shell, its bridge, capabilities, CSP, updater or mobile
+tooling is retired/obsolete even where the historical row remains unchanged.
+Execution order lives in `PLAN.md`; rows below preserve stable IDs.
+
 All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 priority rubric, deduped, 17 already-shipped items excluded, ranked. Source tag: r1=review backlog, r2/r3/r4=idea rounds.
 
 | M# | Item | Tier | Val | Source | Note |
@@ -25,7 +31,7 @@ All ~800 ideas from this session (rounds 1-4) re-scored on one consistent 0-100 
 | 11 | reconcile Rust/TS frequency-to-MIDI rounding | P2 | 64 | r1:review | Both targets use the generated nearest-MIDI contract. [DONE 2026-07-11] |
 | 12 | Multi-resolution dual-window analysis: long window for low strings, short for high | P2 | 64 | r2:algorithms | Fixes low-E resolution vs high-string latency tradeoff. |
 | 13 | stop resizeCanvas every frame | P2 | 62 | r1:review | [DONE 2026-07-11] |
-| 14 | Tauri CSP | P2 | 62 | r1:review | tauri.conf.json strict CSP. [DONE 2026-07-26] |
+| 14 | legacy webview CSP | P2 | 62 | r1:review | [REMOVED 2026-08-04] Former shell deleted. |
 | 15 | adaptive noise-floor gate | P2 | 62 | r1:review | dsp/gate.rs adaptive noise floor. [DONE 2026-07-26] |
 | 16 | Verifiable '100% local, no network' privacy badge backed by CI zero-fetch test | P2 | 62 | r2:distribution | Strong trust signal with a cheap CI assertion; differentiates from cloud tuners. [PARTIAL 2026-07-26] Remaining: the README badge itself; CI zero-network exists. |
 | 17 | Adaptive per-string tau search bounds derived from the selected target | P2 | 62 | r2:algorithms | Faster, fewer-error search when string known. |

@@ -3,34 +3,24 @@ use eframe::egui;
 use pitch_core::TunerEngine;
 use std::sync::{Arc, Mutex};
 
-#[cfg(not(target_arch = "wasm32"))]
 use audio_input::{input_device_names, InputConfig, RecoveryPolicy, SupervisedInputStream};
-#[cfg(not(target_arch = "wasm32"))]
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-#[cfg(not(target_arch = "wasm32"))]
 use cpal::{FromSample, Sample, SampleFormat, SizedSample, Stream, StreamConfig};
 
 #[derive(Default)]
 pub(crate) struct AudioManager {
     pub(crate) input_devices: Vec<String>,
     pub(crate) selected_input_device: Option<String>,
-    #[cfg(not(target_arch = "wasm32"))]
     input: Option<SupervisedInputStream>,
-    #[cfg(not(target_arch = "wasm32"))]
     output: Option<Stream>,
     tone_playing: bool,
 }
 
 impl AudioManager {
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn refresh(&mut self) {
         self.input_devices = input_device_names();
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn refresh(&mut self) {}
-
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn start_input(
         &mut self,
         state: SharedTunerState,
@@ -79,24 +69,12 @@ impl AudioManager {
         Ok(())
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn start_input(
-        &mut self,
-        _state: SharedTunerState,
-        _engine: Arc<Mutex<TunerEngine>>,
-        _context: egui::Context,
-    ) -> Result<(), String> {
-        Ok(())
-    }
-
     pub(crate) fn stop_input(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
         if let Some(mut input) = self.input.take() {
             input.stop();
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn play_tone(&mut self, frequency: f32) -> Result<(), String> {
         self.stop_tone();
         let host = cpal::default_host();
@@ -129,17 +107,8 @@ impl AudioManager {
         Ok(())
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn play_tone(&mut self, _frequency: f32) -> Result<(), String> {
-        self.tone_playing = true;
-        Ok(())
-    }
-
     pub(crate) fn stop_tone(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.output = None;
-        }
+        self.output = None;
         self.tone_playing = false;
     }
 
@@ -148,7 +117,6 @@ impl AudioManager {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn build_tone_stream<T>(
     device: &cpal::Device,
     config: &StreamConfig,
