@@ -30,6 +30,14 @@ jobs:
     with:
       ref: ${{ github.sha }}
 
+  build-egui:
+    needs: security
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-egui.yml
+    with:
+      ref: ${{ github.sha }}
+
   deploy:
     needs: build-web
     permissions:
