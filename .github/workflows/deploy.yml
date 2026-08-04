@@ -77,4 +77,4 @@ jobs:
     permissions:
       pages: write
       id-token: write
-    uses: themoretheless/.github/.github/workflows/deploy-pages.yml@v1
+    uses: themoretheless/.github/.github/workflows/deploy-github-pages.yml@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1

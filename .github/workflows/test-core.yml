@@ -20,13 +20,11 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
-          components: rustfmt, clippy
+          rust-toolchain: beta
+          components: rustfmt,clippy
           targets: wasm32-unknown-unknown
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
 
       # pitch-core depends only on rustfft (no cpal/ALSA), so -p keeps the
       # workspace's native-audio members out of the build.
