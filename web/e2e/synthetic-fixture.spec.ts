@@ -122,11 +122,13 @@ test('turns octave measurements into a concrete intonation adjustment', async ({
 test('keeps metadata, diagnostics and ear-training state coherent', async ({ page }) => {
   await page.goto('/?fixture=E2');
 
-  await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  await page.getByRole('button', { name: 'RU / EN' }).click();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  const initialLang = await page.locator('html').getAttribute('lang');
+  expect(['ru', 'en']).toContain(initialLang);
+  await page.getByRole('button', { name: /Toggle language|Переключить язык/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', initialLang === 'ru' ? 'en' : 'ru');
 
   await expect(page.locator('canvas')).toHaveCount(0);
+  await page.getByRole('tab', { name: /Practice|Практика/ }).click();
   const correct = page.locator('[data-ear-action="correct"]');
   await expect(correct).toBeDisabled();
   await page.locator('[data-ear-action="next"]').click();

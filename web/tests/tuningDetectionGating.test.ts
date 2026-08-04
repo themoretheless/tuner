@@ -1,11 +1,11 @@
-import { effectScope, ref } from 'vue';
+import { effectScope, ref, type Ref } from 'vue';
 import { describe, expect, it } from 'vitest';
 import { useTuningDetection } from '../src/composables/useTuningDetection';
 import { TEMPERAMENTS, TUNINGS, type Note } from '../src/utils/notes';
 
 const strings = TUNINGS.find((tuning) => tuning.id === 'standard')!.strings;
 
-function setup(frameResolved: ReturnType<typeof ref<boolean>>) {
+function setup(frameResolved: Ref<boolean>) {
   const detectedFrequency = ref<number | null>(null);
   const scope = effectScope();
   const detection = scope.run(() => useTuningDetection({

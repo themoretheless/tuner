@@ -142,7 +142,7 @@ describe('PitchCoreAdapter', () => {
     const loadModule: PitchCoreModuleLoader = vi.fn(async () => {
       throw new Error('missing module');
     });
-    const fallback = vi.fn(() => ({ confidence: 0.72, frequency: 220 }));
+    const fallback = vi.fn<FallbackPitchDetector>(() => ({ confidence: 0.72, frequency: 220 }));
     const adapter = new PitchCoreAdapter('/wasm/missing.js', loadModule, fallback);
 
     const first = await adapter.process(BUFFER, 48_000, STATS, RANGE);

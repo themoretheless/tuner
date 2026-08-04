@@ -4,9 +4,8 @@
 //! on cpal or real audio devices, so it is fully unit-testable. The supervisor
 //! in `lib.rs` drives it from cpal error callbacks and a stall watchdog.
 //!
-//! Stable telemetry codes are part of the shared cross-platform diagnostics
-//! contract (web/src/domain/diagnostics.ts); they travel over the Tauri event
-//! wire and are matched by name on every platform.
+//! Stable telemetry codes are consumed by the native egui client and are kept
+//! independent of cpal's platform-specific error values.
 
 use std::time::Duration;
 

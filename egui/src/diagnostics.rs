@@ -1,9 +1,7 @@
 //! Signal-quality watchdog for the egui frontend.
 //!
-//! Emits the same stable diagnostic codes as the shared cross-platform
-//! contract (web/src/domain/diagnostics.ts and
-//! desktop/src-tauri/src/native_audio/signal_health.rs). Keep thresholds and
-//! code strings in sync with that contract.
+//! Codes and thresholds here belong to the native client and are tested here;
+//! the web client has an independent presentation contract.
 
 use pitch_core::{FIXED_GATE_PEAK, FIXED_GATE_RMS};
 
@@ -12,8 +10,7 @@ pub(crate) const SIGNAL_CLIPPING: &str = "signal-clipping";
 pub(crate) const SIGNAL_DC_OFFSET: &str = "signal-dc-offset";
 pub(crate) const SIGNAL_HUM: &str = "signal-hum";
 
-// Stream-loss recovery telemetry codes, shared with the native backends
-// (audio-input::recovery) and the web contract.
+// Stream-loss recovery telemetry codes emitted by audio-input::recovery.
 pub(crate) const BACKEND_STREAM_LOST: &str = "backend-stream-lost";
 pub(crate) const BACKEND_RECOVERY_ATTEMPTED: &str = "backend-recovery-attempted";
 pub(crate) const BACKEND_RECOVERY_SUCCEEDED: &str = "backend-recovery-succeeded";

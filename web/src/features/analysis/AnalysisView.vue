@@ -68,7 +68,7 @@ onUnmounted(analysis.deactivate);
       <DisplayModeSelector :mode="analysis.displayMode" @change="analysis.setDisplayMode" />
     </div>
 
-    <div v-if="analysis.isListening && !analysis.usingNativeAudio" class="analysis-grid">
+    <div v-if="analysis.isListening" class="analysis-grid">
       <div v-if="analysis.showWaveform" class="visualizer-panel card">
         <Waveform :frame="analysis.waveformFrame" :is-listening="analysis.isListening" />
       </div>
@@ -84,7 +84,7 @@ onUnmounted(analysis.deactivate);
       </div>
     </div>
     <div v-else class="analysis-empty card">
-      <strong>{{ analysis.usingNativeAudio ? t('analysis.native') : t('analysis.idle') }}</strong>
+      <strong>{{ t('analysis.idle') }}</strong>
       <span>{{ t('analysis.empty.detail') }}</span>
     </div>
 

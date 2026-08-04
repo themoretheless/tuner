@@ -46,7 +46,6 @@ impl Default for App {
 }
 
 impl App {
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn restore(&mut self, storage: Option<&dyn eframe::Storage>) {
         let Some(storage) = storage else { return };
         self.a4 = parse_or(storage, "a4", self.a4).clamp(420.0, 460.0);
@@ -66,22 +65,8 @@ impl App {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn refresh_devices(&mut self) {
         self.audio.refresh();
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) fn use_shared_state(
-        &mut self,
-        state: SharedTunerState,
-        engine: Arc<Mutex<TunerEngine>>,
-    ) {
-        self.state = state;
-        self.engine = engine;
-        if let Ok(mut engine) = self.engine.lock() {
-            engine.set_spectrum_enabled(self.show_spectrum || self.visualization.show_spectrogram);
-        }
     }
 
     fn toggle_mic(&mut self, context: &egui::Context) {
@@ -204,9 +189,8 @@ impl App {
         if let Some(error) = &state.error {
             ui.colored_label(egui::Color32::from_rgb(248, 113, 113), error);
         }
-        // Typed signal-quality watchdog (shared diagnostic contract). The egui
-        // UI shows the stable code plus a short actionable hint; richer
-        // localized presentation lives in the web/Tauri shell.
+        // Typed signal-quality watchdog. The native UI shows the stable code
+        // plus a short actionable hint.
         // TODO(presentation): localize hints when egui gets a l10n layer.
         for code in &state.diagnostics {
             ui.colored_label(
@@ -214,7 +198,7 @@ impl App {
                 format!("⚠ {} — {}", code, diagnostic_hint(code)),
             );
         }
-        // Stream-loss recovery telemetry (shared diagnostic contract).
+        // Stream-loss recovery telemetry from audio-input.
         for code in &state.backend_diagnostics {
             ui.colored_label(
                 egui::Color32::from_rgb(234, 179, 8),
@@ -393,7 +377,6 @@ impl eframe::App for App {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn parse_or<T>(storage: &dyn eframe::Storage, key: &str, fallback: T) -> T
 where
     T: std::str::FromStr,
@@ -404,7 +387,6 @@ where
         .unwrap_or(fallback)
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn parse_bool(storage: &dyn eframe::Storage, key: &str) -> bool {
     storage.get_string(key).as_deref() == Some("true")
 }

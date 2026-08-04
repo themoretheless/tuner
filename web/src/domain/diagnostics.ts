@@ -2,23 +2,18 @@ import { GATE_THRESHOLDS } from '../generated/gateThresholds';
 import type { AudioInputWarning } from './audioInputDiagnostics';
 import type { MicrophoneStartFailure } from './microphoneStartFailure';
 
-// Cross-platform typed user-facing diagnostics. The stable codes below are the
-// single contract shared by the web shell, the Tauri native audio stream
-// (desktop/src-tauri/src/native_audio/signal_health.rs) and the egui frontend
-// (egui/src/diagnostics.rs). Codes must stay stable: they travel over the
-// Tauri event wire and are matched by name on every platform.
+// Typed user-facing diagnostics emitted by the browser audio pipeline.
 
 export type DiagnosticCategory =
   | 'input'
   | 'device'
   | 'permission'
   | 'signal-quality'
-  | 'backend'
   | 'performance';
 
 export type DiagnosticSeverity = 'info' | 'warning' | 'error';
 
-export type DiagnosticSource = 'web' | 'tauri' | 'egui';
+export type DiagnosticSource = 'web';
 
 export type SignalDiagnosticCode =
   | 'signal-silent'
@@ -41,18 +36,10 @@ export type InputProcessingDiagnosticCode =
   | 'input-resampled'
   | 'input-settings-unavailable';
 
-export type BackendDiagnosticCode =
-  | 'backend-native-stream-failed'
-  | 'backend-stream-lost'
-  | 'backend-recovery-attempted'
-  | 'backend-recovery-succeeded'
-  | 'backend-recovery-failed';
-
 export type DiagnosticCode =
   | SignalDiagnosticCode
   | MicrophoneDiagnosticCode
-  | InputProcessingDiagnosticCode
-  | BackendDiagnosticCode;
+  | InputProcessingDiagnosticCode;
 
 export const DIAGNOSTIC_CODES: readonly DiagnosticCode[] = [
   'signal-silent',
@@ -70,11 +57,6 @@ export const DIAGNOSTIC_CODES: readonly DiagnosticCode[] = [
   'input-multi-channel',
   'input-resampled',
   'input-settings-unavailable',
-  'backend-native-stream-failed',
-  'backend-stream-lost',
-  'backend-recovery-attempted',
-  'backend-recovery-succeeded',
-  'backend-recovery-failed',
 ];
 
 export interface TunerDiagnostic {
@@ -109,11 +91,6 @@ export const DIAGNOSTIC_CATALOG: Readonly<Record<DiagnosticCode, DiagnosticCatal
   'input-multi-channel': { category: 'input', severity: 'info' },
   'input-resampled': { category: 'input', severity: 'info' },
   'input-settings-unavailable': { category: 'input', severity: 'info' },
-  'backend-native-stream-failed': { category: 'backend', severity: 'error' },
-  'backend-stream-lost': { category: 'backend', severity: 'warning' },
-  'backend-recovery-attempted': { category: 'backend', severity: 'info' },
-  'backend-recovery-succeeded': { category: 'backend', severity: 'info' },
-  'backend-recovery-failed': { category: 'backend', severity: 'error' },
 };
 
 const HINT_PREFIX = 'diagnostics.';
@@ -185,27 +162,6 @@ export function diagnosticsFromInputWarnings(
   source: DiagnosticSource,
 ): TunerDiagnostic[] {
   return warnings.map((warning) => createDiagnostic(INPUT_WARNING_CODES[warning], source));
-}
-
-export function nativeStreamFailedDiagnostic(source: DiagnosticSource): TunerDiagnostic {
-  return createDiagnostic('backend-native-stream-failed', source);
-}
-
-// --- Native stream recovery -------------------------------------------------
-
-/** Recovery telemetry codes emitted by the native audio backend
- * (desktop/src-tauri/src/native_audio/stream.rs, audio-input::recovery). */
-export const BACKEND_RECOVERY_CODES: readonly BackendDiagnosticCode[] = [
-  'backend-stream-lost',
-  'backend-recovery-attempted',
-  'backend-recovery-succeeded',
-  'backend-recovery-failed',
-];
-
-export function isBackendRecoveryCode(
-  code: DiagnosticCode,
-): code is BackendDiagnosticCode {
-  return (BACKEND_RECOVERY_CODES as readonly string[]).includes(code);
 }
 
 // --- Signal health ----------------------------------------------------------

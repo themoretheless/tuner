@@ -2,13 +2,12 @@ import type { AudioFrameTimebase, ExactPcmCapture } from '../../ports/audioInput
 import type { DetectorBackend } from '../../types/detectorBackend';
 import type { DetectionFrame } from '../../types/frames';
 import type { Note, Tuning } from '../../utils/notes';
-import type { AudioBackend, DisplayMode } from '../../utils/settingsStorage';
+import type { DisplayMode } from '../../utils/settingsStorage';
 import type { SessionStatus } from '../../session/sessionLifecycle';
 
 export interface LiveTunerPort {
   readonly a4: number;
   readonly allTunings: Tuning[];
-  readonly audioBackend: AudioBackend;
   beginExactPcmCapture(): boolean;
   readonly cents: number;
   clearError(): void;
@@ -36,7 +35,6 @@ export interface LiveTunerPort {
   readonly isListening: boolean;
   readonly leftHanded: boolean;
   loadAudioFile(file: File): Promise<boolean>;
-  readonly nativeAudioAvailable: boolean;
   readonly readoutStability: number;
   readonly referencePlaying: boolean;
   refreshInputDevices(): Promise<void>;
@@ -45,7 +43,6 @@ export interface LiveTunerPort {
   readonly selectedStringIndex: number | null;
   readonly sessionStatus: SessionStatus;
   setA4(value: number): void;
-  setAudioBackend(backend: AudioBackend): Promise<void>;
   setDisplayMode(value: unknown): void;
   setInputDevice(deviceId: string): Promise<void>;
   setTuning(tuning: Tuning): void;
@@ -58,7 +55,6 @@ export interface LiveTunerPort {
   toggleString(note: Note, index?: number): void;
   useMicrophoneInput(): Promise<void>;
   readonly usingFileAudio: boolean;
-  readonly usingNativeAudio: boolean;
   readonly usingSyntheticAudio: boolean;
   readonly volume: number;
 }

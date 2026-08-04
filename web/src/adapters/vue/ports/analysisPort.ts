@@ -19,7 +19,7 @@ interface Dependencies {
   display: DisplayCapability;
   history: HistoryCapability;
   listening: ListeningCapability;
-  session: Pick<SessionCapability, 'error' | 'isListening' | 'status' | 'usingNativeAudio'>;
+  session: Pick<SessionCapability, 'error' | 'isListening' | 'status'>;
   settings: AnalysisSettingsCapability & FeedbackSettingsCapability;
   tuning: Pick<TuningCapability, 'formatFreq'>;
   visualization: VisualizationCapability;
@@ -48,7 +48,6 @@ export function createAnalysisPort(services: Dependencies): AnalysisPort {
     spectrumFrame: visualization.spectrumFrame,
     targetNote: detection.targetNote,
     themeMode: display.themeMode,
-    usingNativeAudio: session.usingNativeAudio,
     waveformFrame: visualization.waveformFrame,
     activate: visualization.activate,
     clearError: listening.clearError,

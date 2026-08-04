@@ -12,6 +12,7 @@ export function createPracticePort({ practice, tuning }: Dependencies): Practice
   return reactive({
     earTrainingAccuracy: practice.accuracy,
     earTrainingAttempts: practice.attempts,
+    earTrainingCanMark: practice.canMark,
     earTrainingCorrect: practice.correct,
     earTrainingRevealed: practice.revealed,
     earTrainingStreak: practice.streak,

@@ -59,6 +59,7 @@ export function usePracticeController(dependencies: PracticeControllerDependenci
     beat: metronome.beat,
     beats: dependencies.beats,
     bpm: dependencies.bpm,
+    canMark: earTraining.canMark,
     clearHistory,
     correct: earTraining.correct,
     exportStats,

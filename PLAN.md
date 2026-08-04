@@ -30,19 +30,19 @@ If not, it doesn't belong in this plan.
 Each milestone is independently shippable and verified with `cargo test -p pitch-core`,
 `vue-tsc --noEmit`, and `cargo check` on egui. Behavior-preserving milestones are marked **[BP]**.
 
-## Status Overlay (2026-07-21)
+## Status Overlay (2026-08-04)
 
 | Milestone | Status | Result / remaining gate |
 | --- | --- | --- |
-| M0 safety net | Done baseline | 159 Vitest, 71 all-feature core tests, pure-use-case/Vue-adapter/output boundaries, generated note-math properties, shared pitch/confidence/smoothing parity, lifecycle failure/retry coverage, eleven E2E flows, licensed native/WASM/Tauri/egui replay parity and a blocking 19-capture corpus; transition/SNR/soak remain in M7 |
-| M1 frames | Done | Rust/Tauri/egui/browser frame adopted; revisioned context, shared hysteresis/smoothing semantics and canonical full-frame shape are verified |
+| M0 safety net | Done | 286 Vitest tests, 12 Playwright flows, native/WASM replay parity, workspace tests and a blocking 19-capture corpus |
+| M1 frames | Done | Shared Rust frame contract is used directly by native egui and through WASM by web; revisioned context and resolver semantics are verified |
 | M2 visualization boundary | Done | Plain frames, shared canvas lifecycle, semantic palette and `320 px` QA |
 | M3 web decomposition | Done | One-line compatibility facade, 124-line Vue composition adapter, framework-independent use cases, injected `TunerInputSet`, explicit capabilities and five segregated feature-port contracts are architecture-tested |
 | M4 pitch-core layering | Done | Focused modules, trait, config, reusable buffers, optional spectrum and high-level WASM `TunerProcessor` |
 | M5 single-source domain | Done | Registry data and one formula AST generate dependency-free Rust/TS note primitives; facades and freshness/property gates are in place |
-| M6 native realtime | Done | Shared bounded input worker, decomposed egui/Tauri and supervised native input with typed recovery telemetry (stream-lost/recovery-attempted/succeeded/failed, stall watchdog, bounded backoff retries, session survives device unplug) are done |
+| M6 native realtime | Done | Native egui uses the bounded `audio-input` worker with typed recovery telemetry; wgpu rendering and texture-backed spectrogram are verified |
 | M7 DSP hardening | Done | DC centering, bounded MPM/ranges, adaptive gate, silence reset, real-WAV temporal gate, licensed cross-backend replay, HPS octave guard, phase period refinement, gated SNR (57/57) and reverb (57/57) grids, calibrated confidence-weighted YIN/MPM fusion, criterion hot-path benchmarks, restart soak tests and a CI differential baseline gate are done |
-| M8 product/release | Done baseline | Offline SW, feature UI, themes, typed cross-platform diagnostics with signal-health watchdog, throttled aria-live/forced-colors/non-color a11y, strict prod CSP with dev override, zero-network CI, cargo-deny/npm-audit gates and signing scaffolding are done; actual Apple/Windows signing requires certificates |
+| M8 product/release | Done baseline | Web/PWA and unsigned native egui packages are the only shipped targets; zero-network CI, cargo-deny/npm-audit and native signing guidance are in place; Apple/Windows signing still requires certificates |
 
 ---
 
@@ -55,7 +55,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Dev **synthetic-signal injector** (`?fixture=E2`) feeding a known WAV into the pipeline; commit a few synthetic guitar fixtures.
 **Verify / DoD:** CI green and gating; parity test passes; one fixture drives detection headlessly.
 
-**Status 2026-07-21:** M0 is complete for the current refactor gate: toolchain pins, `159` Vitest tests, `71` pitch-core all-feature tests, pure-use-case/Vue-adapter/output boundary guards, typed lifecycle failure/retry tests, CI fmt/clippy/tests/wasm/codegen/quality gates, generated registry/note-math parity, shared pitch/confidence and smoothing manifests, a provenance-checked 19-capture corpus, and eleven browser flows including licensed native/WASM replay, full-frame WASM, synthetic/file detection, exact PCM capture, responsive Algorithm/Library navigation and mocked permission/device-loss recovery. Tauri wire frames and egui view state consume the same replay contract; active Web/Native switching is registry-tested.
+**Status 2026-08-04:** M0 is complete for the current two-client topology: 286 Vitest tests, 12 Playwright flows, workspace fmt/clippy/tests, generated registry/note-math gates, production WASM build, licensed native/WASM replay and the provenance-checked corpus are green.
 
 ## M1 - Shared data contracts (the keystone) **[BP]**
 **Goal:** one resolved frame that views render instead of recompute. Phase 0 (types).
@@ -64,7 +64,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - `TunerEngine::process(...) -> DetectionFrame` returns the **fully resolved** readout (chromatic-vs-string, hysteresis, clear-on-silence) so web and egui stop coding those rules twice.
 **Verify / DoD:** frame types exist; engine emits them; shape snapshot test; existing tests green.
 
-**Status 2026-07-12:** complete. `FrameResolver` owns target/cents/hysteresis; Tauri and browser WASM receive A4/temperament/tuning/selected-target `FrameContext`; Vue trusts resolved primary output; Rust/TypeScript smoothing and confidence are fixture-gated; the top-level `frequency` alias is removed.
+**Status 2026-08-04:** complete. `FrameResolver` owns target/cents/hysteresis; native egui links the core directly and browser WASM receives the same context. Vue trusts resolved primary output; fallback smoothing/confidence remain fixture-gated.
 
 ## M2 - Finish web visualization data boundary **[BP]**
 **Goal:** complete the visualizer frame path without regressing the already-decoupled web components. Phase 3.
@@ -115,7 +115,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 **Verify / DoD:** `cargo check` clean; by inspection no DSP/alloc/lock in callback; random tone audibly plays.
 **Risk:** medium-high (threading) - do after M0/M1 so behavior is pinned.
 
-**Status 2026-07-11:** complete for realtime safety and structural decomposition. Tauri/egui share `audio-input`; callback work is bounded nonblocking downmix/copy, DSP runs on workers, and egui main/audio/state/visualization are separate. Runtime error telemetry/restart remains under reliability work.
+**Status 2026-08-04:** complete. egui owns the only native client, uses `audio-input` for bounded nonblocking callback work, runs DSP on a worker and renders through wgpu. Main/audio/state/visualization are separate; the spectrogram is a retained rolling GPU texture.
 
 ## M7 - DSP accuracy hardening
 **Goal:** fewer octave/jitter errors, robust gating - guarded by M0 fixtures. Phase 6 (P2).
@@ -123,7 +123,7 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - HPS octave guard from the existing 2048 FFT; runtime DC-block + ~30-40Hz high-pass; adaptive noise-floor gate; per-string tau bounds when a string is selected; confidence-weighted fusion (YIN+MPM+HPS).
 **Verify / DoD:** fixture corpus + equivalence harness pass; no regression vs M0 baselines.
 
-**Status 2026-07-21:** partial. A licensed guitar/bass/ukulele/violin/voice corpus, deterministic rebuild/checksums, temporal metrics, per-scenario thresholds, blocking CI artifact and sample-indexed native/WASM/Tauri/egui replay parity are complete. The next evidence slices are fixed SNR/noise/reverb transforms, differential baselines, criterion hot-path benchmarks and restart soak tests.
+**Status 2026-08-04:** complete. Licensed native/WASM replay, SNR/reverb grids, differential baselines, criterion hot-path benchmarks and restart soak tests cover the two shipped clients and shared core.
 
 **Status 2026-07-25 (DSP round 07):** HPS octave guard (`dsp/hps.rs`, harmonic product spectrum over 3 compression stages, consulted only when Hz probes are inconclusive, skipped at confidence >= 0.97), phase period refinement (`dsp/phase.rs`, two Hann windows with N/4 shift, magnitude^2 weighting, gated on confidence/stationarity/dominant fundamental, clamp ±6 cents) and a deterministic seeded white-noise SNR grid at 30/20/10 dB (report schema v2, per-level `--check` thresholds, clean gate unchanged) are done. Benchmark `benchmark-07-dsp-*`: clean corpus 19/19, mean MAE 2.645 -> 2.436 cents (-7.9 %), mean p95 4.945 -> 4.763 cents; SNR grid 57/57 passed (30 dB MAE 2.45, 20 dB 2.44, 10 dB 2.48, coverage >= 0.93). Reverb transforms, differential baselines, criterion hot-path benchmarks and soak tests remain.
 
@@ -139,19 +139,19 @@ Each milestone is independently shippable and verified with `cargo test -p pitch
 - Real Service Worker + offline cache is done; add update/rollback and zero-network CI verification.
 - a11y: aria-live on note/cents; colorblind + forced-colors palettes; non-color-only in-tune cue.
 - Observability: "Test my mic" wizard + pipeline health strip + silent/clipping/DC/hum watchdog.
-- Release: Tauri CSP; macOS notarize / Windows sign; CI "zero network in release build" proof + cargo-deny/npm-audit.
+- Release: macOS notarize / Windows sign; CI zero-network proof + cargo-deny/npm-audit.
 **Verify / DoD:** per-item; Lighthouse PWA offline passes; CI zero-fetch test green.
 
-**Status 2026-07-21:** lifecycle visibility, native teardown propagation and web input recovery evidence are complete: restart intent is immediate, failed stop retains its backend for retry, snapshots expose typed operations, the Tauri API boundary is injectable, stale mic starts are revision-cancelled, and permission denial/track loss/devicechange/backend switching are tested. Cross-platform typed user-facing diagnostics, CSP/signing and accessibility gates remain.
+**Status 2026-08-04:** web permission denial, track loss, device changes and stale-start cancellation are browser-tested. Native stream loss/recovery is owned and tested by `audio-input`; there is no browser/native runtime switching inside one client.
 
-**Status 2026-07-26 (M8 round):** typed cross-platform diagnostics are done: shared contract `web/src/domain/diagnostics.ts` (categories, severity, stable string codes, localized actionable hints) with signal-health detection (silent/clipping/DC offset/50-60 Hz hum via Goertzel) mirrored in `desktop/.../signal_health.rs` and `egui/src/diagnostics.rs`, surfaced via `DiagnosticsStrip.vue` (web/Tauri wire field `signal`) and egui state. a11y gates done: throttled aria-live tune announcer (`utils/tuneA11y.ts`, immediate on in-tune/note change, else <= 1/s), non-color in-tune cues (icons + border styles + text), forced-colors and prefers-contrast media branches, colorblind palette audit. Release gates done: strict prod CSP in `tauri.conf.json` with `tauri.conf.dev.json` override (safe-by-default), `scripts/check-no-network.mjs` zero-network proof wired into new `security.yml` (blocking `release.yml`), `deny.toml` cargo-deny (licenses/bans/advisories, two documented quick-xml RUSTSEC exceptions), npm audit gates (postcss high fixed), signing scaffolding in `RELEASE-SIGNING.md` + `scripts/check-release-signing.mjs` (entitlements minimal, no secrets in git). Web 209/209, workspace cargo tests green. Remaining: real Apple/Windows signing needs certificates (checklist in RELEASE-SIGNING.md); version numbers across version.json/Cargo.toml/tauri.conf.json/web package.json are inconsistent and should be aligned.
+**Status 2026-08-04:** release topology is Web/PWA plus native egui only. Pages uses the reusable organization workflow; native CI produces unsigned `.app.zip`, Windows `.zip` and Linux `.tar.gz`. The zero-network gate scans web plus every first-party native crate. Version `0.1.13` is aligned across `version.json`, Cargo packages and web package metadata. Real Apple/Windows signing remains external-certificate work documented in `RELEASE-SIGNING.md`.
 
 ---
 
 ## Now / Next / Later
 
 - **Now:** newcomer batch B (M34 mic wizard, M56 onboarding, M38 guided tuning, M77 simple mode); optional faster hop on the short lane (cadence still 33 ms everywhere).
-- **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml RUSTSEC exceptions on next tauri/plist update.
+- **Next:** real Apple/Windows signing per RELEASE-SIGNING.md once certificates exist; revisit the two quick-xml build-time exceptions on the next eframe/winit update.
 - **Later:** egui diagnostics presentation localization; extend the window set (16384 for bass, adaptive per-target windows) now that lanes are a set, not a pair.
 
 ## Working conventions

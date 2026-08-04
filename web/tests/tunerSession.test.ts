@@ -8,8 +8,6 @@ import { pipelinePresetConfig } from '../src/domain/pipelineConfig';
 import { MIN_USABLE_PITCH_CONFIDENCE } from '../src/utils/pitch';
 import { resolveSyntheticAudioFixture } from '../src/utils/syntheticAudio';
 import { encodeMonoPcm16Wav } from '../src/audio/wav';
-import type { NativeAudioApiLoader } from '../src/platform/nativeAudioApi';
-import type { AudioBackend } from '../src/utils/settingsStorage';
 
 describe('useTunerSession', () => {
   let now = 0;
@@ -46,10 +44,8 @@ describe('useTunerSession', () => {
   });
 
   it('runs detection through the synthetic audio session path', async () => {
-    const audioBackend = ref<AudioBackend>('web');
     const selectedInputDeviceId = ref('');
     const session = useTunerSession({
-      audioBackend,
       inputs: useTunerInputSet({
         selectedInputDeviceId,
         syntheticFixture: resolveSyntheticAudioFixture('E2'),
@@ -92,7 +88,6 @@ describe('useTunerSession', () => {
       gain: 0.006,
     };
     const session = useTunerSession({
-      audioBackend: ref<AudioBackend>('web'),
       inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture }),
       pipelineConfig: ref(pipelinePresetConfig('raw')),
       selectedInputDeviceId,
@@ -114,7 +109,6 @@ describe('useTunerSession', () => {
   it('runs an imported WAV through the same realtime session pipeline', async () => {
     const selectedInputDeviceId = ref('');
     const session = useTunerSession({
-      audioBackend: ref<AudioBackend>('web'),
       inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null }),
       selectedInputDeviceId,
     });
@@ -167,7 +161,6 @@ describe('useTunerSession', () => {
 
     const selectedInputDeviceId = ref('old-device');
     const session = useTunerSession({
-      audioBackend: ref<AudioBackend>('web'),
       inputs: useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null }),
       selectedInputDeviceId,
     });
@@ -222,71 +215,6 @@ describe('useTunerSession', () => {
     expect(track.stop).toHaveBeenCalledOnce();
   });
 
-  it('keeps the effective backend stable when native availability arrives late', async () => {
-    installWebAudioFakes(vi.fn().mockResolvedValue(createMediaStream()));
-    const selectedInputDeviceId = ref('');
-    const audioBackend = ref<AudioBackend>('native');
-    const inputs = useTunerInputSet({ selectedInputDeviceId, syntheticFixture: null });
-    await inputs.native.refreshAvailability();
-    inputs.native.available.value = false;
-    const session = useTunerSession({
-      audioBackend,
-      inputs,
-      selectedInputDeviceId,
-    });
-
-    await session.start();
-    expect(session.activeInputId.value).toBe('web');
-    inputs.native.available.value = true;
-
-    expect(session.requestedInputId.value).toBe('native');
-    expect(session.activeInputId.value).toBe('web');
-    expect(session.usingNativeAudio.value).toBe(false);
-    await session.stop();
-  });
-
-  it('moves an active session from web to native and back through the input registry', async () => {
-    const getUserMedia = vi.fn().mockResolvedValue(createMediaStream());
-    installWebAudioFakes(getUserMedia);
-    const commands: string[] = [];
-    const nativeAudioApiLoader: NativeAudioApiLoader = async () => ({
-      async invoke(command) {
-        commands.push(command);
-        return command === 'native_audio_available' ? true : undefined;
-      },
-      async listen() {
-        return () => {};
-      },
-    });
-    const selectedInputDeviceId = ref('');
-    const audioBackend = ref<AudioBackend>('web');
-    const inputs = useTunerInputSet({
-      nativeAudioApiLoader,
-      selectedInputDeviceId,
-      syntheticFixture: null,
-    });
-    await inputs.native.refreshAvailability();
-    const session = useTunerSession({ audioBackend, inputs, selectedInputDeviceId });
-
-    await session.start();
-    expect(session.activeInputId.value).toBe('web');
-
-    await session.setAudioBackend('native');
-    expect(session.activeInputId.value).toBe('native');
-    expect(session.isListening.value).toBe(true);
-
-    await session.setAudioBackend('web');
-    expect(session.activeInputId.value).toBe('web');
-    expect(session.isListening.value).toBe(true);
-    expect(getUserMedia).toHaveBeenCalledTimes(2);
-    expect(commands).toEqual([
-      'native_audio_available',
-      'start_native_audio',
-      'stop_native_audio',
-    ]);
-
-    await session.stop();
-  });
 });
 
 function installWebAudioFakes(getUserMedia: ReturnType<typeof vi.fn>) {

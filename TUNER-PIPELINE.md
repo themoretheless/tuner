@@ -14,7 +14,7 @@ freq | raw_freq | confidence | rms | level | cents | note | target | in_tune | i
 
 `raw_freq` показывает оценку детектора до подавления, tracking и hold. `freq` содержит уже принятую и стабилизированную частоту, которую можно показывать пользователю.
 
-`pipeline` содержит ограниченный operational summary: не более двух временных кандидатов, выбранный кандидат, arbitration/decision enums, состояния fixed/adaptive gate, tracker/hold, sample rate/размер окна, noise floor/текущий gate threshold и фиксированные массивы из пяти harmonic strengths и трёх octave scores. Форма одинакова для WASM, native и TypeScript fallback и нужна live-визуализации без повторного запуска DSP в Vue.
+`pipeline` содержит ограниченный operational summary: не более двух временных кандидатов, выбранный кандидат, arbitration/decision enums, состояния fixed/adaptive gate, tracker/hold, sample rate/размер окна, noise floor/текущий gate threshold и фиксированные массивы из пяти harmonic strengths и трёх octave scores. Rust-форма одинакова для browser WASM и native egui; TypeScript fallback формирует тот же bounded contract с явно degraded semantics.
 
 Диагностический UI хранит максимум 120 таких кадров. Из них строятся uncertainty band, decision timeline, noise map, freeze/replay, наблюдаемый latency budget и baseline A/B. Virtual bypass пересчитывает только выводимые из snapshot последствия; если upstream-блок не запускался или не сохранено pre-rescue evidence, UI честно требует audio replay.
 
@@ -27,6 +27,7 @@ flowchart LR
     GUM --> WebSource["MediaStreamAudioSourceNode"]
     WebSource --> Analyser["AnalyserNode<br/>8192 latest samples"]
     Analyser --> WebLoop["usePitchLoop<br/>requestAnimationFrame + 33 ms gate"]
+    File["File/WAV input port"] --> WebLoop
     Synthetic["Synthetic input port"] --> WebLoop
     WebLoop --> QuietGuard["Main-thread RMS / peak quiet guard"]
     QuietGuard --> Worker["pitchWorker<br/>one request in flight"]
@@ -36,31 +37,19 @@ flowchart LR
     WebEngine --> WebFrame["Resolved web DetectionFrame"]
   end
 
-  subgraph TAURI["Tauri native input"]
-    NativeMic["Microphone"] --> Cpal["cpal realtime callback"]
-    Cpal --> Pool["4 recycled chunks<br/>mono downmix + try_send"]
-    Pool --> Ring["SampleWindow ring<br/>8192 latest samples"]
-    Ring --> NativeCadence["Worker cadence<br/>about 33 ms"]
-    NativeCadence --> NativeProcessor["NativeFrameProcessor"]
-    NativeProcessor --> NativeEngine["Native TunerEngine instance"]
-    NativeEngine --> NativeEvent["Tauri native-audio-frame event"]
-  end
-
   subgraph EGUI["egui native input"]
-    EguiMic["Microphone"] --> EguiCpal["shared audio-input / cpal"]
-    EguiCpal --> EguiEngine["egui TunerEngine instance"]
+    EguiMic["Microphone"] --> EguiCpal["cpal callback<br/>mono downmix + bounded queue"]
+    EguiCpal --> EguiWindow["audio-input worker<br/>8192 samples / about 33 ms"]
+    EguiWindow --> EguiEngine["native TunerEngine instance"]
     EguiEngine --> EguiState["egui state snapshot"]
-    EguiState --> EguiUi["egui tuner UI"]
+    EguiState --> EguiUi["eframe/egui UI<br/>wgpu renderer"]
   end
 
   Core["Shared pitch-core TunerEngine implementation"]
   WebEngine -. "uses" .-> Core
-  NativeEngine -. "uses" .-> Core
   EguiEngine -. "uses" .-> Core
   TsDetector --> TsFrame["Unresolved DetectionFrame"]
-  NativeEvent --> NativePort["DetectionFrameInputPort"]
-  NativePort --> Session["useTunerSession"]
-  WebFrame --> Session
+  WebFrame --> Session["useTunerSession"]
   TsFrame --> Session
   Session --> ResolveFallback{"Frame already resolved?"}
   ResolveFallback -- "yes" --> ViewModel["useTuner view model"]
@@ -69,21 +58,21 @@ flowchart LR
   ViewModel --> UI["Tuner UI + history + practice + analysis"]
 
   Context["FrameContext<br/>A4, targets, selected string, thresholds"] --> WebEngine
-  Context --> NativeEngine
+  EguiContext["Native A4 + tuning + visualization config"] --> EguiEngine
   Context --> WebResolution
   Range["Detection range"] --> WebEngine
-  Range --> NativeEngine
+  Range --> EguiEngine
   Range --> TsDetector
 ```
 
 ### Что важно в этой схеме
 
-- Web microphone и synthetic input поставляют сырые `Float32Array` кадры. Их pitch detection запускается через `usePitchLoop`.
-- Tauri native port поставляет уже готовый `DetectionFrame`; web worker для него не используется.
-- WASM и native используют один Rust `TunerEngine`. TypeScript остается аварийным деградированным fallback: только YIN (общие parity-фикстуры с Rust), собственный config fingerprint, видимый баннер в тюнере. Оба fallback-окружения собирают кадр одним модулем `web/src/application/services/fallbackFrameAssembly.ts`.
+- Web microphone, file и synthetic input поставляют сырые `Float32Array` кадры. Их pitch detection запускается через `usePitchLoop`.
+- Native egui имеет собственный cpal/audio-input pipeline и не входит в Vue session. Он линкует Rust `TunerEngine` напрямую и передаёт его `DetectionFrame` в egui view state.
+- Browser WASM и native egui используют один Rust `TunerEngine`. TypeScript остается аварийным деградированным web fallback: только YIN (общие parity-фикстуры с Rust), собственный config fingerprint и видимый баннер в тюнере.
 - TS-резолюция ноты (`tuningDetectionMachine`) выполняется только для unresolved-кадров; пока кадры приходят resolved из Rust, машина простаивает и сбрасывается на переходах resolved/unresolved.
 - UI не должен знать, как получены samples. Он получает один frame contract и reactive view-model.
-- Web и native анализируют окна одной длины: 8192 samples. Раньше native использовал 4096, что оставляло YIN около двух периодов сравнения на басовой E1 и делало низкочастотную устойчивость платформ неэквивалентной.
+- Web и native egui анализируют окна одной длины: 8192 samples.
 
 ### Offline quality и replay pipeline
 
@@ -106,15 +95,15 @@ flowchart LR
 
   Wav --> Trace["trace CLI"]
   Trace --> Envelope["Sample-indexed replay JSON<br/>config, candidates, gates, decisions"]
-  Browser["Hidden browser debug capture"] --> Sidecar["WebM + JSON sidecar<br/>settings and live frame snapshots"]
-  Sidecar -. "пока нет exact PCM/timebase" .-> Envelope
+  Browser["Browser debug capture"] --> ExactCapture["Shared mono PCM16 WAV + JSON v2<br/>sample timebase + SHA-256"]
+  ExactCapture --> Envelope
 ```
 
 - `rebuild.sh` отвечает только за получение, преобразование и проверку байтов; он не знает DSP.
 - Corpus manifest связывает audio provenance, ожидаемый музыкальный target, размеченные фазы и quality policy.
 - Quality runner оценивает последовательность публичных кадров и не импортирует detector internals или UI.
 - Trace runner сохраняет решения core по `windowEndSample`; его можно сравнивать без зависимости от wall clock.
-- Browser sidecar полезен для полевого отчёта, но сжатый параллельный WebM нельзя считать точным источником тех же samples. Следующая граница должна писать PCM и единый sample timebase.
+- Browser debug capture пишет тот же mono PCM, который видит AudioWorklet, и связывает WAV с JSON v2 через sample-indexed timebase и SHA-256.
 
 ## 2. Процесс определения внутри `TunerEngine`
 
@@ -257,8 +246,8 @@ PreprocessedFrame = {
 | B02 | Browser window | audio stream | latest 8192 mono samples | `AnalyserNode` in `useAudioInput.ts` |
 | B03 | Browser scheduler | frame source, wall clock | at most one worker request per 33 ms | `web/src/composables/usePitchLoop.ts` |
 | B04 | Worker transport | transferable sample buffer + context | backend result + recycled buffer | `web/src/workers/pitchWorker.ts` |
-| B05 | Native capture | cpal interleaved samples | recycled mono chunks | `audio-input/src/lib.rs` |
-| B06 | Native window/scheduler | chunks | latest 8192-sample window about every 33 ms | `audio-input/src/lib.rs` |
+| B05 | egui native capture | cpal interleaved samples | recycled mono chunks | `audio-input/src/lib.rs` |
+| B06 | egui native window/scheduler | chunks | latest 8192-sample window about every 33 ms | `audio-input/src/lib.rs` |
 | B07a | Raw level | audio window | raw RMS + display level | `pitch-core/src/signal.rs` |
 | B07b | Gate statistics | audio window | centered RMS + peak | `pitch-core/src/signal.rs` |
 | B07c | Detector centering | audio window | centered scratch + repeated RMS/peak | `pitch-core/src/dsp/detector.rs` |
@@ -271,7 +260,7 @@ PreprocessedFrame = {
 | B13 | Temporal tracker | accepted estimates + prior | stable tracked pitch | `pitch-core/src/tracking.rs` |
 | B14 | Resolution | stable frequency + `FrameContext` | note, target, cents, `in_tune` | `pitch-core/src/resolution.rs` |
 | B15 | Orchestration | all blocks above | canonical `DetectionFrame` | `pitch-core/src/engine.rs`, `frames.rs` |
-| B16 | Session routing | raw-frame or resolved-frame input port | active session frame | `web/src/composables/useTunerSession.ts` |
+| B16 | Web session routing | web/file/synthetic audio-frame input | active session frame | `web/src/composables/useTunerSession.ts` |
 | B17 | Presentation fallback | unresolved TS frame + tuning state | resolved web frame | `web/src/adapters/vue/controllers/detectionController.ts` |
 
 ## 4. Временная модель и ожидаемая задержка
@@ -279,7 +268,7 @@ PreprocessedFrame = {
 | Участок | Текущее значение | При 48 kHz | При 44.1 kHz |
 | --- | ---: | ---: | ---: |
 | Web analysis window | 8192 samples | 170.7 ms | 185.8 ms |
-| Native analysis window | 8192 samples | 170.7 ms | 185.8 ms |
+| Native egui analysis window | 8192 samples | 170.7 ms | 185.8 ms |
 | Номинальный detection cadence | 33 ms | около 30 fps | около 30 fps |
 | Acquire новой стабильной частоты | 2 frames | около 33-66 ms после появления подходящего окна | то же |
 | Подтверждение octave correction | 2 frames | около 33 ms дополнительного ожидания | то же |
@@ -288,7 +277,7 @@ PreprocessedFrame = {
 | Detector dropout hold | до 6 frames | около 198 ms | около 198 ms |
 | Web quiet display hold | 8 animation frames | около 133 ms при 60 Hz | зависит от refresh rate |
 
-Analysis window является ретроспективным интервалом, а frame rules частично перекрываются. Эти числа нельзя просто сложить и назвать latency. Фактическую задержку нужно измерять от sample index onset до первого стабильного `DetectionFrame`, отдельно для web, Tauri и egui.
+Analysis window является ретроспективным интервалом, а frame rules частично перекрываются. Эти числа нельзя просто сложить и назвать latency. Фактическую задержку нужно измерять от sample index onset до первого стабильного `DetectionFrame`, отдельно для web и native egui.
 
 ## 5. Где искать ошибку `E2 около 82 Hz -> E3 около 165 Hz`
 
@@ -308,7 +297,7 @@ flowchart LR
 - `raw_freq ~= 82`, `freq ~= 165`: detector уже вернул правильную октаву; значение изменили target-guided tracking, старый track или hold.
 - `raw_freq == null`, `freq ~= 165`: detector не дал оценку, а pipeline временно показывает held reading предыдущего track.
 - `freq ~= 82`, но note/cents показывают E3: detector исправен, ошибка находится в `FrameContext` или `FrameResolver`.
-- Web ошибается, native нет: сначала сравниваются sample rate, window size, браузерные audio settings и WASM/fallback semantics.
+- Web ошибается, egui нет: сначала сравниваются sample rate, window size, браузерные audio settings и WASM/fallback semantics.
 - Оба backend-а ошибаются одинаково: нужен replay одного и того же WAV через `TunerEngine` с trace каждого блока.
 
 Текущий bounded live `PipelineTelemetry` уже показывает YIN/MPM, выбранный результат, gate decision, tracker/hold, noise threshold, компактное harmonic/octave evidence и причину публикации. Rust replay дополнительно фиксирует `windowEndSample`, однако постоянному live contract всё ещё не хватает точной tracker phase и общей capture/process/publish sample timebase; внутренние YIN/NSDF массивы тоже не сохраняются. Эти тяжёлые данные следует отдавать отдельным opt-in diagnostics frame, а не добавлять в постоянный UI contract.
@@ -374,19 +363,19 @@ DiagnosticsFrame = optional evidence and decision trace
 5. `TemporalPitchTracker` хранит время в samples/milliseconds, поэтому одинаково работает при 30, 60 или пропущенных frames.
 6. `NoteResolver` не видит audio buffer. Его можно тестировать обычными таблицами частот.
 7. `DetectionFrame` остается стабильным контрактом продукта. Подробная DSP-трасса живет отдельно и включается только для диагностики.
-8. Browser, Tauri, egui, synthetic и будущий WAV adapter проходят одинаковые contract и replay tests.
+8. Browser, egui, synthetic и file/WAV paths проходят сопоставимые core contract и replay tests на границах, которые они действительно делят.
 
 ## 7. Рекомендуемый порядок выделения блоков
 
 1. Добавить `AudioChunk.start_sample` и измерение end-to-end latency без изменения detector logic.
-2. Вынести единый `WindowPlanner` и сделать web/native window/cadence явно конфигурируемыми.
+2. Вынести единый `WindowPlanner` и сделать web/egui window/cadence явно конфигурируемыми.
 3. Расширить уже существующий replay envelope до opt-in `DiagnosticsFrame` с YIN/NSDF internals и общей capture/process/publish timebase.
 4. Представить результаты детекторов как список `PitchCandidate`, сохранив текущую arbitration policy.
 5. Перевести tracker, gate, hold и octave confirmation с количества frames на elapsed sample time.
 6. Добавить явный `SignalPhaseClassifier` и разные policies для attack/sustain/release.
 7. Ввести multi-candidate temporal tracking, затем проверить его на существующем real-WAV corpus и фиксированной SNR/reverb матрице.
 8. После benchmark заменить target-guided harmonic heuristics на доказанно более точный evidence model.
-9. Сделано: native окно унифицировано с web (8192 samples, `audio-input/src/lib.rs`).
+9. Сделано: native egui окно унифицировано с web (8192 samples, `audio-input/src/lib.rs`).
 10. Зафиксировать parity tests: один WAV должен давать сопоставимые candidates, frequency и transition timing во всех backend-ах.
 
 ## 8. Карта исходников
@@ -397,8 +386,8 @@ DiagnosticsFrame = optional evidence and decision trace
 - WASM adapter: [`web/src/workers/pitchCoreAdapter.ts`](web/src/workers/pitchCoreAdapter.ts)
 - Input routing: [`web/src/composables/useTunerSession.ts`](web/src/composables/useTunerSession.ts)
 - Web composition: [`web/src/composables/useTuner.ts`](web/src/composables/useTuner.ts)
-- Native capture/window: [`audio-input/src/lib.rs`](audio-input/src/lib.rs)
-- Tauri stream/frame adapters: [`desktop/src-tauri/src/native_audio/`](desktop/src-tauri/src/native_audio/)
+- Native egui capture/window: [`audio-input/src/lib.rs`](audio-input/src/lib.rs)
+- Native egui adapter and view state: [`egui/src/audio.rs`](egui/src/audio.rs), [`egui/src/state.rs`](egui/src/state.rs)
 - Engine orchestration: [`pitch-core/src/engine.rs`](pitch-core/src/engine.rs)
 - Hybrid detector: [`pitch-core/src/dsp/detector.rs`](pitch-core/src/dsp/detector.rs)
 - Candidate arbitration: [`pitch-core/src/dsp/candidates.rs`](pitch-core/src/dsp/candidates.rs)
@@ -412,4 +401,4 @@ DiagnosticsFrame = optional evidence and decision trace
 - Corpus runner and manifest boundary: [`pitch-core/examples/quality/`](pitch-core/examples/quality/)
 - Sample-indexed trace envelope: [`pitch-core/examples/trace.rs`](pitch-core/examples/trace.rs), [`pitch-core/examples/support/trace_report.rs`](pitch-core/examples/support/trace_report.rs)
 - Licensed corpus and deterministic rebuild: [`fixtures/corpus/`](fixtures/corpus/)
-- Browser capture sidecar: [`web/src/utils/debugCaptureEnvelope.ts`](web/src/utils/debugCaptureEnvelope.ts)
+- Browser exact-capture envelope: [`web/src/utils/debugCaptureEnvelope.ts`](web/src/utils/debugCaptureEnvelope.ts)

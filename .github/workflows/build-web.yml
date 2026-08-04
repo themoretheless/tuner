@@ -34,8 +34,6 @@ jobs:
           const expected = JSON.parse(readFileSync('version.json', 'utf8')).version;
           const jsonFiles = [
             'web/package.json',
-            'desktop/package.json',
-            'desktop/src-tauri/tauri.conf.json',
           ];
           const cargoFiles = [
             'Cargo.toml',

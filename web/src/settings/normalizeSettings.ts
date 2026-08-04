@@ -16,7 +16,6 @@ import {
 } from '../utils/notes';
 import { createDefaultPipelineConfig, normalizePipelineConfig } from '../domain/pipelineConfig';
 import type {
-  AudioBackend,
   DisplayMode,
   LayoutMode,
   PersistedSettings,
@@ -34,7 +33,6 @@ export function createDefaultSettings(): PersistedSettings {
   return {
     a4: 440,
     activeInstrument: 'guitar',
-    audioBackend: 'web',
     capo: 0,
     chromatic: false,
     customInstruments: [],
@@ -112,7 +110,6 @@ export function normalizePersistedSettings(
   return {
     a4: normalizeInteger(value.a4, 420, 460, defaults.a4),
     activeInstrument,
-    audioBackend: normalizeAudioBackend(value.audioBackend),
     capo: normalizeInteger(value.capo, 0, 12, defaults.capo),
     chromatic: normalizeBoolean(value.chromatic, defaults.chromatic),
     customInstruments,
@@ -192,10 +189,6 @@ function normalizeOffsets(value: unknown): number[] {
 
 export function normalizeDisplayMode(value: unknown): DisplayMode {
   return value === 'needle' || value === 'strobe' ? value : 'gauge';
-}
-
-export function normalizeAudioBackend(value: unknown): AudioBackend {
-  return value === 'native' ? 'native' : 'web';
 }
 
 export function normalizeThemeMode(value: unknown): ThemeMode {

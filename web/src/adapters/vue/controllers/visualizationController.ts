@@ -9,7 +9,6 @@ export interface VisualizationControllerDependencies {
   showSpectrogram: Readonly<Ref<boolean>>;
   showSpectrum: Readonly<Ref<boolean>>;
   showWaveform: Readonly<Ref<boolean>>;
-  usingNativeAudio: Readonly<Ref<boolean>>;
   usingSyntheticAudio: Readonly<Ref<boolean>>;
 }
 
@@ -17,7 +16,6 @@ export function useVisualizationController(dependencies: VisualizationController
   const featureActive = ref(false);
   const active = computed(() => (
     featureActive.value
-    && !dependencies.usingNativeAudio.value
     && !dependencies.usingSyntheticAudio.value
     && dependencies.isWebAudioListening.value
     && (

@@ -19,6 +19,7 @@ const { t } = useL10n();
       <EarTrainingPanel
         :accuracy="practice.earTrainingAccuracy"
         :attempts="practice.earTrainingAttempts"
+        :can-mark="practice.earTrainingCanMark"
         :correct="practice.earTrainingCorrect"
         :get-note-display="practice.getNoteDisplay"
         :revealed="practice.earTrainingRevealed"

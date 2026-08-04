@@ -74,14 +74,7 @@ jobs:
       always() &&
       (needs.release-site.result == 'success' || needs.build.result == 'success') &&
       (needs.release-site.outputs.found == 'true' || needs.build.result == 'success')
-    runs-on: ubuntu-latest
     permissions:
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy production Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+    uses: themoretheless/.github/.github/workflows/deploy-pages.yml@v1

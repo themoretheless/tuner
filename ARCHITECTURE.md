@@ -1,34 +1,40 @@
 # Guitar Tuner - Architecture & Deep Refactoring Plan
 
-**Date:** 2026-07-21
+**Date:** 2026-08-03
 **Perspective:** Designing from scratch with heavy focus on **modularity**, **code decomposition**, and **loose coupling**.
 
 ## Current State Assessment (Honest Critique)
 
-The project now has three working shells (Vue web, Tauri and egui), a shared Rust pitch core and a shared native input adapter. This section describes the code after three implementation passes and a final review, not the older pre-refactor shape.
+The project ships two independent shells: a Vue web/PWA client and a native
+egui/eframe desktop client. Both use the shared Rust `pitch-core`; the browser
+loads it as WASM, while the desktop binary links it directly. Native packaging
+assets live in `assets/icons/`; there is no third desktop shell.
+
+References to the former third shell in dated external audit files are historical
+evidence and do not describe the current shipped topology.
 
 Strengths:
 - `pitch-core` is split into domain, detector implementations, signal, smoother, spectrum, frames, engine and WASM modules; `lib.rs` is a small export surface.
-- Tauri and egui share `audio-input`: cpal callbacks only downmix into bounded recycled chunks; worker threads own DSP and UI/event delivery.
-- Web/native/synthetic/file inputs implement one discriminated TypeScript port and are selected through a capability-based registry; exact PCM capture is an optional segregated capability.
+- Native egui uses `audio-input`: cpal callbacks only downmix into bounded recycled chunks; a worker thread owns DSP and view-state delivery.
+- Web/synthetic/file inputs implement one discriminated TypeScript port and are selected through a capability-based registry; exact PCM capture is an optional segregated capability.
 - Web pitch detection uses one full-frame pitch-core/WASM `TunerProcessor` per worker, with an explicit tested TS fallback.
 - Worker frames declare `resolved | unresolved` semantics, so presentation depends on capability rather than a concrete backend name.
 - Native Rust, browser WASM and TS fallback share one B0-E5 fixture manifest with explicit cents and normalized-periodicity confidence budgets.
 - `DetectionFrame` carries bounded decision evidence: composite confidence, five-window uncertainty, pipeline-config fingerprint and optional competing-string diagnostics. The web fallback implements the same contract without importing Vue.
 - `registry/music-registry.json` generates Rust tunings and feeds web domain data; custom-library CRUD has its own injected controller.
-- Session lifecycle is an explicit serialized state machine with cancellation, backend switching and runtime-failure recovery tests.
+- Web session lifecycle is an explicit serialized state machine with cancellation and runtime-failure recovery tests; native recovery belongs to `audio-input`.
 - Vue is a small shell over five feature views and restricted feature ports; optional views are lazy chunks.
 - Settings use a complete versioned profile with strict normalization, relational validation, legacy fallback and serialized persistence.
-- Offline web build, responsive themes/canvases and full native Tauri bundles are verified.
+- Offline web build, responsive themes/canvases and unsigned native egui packages for Windows, macOS and Linux are built by CI.
 
 Remaining weaknesses:
-- Web workflow ownership is split across focused controllers, tuning model/commands/detection and feature-specific ports. The composition root now creates settings, output audio and a typed four-adapter `TunerInputSet`; `useTunerSession` consumes only that port contract. Lifecycle preserves typed start/stop/runtime failures and retryable failed teardowns. The next coupling hotspot is file/source workflow ownership inside `useTunerSession` plus translation of typed failures into actionable diagnostics.
-- Primary browser/native frames share Rust detector, smoothing and resolver ownership; TS fallback confidence and smoothing are fixture/trace-gated. Power flags still degrade explicitly in the fallback.
+- Web workflow ownership is split across focused controllers, tuning model/commands/detection and feature-specific ports. The composition root now creates settings, output audio and a typed three-adapter `TunerInputSet`; `useTunerSession` consumes only that port contract. Lifecycle preserves typed start/stop/runtime failures and retryable failed teardowns. The next coupling hotspot is file/source workflow ownership inside `useTunerSession` plus translation of typed failures into actionable diagnostics.
+- Primary browser WASM and native egui frames share Rust detector, smoothing and resolver ownership; TS fallback confidence and smoothing are fixture/trace-gated. Power flags still degrade explicitly in the fallback.
 - Tuning data and note/cents primitives have canonical registry/expression sources; checked-in Rust and TypeScript outputs are generated and freshness-gated.
 - Interactive PCM/float WAV input is implemented without browser resampling and feeds sample-indexed overlapping windows through the same session pipeline; permission denial, device loss/restart and transient device changes are browser-tested.
 - Enabled Rust spectrum output still becomes an owned `Vec` per frame.
-- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency. A licensed 19-WAV corpus, blocking temporal quality gate, sample-indexed Rust replay v2, exact shared browser PCM/WAV+JSON v2 capture and automated native/WASM/Tauri/egui replay parity now exist; mic self-test, typed errors, benchmarks, noise/SNR matrices, soak tests and release hardening remain incomplete.
-- egui persistence and the egui WASM singleton are still separate platform-specific designs.
+- In-app pipeline diagnostics now cover bounded frame evidence, freeze/replay, A/B and observed latency. A licensed 19-WAV corpus, blocking temporal quality gate, sample-indexed Rust replay v2, exact shared browser PCM/WAV+JSON v2 capture and automated native/WASM/egui replay parity now exist; mic self-test, typed errors, benchmarks, soak tests and release hardening remain incomplete.
+- Web and egui intentionally retain separate platform adapters and presentation state; only domain/DSP contracts and generated data are shared.
 
 See the canonical current open-problems extract in [recommendation.md](recommendation.md) and the unified ranked Top 500 plus historical grounded audit in [TOP-500-backlog.md](TOP-500-backlog.md).
 
@@ -36,7 +42,7 @@ External evidence from 100 pitch/MIR/realtime-audio repositories, primary papers
 
 The broader competitor pass in [RESEARCH-473-MUSIC-REPOSITORIES.md](RESEARCH-473-MUSIC-REPOSITORIES.md) screens 473 unique music/instrument repositories, deeply reads 139 README files and reviews 10 source trees. Its final 50 `G#` proposals are a synthesis layer, not 50 new canonical defects. Existing `M#`/`X#`/`R#` links must be strengthened instead of duplicated.
 
-The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/native/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
+The executable tuner path is decomposed block by block in [TUNER-PIPELINE.md](TUNER-PIPELINE.md). That document distinguishes the current web/egui data flow from the target sample-clocked, multi-candidate architecture and is the canonical diagram for pitch-pipeline changes.
 
 The current list contains 290 open/partial `R#` findings and a 104-item closure registry: 101/79 in the original range and 189/25 in the independent post-refactor pass. The Top 500 remains a full idea/risk register; done rows retain dated `[DONE]` markers for traceability.
 
@@ -47,13 +53,12 @@ flowchart LR
   WebMic["Web Audio port"] --> WebSession["SessionLifecycle + input-port registry"]
   FileInput["WAV file port"] --> WebSession
   Synthetic["Synthetic port"] --> WebSession
-  NativePort["Tauri detection-frame port"] --> WebSession
   WebSession --> WasmWorker["Full-frame pitch-core/WASM TunerProcessor + TS fallback"]
   Cpal["cpal devices"] --> AudioInput["audio-input bounded queue"]
   AudioInput --> Core["pitch-core detector + engine"]
-  Core --> WasmWorker
-  Core --> Tauri["Tauri frame/event adapter"]
-  Core --> Egui["egui state + painters"]
+  Core -. "compiled to WASM" .-> WasmWorker
+  Core --> EguiState["egui view-state snapshot"]
+  EguiState --> Egui["eframe/egui UI via wgpu"]
   Registry["workspace music registry"] --> Core
   Registry --> GeneratedMath["generated Rust/TS note math"]
   FormulaAst["language-neutral formula AST"] --> GeneratedMath
@@ -62,9 +67,7 @@ flowchart LR
   Fixtures["shared pitch fixtures"] --> Core
   Fixtures --> WasmWorker
   WasmWorker --> Session["Tuner session"]
-  Tauri --> Session
   WasmWorker --> Telemetry["bounded PipelineTelemetry"]
-  Tauri --> Telemetry
   Telemetry --> Diagnostics["timeline + spectral/noise + inspector + A/B"]
   Session --> VueAdapters["Vue reactive controllers"]
   Tuning --> UseCases["Framework-independent use cases"]
@@ -73,28 +76,28 @@ flowchart LR
   Composition --> InputSet["TunerInputSet adapter factory"]
   InputSet --> WebSession
   Composition --> FrameContext["resolved FrameContext value"]
-  FrameContext --> Tauri
+  FrameContext --> WasmWorker
   Profile["UserProfileV1 + injected storage adapter"] --> UseCases
   OutputPort["AudioOutputPort + Web Audio mixer"] --> VueAdapters
   Composition --> Ports["Five segregated feature ports + shell port"]
   Ports --> Views["Tuner / Library / Practice / Analysis / Algorithm"]
 ```
 
-## Resolved Native Frame Boundary
+## Native egui Frame Boundary
 
-The native path now separates configuration from streaming data:
+The native desktop path is independent from the Vue session:
 
-1. The web music domain resolves A4, temperament, transpose/capo, sweetening and selected-string choices into plain note targets.
-2. `FrameContext` carries only values: display targets, tuning targets, selected/idle targets and in-tune thresholds. Tauri does not import or know Vue settings concepts.
-3. Tauri validates and caps the payload, stores it with a revision, and clones target arrays only when that revision changes. The audio worker checks the revision before updating its processor.
-4. `pitch-core::FrameResolver` owns closest-target selection, note display, cents and 5/7-cent hysteresis; `TunerEngine` remains responsible for detector/smoother/spectrum orchestration.
-5. Tauri emits one canonical `DetectionFrame`; Vue uses that native frame directly. Its fixed-size `PipelineTelemetry` summary carries two candidates, decision/gate state, sample/window metadata, noise threshold and only five harmonic plus three octave strengths. Vue stores at most 120 cloned samples for timeline/freeze/A-B and never receives FFT buffers through this path. Internal YIN/NSDF arrays, tracker phase and sample timestamps remain a separate future opt-in trace. The removed top-level `frequency` alias cannot silently revive because Rust serialization and TypeScript normalization both have contract tests.
+1. The eframe `App` owns native UI settings such as A4, tuning, selected input device and enabled visualizations.
+2. `AudioManager` opens `audio-input::SupervisedInputStream`; the cpal callback only downmixes into a bounded recycled queue and never runs DSP.
+3. The processor thread feeds 8192-sample windows to a native `pitch_core::TunerEngine`. `FrameResolver` owns note/target/cents/in-tune resolution, while the engine owns detector, smoothing and optional spectrum work.
+4. Each canonical `DetectionFrame` is reduced to an `Arc`-backed `TunerViewState`; egui painters consume that snapshot and eframe renders it through wgpu.
+5. No native frame crosses into Vue and no browser API is linked into the desktop binary. Cross-client parity is tested at shared core/frame boundaries instead of through a UI bridge.
 
 ## Pipeline Diagnostics Boundary
 
 The Algorithm view keeps collection, derivation and rendering separate:
 
-- `pitch-core::PipelineTelemetry` owns measured, fixed-size backend evidence; native and WASM adapters preserve the same meanings.
+- `pitch-core::PipelineTelemetry` owns measured, fixed-size backend evidence; the WASM export preserves those meanings and egui consumes the native `DetectionFrame` directly.
 - `pitch-core/src/confidence.rs` combines periodicity, detector agreement, five overlapping-window observations and signal/noise evidence. It changes the displayed confidence and uncertainty, not detector acceptance policy.
 - `web/src/domain/pipelineDiagnostics.ts` contains pure uncertainty, octave, comparison and virtual-bypass models. Unsupported counterfactuals say that replay is required instead of inventing data.
 - `web/src/domain/audioInputDiagnostics.ts` normalizes effective microphone processing and sample rates behind the optional `DiagnosableAudioInputPort`; session and views do not depend on `MediaStreamTrack`.
@@ -106,13 +109,13 @@ This is intentionally operational observability, not a full DSP trace. It adds n
 
 The intonation workflow follows the same split: `domain/intonationSetup.ts` owns cents math and saddle direction, while `IntonationSetupPanel.vue` only captures three measurements and renders guidance. It does not mutate tuning targets or detector state.
 
-This shape deliberately sends resolved targets instead of teaching Tauri about every custom temperament/profile schema. It keeps the platform adapter weakly coupled to product settings; generated note math now gives both sides the same primitives without making synchronous UI startup depend on WASM availability.
+This shape keeps platform adapters weakly coupled: Vue resolves browser product settings into plain `FrameContext` values, while egui configures the native engine from its own smaller settings surface. Generated note math gives both clients the same primitives without making native startup depend on WASM or browser availability.
 
 ## Competitive Research Boundary
 
 The 473-repository pass changes the architecture roadmap in five concrete ways:
 
-1. **Accuracy work starts with evidence.** `pitch-core::quality` owns pure temporal failure metrics; the licensed 19-WAV corpus has verified provenance/checksums, blocking per-scenario thresholds and a CI JSON artifact. Rust replay v2 and browser PCM/WAV+JSON v2 captures are sample-indexed; one licensed contract now compares native Rust and browser WASM frame by frame and verifies Tauri/egui projections. Top-K candidates and phase-aware policy remain core contracts, not Vue experiments.
+1. **Accuracy work starts with evidence.** `pitch-core::quality` owns pure temporal failure metrics; the licensed 19-WAV corpus has verified provenance/checksums, blocking per-scenario thresholds and a CI JSON artifact. Rust replay v2 and browser PCM/WAV+JSON v2 captures are sample-indexed; one licensed contract compares native Rust and browser WASM frame by frame and verifies the egui view projection. Top-K candidates and phase-aware policy remain core contracts, not Vue experiments.
 2. **Musical formats are adapters.** Scala `.scl`, `.kbm`, AnaMark `.tun`, MIDI and MusicXML parsers belong behind explicit format ports. They validate into versioned domain values and commit only after preview.
 3. **Practice gets its own application layer.** Exercise generation, playback, evaluation, scheduling and persistence must not expand `useTuner.ts`; Practice consumes narrow ports like every other feature.
 4. **Output audio has one owner.** Reference tones, ear training and metronome need a shared resumed `AudioContext`, mixer and cancellable playback scopes. The metronome clock is audio/sample time, never the paint or `setInterval` clock.
@@ -189,8 +192,8 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 **Critique:** WASM build is ad-hoc. Desktop vs web have different entry points for same logic. Hard to ship consistent core.
 **From scratch:** 
 - DSP crate built to WASM artifact once.
-- Platform shells (web, egui, tauri) depend on it.
-- Clear separation in CI: build-core, build-web, build-egui, build-tauri.
+- **Historical proposal (superseded):** three platform shells were once listed.
+- **Historical proposal (superseded):** CI once included an additional desktop job. Current CI builds only web and egui clients.
 
 ### 10. Maintainability & Onboarding Lead
 **Critique:** New developer opens `useTuner.ts` + `main.rs` and is overwhelmed. No clear "where does X live?".
@@ -204,15 +207,15 @@ Use signals / fine-grained reactivity. Avoid god return objects.
 
 | Critic | 2026-07-11 response | Remaining challenge |
 | --- | --- | --- |
-| Systems | Session, focused controllers, injected settings/input/output and segregated feature ports now have owners; lifecycle failures cross the native adapter boundary | Split file/source workflow and translate typed failures into user-facing diagnostics |
+| Systems | Session, focused controllers, injected settings/input/output and segregated feature ports now have owners; lifecycle failures cross the web input-port boundary | Split file/source workflow and translate typed failures into user-facing diagnostics |
 | DSP/audio | Detector modules/trait, full-frame web WASM, optional spectrum and reusable buffers shipped | Real-audio fixtures and benchmarks |
 | Vue | Five feature views, tuning model/commands/detection and plain visual frames shipped | Keep command/query ports narrow as features grow |
 | Rust library | `lib.rs` is a small re-export layer over focused modules | Consider crate split only if module boundaries prove insufficient |
-| Portability | Native and browser primary paths share core/frame/context ownership; fallback confidence is fixture-gated | File input and fallback power flags remain |
+| Portability | Native egui and browser primary paths share core/frame ownership; fallback confidence is fixture-gated | Keep shell-specific audio/session adapters narrow |
 | QA | Synthetic, lifecycle, profile, controller, architecture, core, real-WAV, cross-backend replay and input-recovery E2E tests shipped | SNR, typed diagnostic, benchmark and soak suites |
 | Performance | Native callback DSP/allocations removed; hidden FFT and Analysis capture are feature-gated | Enabled spectrum frame still owns a Vec; add benchmarks/soak evidence |
 | Product design | Task-based views, explicit states, themes and responsive layout shipped | Diagnostics and automated visual/a11y coverage |
-| Build/release | WASM, production web and full Tauri bundle verified | Pin tooling, CSP, signing and checksums |
+| Build/release | WASM, production web and unsigned egui packages are built in separate jobs | Add native signing/notarization and checksums |
 | Onboarding | README reading order and focused native/core modules shipped | Add crate/module READMEs as APIs stabilize |
 
 ## Target Architecture (From-Scratch Design)
@@ -231,14 +234,14 @@ audio-input/
 
 web/src/
   domain + settings -> session/application controllers -> feature ports -> views
-  platform adapters: Web Audio / native Tauri / synthetic / service worker
-
-desktop/src-tauri/
-  commands -> native stream adapter -> shared audio-input + pitch-core -> events
+  platform adapters: Web Audio / file / synthetic / service worker
 
 egui/src/
   app commands -> audio manager -> shared audio-input + pitch-core
   state snapshots -> visualization painters
+
+assets/icons/
+  native release icons for macOS, Windows and Linux packages
 ```
 
 **Key rules:**
@@ -258,7 +261,7 @@ egui/src/
 - Gate visualizers behind `isListening` in App.vue (fix "big black boxes").
 - Extract magic numbers into config structs.
 
-**Status 2026-07-12: done.** pitch-core, Tauri, egui and primary browser WASM use `DetectionFrame`; Vue visualizers consume plain frames and heavy views are gated/lazy. `FrameResolver` owns target/cents/hysteresis, native and browser processors consume active A4/temperament/tuning/selected-target context, and Vue trusts resolved primary frames.
+**Status 2026-08-04: done.** Native egui and primary browser WASM use the shared pitch-core `DetectionFrame`; Vue visualizers consume plain frames and heavy views are gated/lazy. `FrameResolver` owns target/cents/hysteresis, and both shipped clients consume the same musical context.
 
 ### Phase 1 — Strengthen the Core (highest value)
 - Split `pitch-core`:
@@ -276,7 +279,7 @@ egui/src/
 - Move all `AudioContext`, stream, device enum logic behind the trait.
 - Same for reference tone generation.
 
-**Status 2026-07-19: input boundary done, web output boundary done, cross-platform output partial.** `audio-input` is the shared Tauri/egui adapter with a bounded worker queue and all cpal sample formats. Web/native/synthetic/file inputs implement one discriminated TS port. Web reference/timed/metronome playback uses one injected `AudioOutputPort`, lazy resumed context, master mixer and cancellable scopes; its look-ahead scheduler follows `AudioContext.currentTime`. egui output still has a separate platform-specific owner.
+**Status 2026-08-04: done for the two-client topology.** `audio-input` is the native egui adapter with a bounded worker queue and all cpal sample formats. WebAudio/synthetic/file inputs implement the web TS port. Web reference/metronome playback uses an injected `AudioOutputPort`; egui owns its platform-specific output directly.
 
 ### Phase 3 — Decompose Web God Object
 - Split `useTuner.ts` → 
@@ -308,7 +311,7 @@ egui/src/
 - AudioWorklet sample timeline and exact capture for web. [done]
 - Better WASM packaging.
 
-**Status 2026-07-21: baseline extended.** `159` Vitest tests, `71` pitch-core all-feature tests, test-source typechecking, pure-use-case/Vue-adapter/output boundaries, Worker constructor/runtime/timeout degradation tests, lifecycle failure/retry, native runtime-error and retryable teardown tests, native/browser context tests, generated-source/property gates, eleven Playwright flows including licensed native/WASM replay, synthetic start/stop, view-scroll reset, permission denial, track loss/restart and transient device changes, workspace strict clippy, production web/WASM build, manual desktop/`390 px`/`320 px` visual QA and full Tauri `.app`/`.dmg` bundle pass. A checksummed licensed corpus of 19 guitar/bass/ukulele/violin/voice captures passes blocking acquisition/false-lock/switching/sustain/coverage thresholds and uploads a versioned CI report. Reacquisition metrics exist but still need multi-segment transition captures. Rust replay v2, interactive file/WAV input and exact shared browser PCM/WAV+JSON v2 capture are sample-indexed; bass E1, guitar E2 and violin A4 are parity-gated across native Rust/browser WASM with Tauri-wire and egui-view projections. Remaining: SNR/noise/reverb scenarios, cross-platform typed diagnostics, benchmark/soak suites, broader visual regression, DSP fuzzing and pinned WASM tooling.
+**Status 2026-08-04: current gate.** 286 Vitest tests, 12 Playwright flows, workspace tests/clippy/fmt, production Vue/WASM build, zero-network scan and YAML validation pass. Licensed bass E1, guitar E2 and violin A4 sessions are parity-gated between native Rust and browser WASM; egui projection tests use the same frames. SNR/reverb grids, differential baselines, hot-path benchmarks and restart soak are present. Remaining evidence work is broader visual regression, DSP fuzzing and cross-platform native performance telemetry.
 
 ### Phase 7 — Migration & Documentation
 - Incremental migration (keep facades temporarily).
@@ -318,11 +321,11 @@ egui/src/
 
 ## Immediate Next Actions (Concrete)
 
-1. Add one cross-platform typed diagnostic contract with actionable, localized web/Tauri/egui presentation.
-2. Extend the licensed corpus with fixed SNR/noise/reverb scenarios, criterion benchmarks and a restart soak test.
-3. Split file import/source-switching from the remaining `useTunerSession` orchestration without moving lifecycle policy back into views.
-4. Add explicit requested-vs-active backend UX.
-5. Enforce CSP/signing/checksum/dependency release gates.
+1. Add macOS codesign/notarization and Windows Authenticode gates.
+2. Publish checksums and SBOM with native release artifacts.
+3. Decimate native waveform snapshots and reduce spectrum transport to displayed bins.
+4. Move native diagnostics/snapshot preparation outside the state mutex and expose audio-drop telemetry.
+5. Add cross-platform native renderer metrics plus broader visual regression and DSP fuzzing.
 
 This plan prioritizes **loose coupling** and **modularity** so future features (MIDI, file playback, new platforms, better viz) become additive instead of invasive.
 
@@ -360,7 +363,7 @@ These are the current highest-scored items pulled directly from the ranked backl
 - Reconcile Rust/TS frequency-to-MIDI / note rounding behavior.
 - Multi-resolution / dual-window analysis (long window for low strings, short for high strings).
 - Stop calling resizeCanvas every frame (critical for current canvas-dpr-and-dsp-fixes branch).
-- Tauri CSP hardening.
+- Native artifact signing, notarization, checksums and SBOM.
 - Adaptive noise-floor gate.
 - Verifiable "100% local, no network" privacy badge + CI zero-fetch test.
 - Adaptive per-string tau search bounds derived from selected target.
@@ -464,7 +467,7 @@ The following categorized list (200 items) was created to be implementation-conc
 51. Introduce small tuner-types crate or mod for Frame types shared without pulling whole engine.
 52. Make settings (A4, tuning, tolerances) a pure config value object passed into engine.
 53. Eliminate global statics (WEB_ENGINE, WEB_STATE) via better WASM host object ownership.
-54. Use ports-and-adapters for persistence: one SettingsStore trait, implementations for localStorage + Tauri + egui storage.
+54. Keep persistence adapters client-local: localStorage/profile codec for web and eframe storage for egui.
 55. Ensure no outer-layer types (cpal, web-sys, AnalyserNode) leak into dsp or domain.
 56. [DONE 2026-07-12] Provide a thin `TunerProcessor` high-level WASM export instead of raw detect_ functions.
 57. Add clear ownership diagram in ARCHITECTURE.md for every platform path.
@@ -502,7 +505,7 @@ The following categorized list (200 items) was created to be implementation-conc
 85. Use wasm-bindgen-rayon or simple threading if available for heavy analysis.
 86. Version the WASM interface (detect_pitch_wasm_v1) so future changes don't break.
 87. Serve pre-compressed .wasm .js .br via Vite plugin for Pages.
-88. Add proper CSP for Tauri webview + web build (report-only first).
+88. Maintain a production CSP/security-header policy for the hosted web build.
 89. Fix remaining hardcoded English strings in web UI.
 90. Add proper error boundary + friendly message when mic API unavailable (http vs https).
 91. Persist user-chosen input device across reloads with deviceId + label validation.
@@ -536,7 +539,7 @@ The following categorized list (200 items) was created to be implementation-conc
 117. Add "pure Rust" badge / version string in native window title.
 118. Reduce allocations in the egui update/draw hot loop (reuse Vecs).
 119. Add keyboard focus ring + full keyboard navigation parity with web.
-120. Package native as single binary; embed icons properly (current icons dir is for Tauri).
+120. Package native as a single binary/app bundle using `assets/icons/`; add signing when certificates exist.
 
 ### Audio I/O, Devices, Reference & Ear Training (121-140)
 121. Add input level auto-gain warning + clip detection with visual + text guidance.
@@ -551,7 +554,7 @@ The following categorized list (200 items) was created to be implementation-conc
 130. Record 5-10s of playing and show average tuning per string (post-session report).
 131. Support virtual audio cables / loopback as valid input for studio use.
 132. Latency measurement & display (mic -> detection) for transparency.
-133. Per-platform mic permission preflight (AVCapture on mac for Tauri).
+133. Per-platform mic permission preflight for native egui (AVCapture on macOS where needed).
 134. Graceful degradation when no mic: show "use reference tone only" mode prominently.
 135. Mute system sounds / ducking hint while listening (desktop only, optional).
 136. Add "play target note for this string" one-shot button per string selector.
@@ -614,9 +617,9 @@ The following categorized list (200 items) was created to be implementation-conc
 187. Locale detection + full solfege (Do Re Mi) note names per language.
 188. Right-to-left layout support (Arabic, Hebrew) - at least basic.
 189. Add "privacy" badge + CI-enforced "zero network in release build" proof.
-190. Tauri: code-sign + notarize pipeline (macOS) and EV cert for Windows.
+190. Native egui: code-sign + notarize macOS bundles and Authenticode-sign Windows binaries.
 191. Add reproducible desktop builds (same hash for same source).
-192. GitHub release: attach both egui and Tauri bundles + checksums.
+192. GitHub release: attach web archive plus native egui bundles, checksums and SBOM.
 193. Documentation: architecture decision records (ADR) for key choices (YIN vs MPM, WASM vs native).
 194. Onboarding README section with screenshots for each platform.
 195. Add "contributing tunings" guide + test that all listed tunings have correct math.
@@ -653,7 +656,7 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 - `dsp` has signal algorithms only: YIN, MPM, HPS, gates, filters, smoothing, spectrum transforms.
 - `engine/session` resolves raw signal into `DetectionFrame` and owns lifecycle state.
 - `ports` define contracts: audio input, tone output, settings store, profile import/export, diagnostics.
-- `adapters` talk to Web Audio, Tauri, cpal, localStorage, Tauri Store, browser APIs.
+- `adapters` talk to Web Audio, cpal, localStorage and browser/OS APIs.
 - `presentation` renders view-models and sends commands; it does not know audio or DSP internals.
 
 ### SOLID Rules For This Project
@@ -662,9 +665,9 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 | --- | --- | --- | --- |
 | Single Responsibility | One module owns one workflow | Application/tuning/settings/input/output owners are split; lifecycle owns typed failure/retry state | Extract file decoding/source switching from `useTunerSession` |
 | Open/Closed | New backend or tuning adds an adapter/data row | Input/output ports and generated music registry are extensible; engine detector selection is still concrete | Inject `PitchDetector` into `TunerEngine` when alternate detectors are required |
-| Liskov | Fake, web, native and file inputs obey one contract | Web/native/synthetic/file share lifecycle semantics; file sessions, input recovery and active backend switching are contract/integration tested | Keep all adapter recovery scenarios in the shared lifecycle gate |
+| Liskov | Fake, web and file inputs obey one contract | Web/synthetic/file share lifecycle semantics; file sessions and browser input recovery are contract/integration tested | Keep all adapter recovery scenarios in the shared lifecycle gate |
 | Interface Segregation | Components receive only what they render | Five feature ports and a shell port are separate; Live is intentionally the richest surface | Split command/query subports only when a feature demonstrably grows |
-| Dependency Inversion | UI depends on capabilities, not APIs | Settings storage, fullscreen, input registry, output audio and the Tauri API loader are injected; native runtime/stop failures reach lifecycle | Replace remaining cross-platform error strings with typed diagnostic categories |
+| Dependency Inversion | UI depends on capabilities, not APIs | Settings storage, fullscreen, input registry and output audio are injected; the native egui shell has its own adapter boundary | Replace remaining cross-platform error strings with typed diagnostic categories |
 
 ### DRY Rules For This Project
 
@@ -680,8 +683,8 @@ domain -> dsp -> engine/session -> ports -> adapters -> presentation
 
 | Status | Slice | Current Owner | Next Small Boundary |
 | --- | --- | --- | --- |
-| Done | Live lifecycle | `session/sessionLifecycleContract.ts`, `sessionLifecycle.ts`, `ports/tunerInputSet.ts`, injected `platform/nativeAudioApi.ts` | Extract file/source workflow from `useTunerSession`; keep the state machine and adapters independent |
-| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, four adapters, sample timeline, WAV codec, licensed replay parity and input-recovery evidence | Replace remaining free-form platform errors with typed diagnostic categories |
+| Done | Live lifecycle | `session/sessionLifecycleContract.ts`, `sessionLifecycle.ts`, `ports/tunerInputSet.ts`, `adapters/vue/useTunerInputSet.ts` | Extract file/source workflow from `useTunerSession`; keep the state machine and adapters independent |
+| Done | Audio port | `audio-input`, `web/src/ports/audioInput.ts`, three web-side adapters, sample timeline, WAV codec, licensed replay parity and input-recovery evidence | Replace remaining free-form platform errors with typed diagnostic categories |
 | Done web / partial cross-platform | Tone port | `ports/audioOutput.ts`, `platform/webAudioOutput.ts`, `application/services/metronomeScheduler.ts`; egui `AudioManager` | Keep adapters separate; share only capability semantics when egui playback is revisited |
 | Done | Music source | `registry/music-registry.json` + Rust build generation + web loader | Keep schema/codegen parity green |
 | Done primary | Pitch domain | Generated note math, detector/confidence fixtures, smoothing traces, native/browser full-frame context, 19 real-WAV quality scenarios and licensed cross-backend replay are shared | Keep fallback power degradation explicit; add SNR evidence |
@@ -747,12 +750,12 @@ The 10-slice table above is the architectural target; the table below is the **n
 - `Q24` **Vue visualizer components** — web/src/components/Waveform.vue, Spectrum.vue, Spectrogram.vue, CentsHistory.vue, CentsHistoryGraph.vue, CentsGauge.vue (17 new findings in recommendation.md, R181+)
 - `Q25` **egui visualization module** — egui/src/visualization.rs (7 new findings in recommendation.md, R181+)
 
-**Native Audio & Desktop Platform (new audio-input crate, Tauri, egui)**
+**Native Audio & Desktop Platform (audio-input + egui)**
 
 - `Q26` **audio-input shared crate** — audio-input/src/lib.rs (10 new findings in recommendation.md, R181+)
-- `Q27` **desktop native_audio service** — desktop/src-tauri/src/native_audio.rs, native_audio/frame.rs, native_audio/stream.rs (8 new findings in recommendation.md, R181+)
+- `Q27` **native audio service** — `audio-input/src/`, `egui/src/audio.rs` (former third-shell paths are deleted)
 - `Q28` **egui app/audio/state modules** — egui/src/app.rs, egui/src/audio.rs, egui/src/state.rs, egui/src/main.rs (13 new findings in recommendation.md, R181+)
-- `Q29` **Tauri release/signing/CSP/distribution** — desktop/src-tauri/tauri.conf.json, .github/workflows/build-tauri.yml, release.yml (13 new findings in recommendation.md, R181+)
+- `Q29` **native release/signing/distribution** — `.github/workflows/build-egui.yml`, `release.yml`, `RELEASE-SIGNING.md`
 
 **Testing / CI / Build / Release / Offline**
 
@@ -873,7 +876,7 @@ Every architecture change should pass these three review loops before merging:
 2. **Pass 2 - Design/UX:** Does the user see a calmer, clearer workflow? Are states, labels, focus and mobile layout coherent?
 3. **Pass 3 - Verification:** Is there a unit, parity, E2E, visual or build check that would catch a regression?
 
-The 2026-07-11 pass used all three loops: structural tests/review, desktop and `320 px` visual inspection, then web/Rust/E2E/full-Tauri verification. The resulting fixes and remaining findings are recorded in [recommendation.md](recommendation.md).
+The 2026-07-11 pass used all three loops: structural tests/review, desktop and `320 px` visual inspection, then web/Rust/E2E verification. The resulting fixes and remaining findings are recorded in [recommendation.md](recommendation.md).
 
 ## Master Top 500 Register
 
@@ -900,7 +903,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M11 | P2 | review | reconcile Rust/TS frequency-to-MIDI rounding | Both targets use the generated nearest-MIDI contract. [DONE 2026-07-11] |
 | M12 | P2 | algorithms | Multi-resolution dual-window analysis: long window for low strings, short for high | Fixes low-E resolution vs high-string latency tradeoff. |
 | M13 | P2 | review | stop resizeCanvas every frame | [DONE 2026-07-11] |
-| M14 | P2 | review | Tauri CSP |  |
+| M14 | P2 | review | legacy webview CSP | [REMOVED 2026-08-04] Third shell deleted. |
 | M15 | P2 | review | adaptive noise-floor gate |  |
 | M16 | P2 | distribution | Verifiable '100% local, no network' privacy badge backed by CI zero-fetch test | Strong trust signal with a cheap CI assertion; differentiates from cloud tuners. |
 | M17 | P2 | algorithms | Adaptive per-string tau search bounds derived from the selected target | Faster, fewer-error search when string known. |
@@ -938,7 +941,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M49 | P3 | review | validate/clamp A4 on load | [DONE 2026-07-11] |
 | M50 | P3 | review | gate FFT spectrum when viz hidden | [DONE 2026-07-11] |
 | M51 | P3 | review | reuse YIN difference buffers | [DONE 2026-07-11] |
-| M52 | P3 | native-os | Native mic-permission preflight via Tauri macOS AVCaptureDevice request | Avoids silent failure when OS denies mic. |
+| M52 | P3 | native-os | Native egui mic-permission preflight via macOS AVCaptureDevice request | Avoids silent failure when OS denies mic. |
 | M53 | P3 | algorithms | Gaussian-window interpolation on log-magnitude FFT peaks (Jacobsen/Quinn) | Sub-bin frequency accuracy from existing FFT. |
 | M54 | P3 | observability-reliability | Stale-PWA / update-available checker against version.json | Stops users getting stuck on cached old builds. |
 | M55 | P3 | perf-bundle | Cap maxTau by selected-string frequency to shorten YIN | When string chosen, narrow lag range, fewer CMNDF iterations. |
@@ -999,7 +1002,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M110 | P3 | review | ring buffer for centsHistory |  |
 | M111 | P3 | review | tighten 440Hz octave test |  |
 | M112 | P3 | review | idle vs no-signal empty states |  |
-| M113 | P3 | review | Tauri updater signed feed |  |
+| M113 | P3 | review | legacy desktop updater feed | [REMOVED 2026-08-04] No updater is shipped. |
 | M114 | P3 | algorithms | Inharmonicity-aware f0 fit (B-coefficient stretched-partial model) | Corrects wound-string stretched partials. |
 | M115 | P3 | algorithms | pYIN probabilistic candidates + Viterbi HMM pitch track across frames | State-of-art temporal track; heavier to implement. |
 | M116 | P3 | a11y-deep | Per-string cents announced as discrete buckets for screen-reader users | Readable SR output instead of rapid numbers. |
@@ -1013,7 +1016,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M124 | P3 | review | label A4 input |  |
 | M125 | P3 | review | label tuning select |  |
 | M126 | P3 | review | FFT-accelerate YIN/MPM |  |
-| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [DONE 2026-07-21] Rust replay v2 is sample-indexed; a shared licensed contract compares native/WASM frames and verifies Tauri/egui projections. |
+| M127 | P3 | dx-quality | DSP scope-recorder: dump per-frame internals to a replayable .ndjson trace | [DONE 2026-07-21] Rust replay v2 compares native/WASM frames and verifies egui projections. |
 | M128 | P3 | algorithms | Autocorrelation-of-the-spectrum (spectral autocorrelation) f0 estimator | Extra fusion vote robust to missing fundamental. |
 | M129 | P3 | native-os | Window-state persistence across launches | Restores size/position; expected desktop polish. |
 | M130 | P3 | a11y-deep | egui native: respect OS reduce-motion/high-contrast via accesskit + theme query | Brings native app to accessibility parity. |
@@ -1052,23 +1055,23 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M163 | P3 | review | input-device affordance/heading semantics |  |
 | M164 | P3 | distribution | Embeddable iframe widget (vite lib mode) + postMessage onInTune/onNote API | Distribution multiplier across third-party sites. |
 | M165 | P3 | design-motion | Spring-physics needle driven by a critically-damped spring integrator | Smooth needle motion without overshoot. |
-| M166 | P3 | platform-reach | Android app + Play listing via Tauri 2 mobile with Oboe low-latency audio | Biggest install-base expansion; Oboe keeps latency tuner-grade. |
+| M166 | P3 | platform-reach | Android app as a separate future native project | Outside current scope. |
 | M167 | P3 | i18n-breadth | Translation-completeness fallback chain with coverage badge | Prevents blank strings and tracks translation progress. |
 | M168 | P3 | data-viz | Cents sparkline mini-history under note readout | Tiny 3-second inline trace shows whether pitch is settling. |
 | M169 | P3 | ui-micro | Hover popover on string shows target Hz and cents | Desktop tooltip surfaces exact frequency per string. |
 | M170 | P3 | ui-micro | Double-tap a string to instantly select as target | Quick gesture pins manual target without dropdown. |
 | M171 | P3 | settings-personalization | Units toggle: cents-only vs Hz-and-cents readout | Hide Hz for beginners, show both for techs. |
-| M172 | P3 | privacy-security | Tauri capability allowlist audit removing unused command scopes | Minimize Tauri v2 capabilities to mic and storage only. |
+| M172 | P3 | privacy-security | legacy capability allowlist audit | [REMOVED 2026-08-04] Webview capability layer deleted. |
 | M173 | P3 | perf-bundle | Low-end-device mode: halve FFT_SIZE and viz FPS | Detect deviceMemory/hardwareConcurrency, reduce 2048 buffer and redraw rate. |
 | M174 | P3 | content-marketing | FAQ schema JSON-LD on landing page | Rich-result eligibility for "is this tuner accurate" queries. |
-| M175 | P3 | docs-dx | Three-target architecture diagram in README | Mermaid graph: pitch-core feeding web, egui, Tauri. |
+| M175 | P3 | docs-dx | Two-client architecture diagram | pitch-core feeds web WASM and native egui. |
 | M176 | P3 | docs-dx | Visual-regression snapshots per CentsGauge needle angle | Lock pixel output of gauge at -50/0/+50 cents. |
 | M177 | P3 | review | prefers-reduced-motion handling | [DONE 2026-07-11] |
 | M178 | P3 | review | capo/transpose + pitch-pipe per-string reference |  |
 | M179 | P3 | a11y-deep | Distinct vibration patterns: pulse-train flat, long-buzz sharp, double-tap in-tune | Eyes-free directional feedback; small code, big inclusion. |
 | M180 | P3 | design-motion | Modular type scale + 4px spacing tokens with fluid clamp() root | Design-system foundation for consistent layout. |
 | M181 | P3 | a11y-deep | RTL layout support with dir=rtl, logical properties, mirrored cents axis | Supports Arabic/Hebrew UI direction. |
-| M182 | P3 | platform-reach | iOS/iPadOS app via Tauri 2 mobile reusing native pitch-core | Unlocks App Store distribution and the high-value iOS music market. |
+| M182 | P3 | platform-reach | iOS/iPadOS app as a separate future native project | Outside current scope. |
 | M183 | P3 | observability-reliability | Structured in-app bug-report template prefilled from local diagnostics | Standardizes incoming issues for faster triage. |
 | M184 | P3 | i18n-breadth | Translated tuning-preset display names with locale conventions | Completes the localized feel of the catalog. |
 | M185 | P3 | ui-micro | Inline-edit string note via tap-to-spin chromatic picker | Tap string label, scroll wheel to reassign note. |
@@ -1104,7 +1107,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M215 | P4 | offline-storage | IndexedDB tuning store replacing localStorage for packs | Move custom tunings/packs from localStorage to structured IndexedDB store. |
 | M216 | P4 | content-marketing | "Standard tuning notes EADGBE" cornerstone SEO page | Targets the single highest-volume beginner guitar query. |
 | M217 | P4 | docs-dx | ADR for Vite base '/tuner/' subpath constraint | Document base-path coupling so contributors stop breaking asset URLs. |
-| M218 | P4 | docs-dx | Pull request template with target-checklist | Boxes for web/egui/Tauri tested and tuning-table parity. |
+| M218 | P4 | docs-dx | Pull request template with target checklist | Boxes for web/egui and shared-core parity. |
 | M219 | P4 | docs-dx | ADR for keeping note math in two languages | Explain Rust-TS duplication tradeoff vs single WASM source. |
 | M220 | P4 | theming-identity | OLED true-black theme with pure #000 surfaces | Saves AMOLED power; cards become #000, borders dim gray. |
 | M221 | P4 | theming-identity | Animated tuning-fork logo with listening/locked states | Tine vibrates while listening, settles when in tune. |
@@ -1265,7 +1268,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M376 | P4 | content-marketing | Press/media kit page: logo, screenshots, copy blurbs | Lowers friction for bloggers and reviewers to feature. |
 | M377 | P4 | content-marketing | Song-to-tuning index page (capo + tuning per song) | Curated static map of popular songs to their tunings. |
 | M378 | P4 | theming-identity | Live theme preview before applying in picker | Hover a theme tile to temporarily recolor the tuner. |
-| M379 | P4 | notifications-engagement | Tauri tray scheduled daily practice reminder | Native OS notification at user-set hour via tauri-plugin-notification. |
+| M379 | P4 | notifications-engagement | Native egui scheduled practice reminder | Requires explicit OS integration. |
 | M380 | P4 | business-ops-deep | Canary channel toggle pulling versioned WASM from /tuner/canary/ | Opt-in users get prerelease builds before stable promotion. |
 | M381 | P4 | instruments-notation | Per-tuning notation-system binding so world presets auto-select naming scheme | Right notation appears automatically with preset. |
 | M382 | P4 | workflows | Capo-aware shared key for the band: announce capo + sounding key | Aligns capoed players on a key. |
@@ -1343,7 +1346,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M454 | P4 | theming-identity | Swappable icon-set variants outline/filled/duotone | Mic, settings, play icons share one selectable style family. |
 | M455 | P4 | notifications-engagement | Quiet-hours window suppressing all reminders | User-defined start/end; clamp scheduled times outside band. |
 | M456 | P4 | notifications-engagement | Do-not-disturb master toggle pausing all nudges | One switch silences reminders for a chosen duration. |
-| M457 | P4 | notifications-engagement | Tauri autostart with minimized tray for reminders | Launch-on-login so scheduled toasts fire without app open. |
+| M457 | P4 | notifications-engagement | Native autostart with minimized tray for reminders | Deferred OS-specific integration. |
 | M458 | P4 | business-ops-deep | Privacy-preserving local aggregate metrics with k-anonymity batching | Opt-in counters flushed only above threshold, no IDs. |
 | M459 | P4 | business-ops-deep | Self-hosted Plausible-style aggregate dashboard, IP-truncated, opt-in | First-party analytics with no cookies or persistent IDs. |
 | M460 | P4 | bowed-strings | Equal-tempered vs pure-fifths deviation display | Show both ET target and beatless-fifth target cents. |
@@ -1380,7 +1383,7 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 | M491 | P4 | privacy-security | Threat-model doc STRIDE for mic audio and storage | Document trust boundaries, attack surface, mitigations in repo. |
 | M492 | P4 | offline-storage | Last-write-wins conflict resolution with timestamp tiebreak | Per-pack updatedAt compares local vs synced, prompt on tie. |
 | M493 | P4 | offline-storage | Offline pack availability badge per gallery entry | Mark which community packs are cached and usable offline. |
-| M494 | P4 | theming-identity | Wallpaper-extracted palette via desktop accent (Tauri) | Native pulls OS accent color to seed app theme. |
+| M494 | P4 | theming-identity | Wallpaper-extracted palette via native OS accent API | Native egui may use a platform adapter. |
 | M495 | P4 | theming-identity | Texture/material backdrop layer brushed-metal or felt | Optional subtle tiled SVG behind cards per theme. |
 | M496 | P4 | notifications-engagement | Streak-at-risk nudge before midnight local time | Fire only if today's session count is zero near cutoff. |
 | M497 | P4 | notifications-engagement | Weekly recap notification: strings tuned, accuracy delta | Sunday summary pulled from local IndexedDB session stats. |
@@ -1395,15 +1398,14 @@ Verified master closures: **M1, M2, M3, M5, M6, M7, M11, M13, M22, M24, M25, M26
 
 The synchronized problem map is split by purpose:
 - [TOP-500-backlog.md](TOP-500-backlog.md) - full ranked Top 500 (`M#`) plus historical detailed `C#` evidence; revalidate old audit claims against the current status overlay.
-- [recommendation.md](recommendation.md) - current grounded extract: 290 open/partial and 104 closed stable `R#` references.
+- [recommendation.md](recommendation.md) - historical grounded stable `R#` evidence; dispositions must be revalidated against the current topology.
 
 Key highlights that directly block the target architecture:
-- Add cross-platform typed user-facing diagnostics and explicit requested-vs-active backend UX; permission/device-loss/backend-switch evidence is now in the gate.
-- Split file/source workflow from `useTunerSession` without moving lifecycle policy into views.
-- Complete shared power semantics and remove remaining platform policy drift (`R18`, `R106-R110`).
-- Remove enabled-spectrum frame allocation and decouple web detection from paint cadence (`R26-R28`, `R76`, `R87`).
-- Add real-audio performance/stability suites (`R33-R38`, `R148-R165`).
-- Finish diagnostics, typed errors, accessibility and release hardening (`R22`, `R41-R44`, `R133-R147`).
+- Sign and attest native release artifacts; unsigned packaging is implemented but certificates are absent.
+- Reduce native snapshot allocation and mutex hold time; add audio-drop/repaint/GPU telemetry.
+- Complete shared fallback capability semantics without coupling the two client runtimes.
+- Expand visual regression and DSP fuzzing while preserving the existing corpus/SNR/reverb/soak gates.
+- Keep hosted-web security headers and zero-network checks aligned with the release workflow.
 
 When closing any of these open problems, update [recommendation.md](recommendation.md), the unified [TOP-500-backlog.md](TOP-500-backlog.md) if an `M#`/`C#` status changes, this file, [README.md](README.md), and if the execution order changes, [PLAN.md](PLAN.md) / [RECOMMENDATIONS.md](RECOMMENDATIONS.md).
 

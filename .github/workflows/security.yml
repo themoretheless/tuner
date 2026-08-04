@@ -1,6 +1,6 @@
 name: Security Gates
 
-# Релизные гейты M8: zero-network, cargo-deny, npm audit, signing scaffold.
+# Релизные гейты M8: zero-network, cargo-deny и npm audit.
 # Вызывается из release.yml как обязательный гейт релиза и гоняется на каждый PR.
 
 env:
@@ -55,9 +55,9 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Build web (production, tauri base)
+      - name: Build web (production)
         working-directory: web
-        run: npm run build:tauri
+        run: npm run build
 
       - name: Zero-network gate
         run: node scripts/check-no-network.mjs
@@ -77,7 +77,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "desktop/src-tauri"
+          workspaces: ". -> target"
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
@@ -87,7 +87,7 @@ jobs:
       - name: cargo deny check
         run: cargo deny check
 
-  # 3. npm audit для web/ и desktop/ (severity high и выше).
+  # 3. npm audit для web/ (severity high и выше).
   npm-audit:
     runs-on: ubuntu-latest
     steps:
@@ -101,9 +101,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-          cache-dependency-path: |
-            web/package-lock.json
-            desktop/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies (web)
         working-directory: web
@@ -114,29 +112,3 @@ jobs:
         # high+ = падение. Известные исключения фиксируются ТОЛЬКО через
         # overrides в package.json с комментарием, не через --audit-level=none.
         run: npm audit --audit-level=high
-
-      - name: Install dependencies (desktop)
-        working-directory: desktop
-        run: npm ci
-
-      - name: npm audit (desktop)
-        working-directory: desktop
-        run: npm audit --audit-level=high
-
-  # 4. Signing scaffold: plist/entitlements на месте, права минимальны,
-  #    секреты подписи не закоммичены, RELEASE-SIGNING.md существует.
-  release-signing-scaffold:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-          persist-credentials: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-
-      - name: Release-signing scaffold gate
-        run: node scripts/check-release-signing.mjs
