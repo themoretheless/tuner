@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload release site
         if: steps.resolve.outputs.found == 'true'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: _site
 
@@ -77,4 +77,4 @@ jobs:
     permissions:
       pages: write
       id-token: write
-    uses: themoretheless/.github/.github/workflows/deploy-pages.yml@v1
+    uses: themoretheless/.github/.github/workflows/deploy-github-pages.yml@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions

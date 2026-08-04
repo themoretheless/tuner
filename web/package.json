@@ -12,7 +12,7 @@
     "build": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build",
     "build:e2e": "npm run codegen:check && npm run build:wasm && vue-tsc -b && vite build --base /",
     "build:wasm": "node ./scripts/build-wasm.mjs",
-    "test": "npm run codegen:check && vitest run src tests",
+    "test": "npm run codegen:check && node --test ../scripts/release-metadata.test.mjs && vitest run src tests",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
     "benchmark:spectrogram": "npm run benchmark:spectrogram:typecheck && vite build --config benchmarks/spectrogram/vite.config.ts && playwright test --config benchmarks/spectrogram/playwright.config.ts",
