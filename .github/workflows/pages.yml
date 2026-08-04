@@ -1,0 +1,38 @@
+name: Deploy Pages
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages-production
+  cancel-in-progress: true
+
+jobs:
+  security:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/security.yml
+    with:
+      ref: ${{ github.sha }}
+
+  build-web:
+    needs: security
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-web.yml
+    with:
+      ref: ${{ github.sha }}
+
+  deploy:
+    needs: build-web
+    permissions:
+      pages: write
+      id-token: write
+    uses: themoretheless/.github/.github/workflows/deploy-github-pages.yml@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
