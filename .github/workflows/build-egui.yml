@@ -36,7 +36,7 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
@@ -47,10 +47,11 @@ jobs:
         run: node scripts/release-metadata.mjs validate
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
         with:
           rust-toolchain: beta
           targets: ${{ matrix.target }}
+          cache-key: egui-${{ matrix.target }}
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -92,7 +93,7 @@ jobs:
             --package-path "$PACKAGE_PATH"
 
       - name: Upload egui artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: egui-${{ matrix.os }}-${{ matrix.target }}
           path: ${{ steps.package.outputs.path }}
