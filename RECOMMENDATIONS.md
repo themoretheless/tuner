@@ -4,7 +4,7 @@
 
 Problem sources: [recommendation.md](recommendation.md) is the current extract (290 open/partial and 104 closed stable `R#` items), while the unified [TOP-500-backlog.md](TOP-500-backlog.md) contains the full ranked `M#` Top 500, verified `[DONE]` markers and historical detailed `C#` evidence. This file keeps detailed implementation recipes; [PLAN.md](PLAN.md) is the execution-order source of truth.
 
-**Status 2026-07-21:** session state machine, injected input registry, native realtime queue, pitch-core split/trait/resolver, contextual native/browser `DetectionFrame`, full-frame WASM `TunerProcessor`, composite decision evidence, configuration/input provenance, measured fallback confidence, monitor-synchronized visual presentation, generated note math, egui/Tauri decomposition, profile V1, feature screens/ports, intonation setup, responsive live canvases, offline SW, licensed 19-WAV quality gate, interactive file/WAV input, exact shared browser PCM capture, licensed cross-backend replay parity and permission/device-loss/backend-switch recovery evidence are implemented. Recipes below that describe those items are historical implementation guidance; use the matrix status and PLAN overlay before starting work.
+**Status 2026-08-04:** the shipped topology is Vue/Web Audio + pitch-core WASM and native egui/wgpu + audio-input/cpal. The former third desktop shell and its bridge were removed. Recipes below are historical implementation guidance; validate paths against `PLAN.md` before using them.
 
 ## Executive Summary
 
@@ -12,14 +12,12 @@ Problem sources: [recommendation.md](recommendation.md) is the current extract (
 
 Актуальный порядок оставшейся работы:
 
-1. Ввести typed user-facing diagnostics/errors с единым category contract для web, Tauri и egui.
-2. Расширить лицензированный 19-WAV corpus фиксированными SNR/noise/reverb transforms.
-3. Добавить criterion benchmark, restart soak, visual suites и более широкий DSP fuzzing.
-4. Убрать owned spectrum `Vec` из каждого enabled frame через отдельный recyclable transport.
-5. Унифицировать power/harmonic flags для explicit TS fallback либо документировать capability contract.
-6. Завершить accessibility, CSP, signing, checksum и dependency release gates.
-7. Развязать file/source workflow и requested-vs-active backend UX от `useTunerSession`.
-8. Не делать физический workspace split без измеримой необходимости: текущие module/crate boundaries уже читаемы.
+1. Настроить codesign/notarization для macOS и Authenticode для Windows.
+2. Добавить checksums/SBOM к native release artifacts.
+3. Уменьшить native snapshot allocations: decimated waveform и ограниченный spectrum transport.
+4. Вынести native diagnostics/snapshot preparation из state mutex и добавить drop telemetry аудиопула.
+5. Добавить измерения egui repaint/tessellation/GPU upload на трёх ОС.
+6. Расширить visual regression и DSP fuzzing без создания нового client shell.
 
 ## Recommendation Matrix
 
@@ -135,7 +133,7 @@ web/src/utils/pitch.ts
 
 **Definition Of Done**
 
-- `core/pitch` не импортирует Vue/DOM/Tauri.
+- `core/pitch` не импортирует Vue/DOM.
 - Worker и tests проходят через public pitch API.
 - `npm run test` и `npm run build` зеленые.
 
@@ -264,7 +262,8 @@ Settings are a flat storage schema. Full backup is missing. Migration strategy i
 
 **Recommendation**
 
-Add `UserProfileV1` and make localStorage/Tauri Store adapters load/save that shape.
+Keep `UserProfileV1` as the web persistence/import contract; native egui settings
+use eframe storage and do not share a UI storage adapter.
 
 **Target Files**
 
@@ -273,7 +272,7 @@ web/src/core/profile/profileSchema.ts
 web/src/core/profile/migrations.ts
 web/src/core/profile/profileTransfer.ts
 web/src/adapters/storage/localStorageProfileStore.ts
-web/src/adapters/storage/tauriProfileStore.ts
+egui/src/app.rs (native eframe storage boundary)
 ```
 
 **Profile Scope**
@@ -377,7 +376,8 @@ Create a single registry fixture or parity test.
 
 **Problem**
 
-`native_audio.rs` contains command handling, service state, stream creation, conversion and DSP.
+The former third-shell service no longer exists. Native ownership is split
+between `audio-input` (cpal/recovery) and the egui audio manager.
 
 **Recommendation**
 
@@ -386,20 +386,16 @@ Split internally first, crate later.
 **Target Internal Shape**
 
 ```text
-desktop/src-tauri/src/native_audio/
-  mod.rs
-  commands.rs
-  service.rs
-  stream.rs
-  pitch.rs
-  events.rs
+audio-input/src/        # cpal stream, pool, recovery supervisor
+egui/src/audio.rs       # client lifecycle and frame publication
+pitch-core/src/         # DSP and resolved DetectionFrame
 ```
 
 **Definition Of Done**
 
-- Tauri commands are thin wrappers.
-- Stream service can be reasoned about separately.
-- Pitch function has tests or parity fixtures.
+- cpal callback remains bounded and nonblocking.
+- Stream recovery is tested separately from UI state.
+- pitch-core has native/WASM parity fixtures.
 
 ### 12. Accessibility And UX Pass
 
@@ -467,16 +463,14 @@ Extend the current manifests with real WAV/SNR cases and failure traces. Keep th
 - Native/WASM/TS fixtures assert cents and confidence contracts; smoothing traces match exactly.
 - Remaining extensions use real WAV/SNR evidence and keep fallback capability differences explicit.
 
-## Recommended Next 8 Commits
+## Recommended Next Commits
 
-1. `Add cross-platform typed audio diagnostics`
-2. `Add SNR fixtures and restart soak gates`
-3. `Separate recyclable spectrum transport from detection frames`
-4. `Unify fallback power capability semantics`
-5. `Add release security and accessibility gates`
-6. `Decouple file/source workflow from tuner session`
-7. `Add requested-vs-active backend UX`
-8. `Move web detection cadence off requestAnimationFrame`
+1. `Add signed native release gates`
+2. `Publish checksums and SBOM with releases`
+3. `Decimate native waveform snapshots`
+4. `Move native diagnostics outside the state lock`
+5. `Add audio drop and repaint telemetry`
+6. `Add cross-platform native renderer benchmarks`
 
 This sequence attacks the current P0/P1 open items first: replay parity, lifecycle error visibility, realtime safety and core evidence. Application/practice/tuning/settings/output decomposition is complete and should now be preserved rather than repeated.
 
@@ -485,18 +479,18 @@ This sequence attacks the current P0/P1 open items first: replay parity, lifecyc
 - Do not move to `packages/` before tests and compatibility exports.
 - Do not bypass feature ports by importing broad application services into views.
 - Do not add more features into compatibility facades such as `notes.ts` or `useTuner.ts`.
-- Do not add more native Tauri commands without a service boundary.
+- Do not introduce another desktop shell without a measured product requirement.
 - Do not add new presets separately in web and egui without parity protection.
 
 ## Success Metrics
 
 - Visualizer components keep receiving only plain frame props.
 - Shared `DetectionFrame` / viz frame contracts exist and the web readout path consumes them.
-- egui and Tauri native callbacks do not lock engine state or allocate detector buffers.
+- Native cpal callbacks do not lock engine state or allocate detector buffers.
 - `useTuner.ts` remains a one-line compatibility export; `useTunerApplication.ts` remains within its 120-line architecture budget.
 - `notes.ts` becomes compatibility export only.
 - `pitch.ts` becomes compatibility export only.
-- Core tests run in Node without DOM/Vue/Tauri.
+- Core web tests run in Node without DOM/Vue; Rust core tests have no UI dependency.
 - Full profile export/import roundtrip test passes.
 - Backend switching is tested with fake adapters.
 - web and egui preset parity test passes.

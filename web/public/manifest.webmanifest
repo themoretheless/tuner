@@ -1,7 +1,7 @@
 {
   "name": "Guitar Tuner",
   "short_name": "Tuner",
-  "description": "Accurate browser and desktop guitar tuner.",
+  "description": "Accurate offline-capable browser guitar tuner.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

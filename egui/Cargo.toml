@@ -4,19 +4,11 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
-eframe = { version = "0.27", features = ["glow"] }
+audio-input = { path = "../audio-input" }
+eframe = { version = "0.27", default-features = false, features = ["accesskit", "default_fonts", "persistence", "wgpu", "wayland", "x11"] }
 egui = "0.27"
 cpal = "0.15"
 pitch-core = { path = "../pitch-core", default-features = false }
 
 [dev-dependencies]
 tuner-test-support = { path = "../test-support" }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-audio-input = { path = "../audio-input" }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
-console_error_panic_hook = "0.1.7"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["console"] }

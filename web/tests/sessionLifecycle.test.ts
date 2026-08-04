@@ -23,11 +23,11 @@ describe('SessionLifecycle', () => {
     });
 
     await lifecycle.start('web');
-    await lifecycle.start('native');
+    await lifecycle.start('synthetic');
 
-    expect(calls).toEqual(['start:web', 'stop:web', 'start:native']);
+    expect(calls).toEqual(['start:web', 'stop:web', 'start:synthetic']);
     expect(lifecycle.snapshot()).toEqual({
-      activeBackend: 'native',
+      activeBackend: 'synthetic',
       failure: null,
       status: 'listening',
     });
@@ -67,7 +67,7 @@ describe('SessionLifecycle', () => {
   });
 
   it('reports an adapter start failure as an error state', async () => {
-    const failedBackend: SessionBackend = 'native';
+    const failedBackend: SessionBackend = 'file';
     const lifecycle = new SessionLifecycle({
       async start(backend) {
         return backend !== failedBackend;

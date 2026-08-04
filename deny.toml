@@ -13,18 +13,17 @@ no-default-features = false
 version = 2
 # БД уязвимостей RustSec по умолчанию (github.com/RustSec/advisory-db).
 yanked = "deny"
-# unmaintained/unsound — предупреждения: большинство приходят транзитивно из
-# tauri/wry/gtk-rs/egui, безопасного апгрейда на текущий момент нет; обновляем
-# вместе с мажорными релизами tauri/egui.
+# unmaintained/unsound — предупреждения: часть приходит транзитивно из
+# platform crates egui/winit; обновляем вместе с мажорными релизами eframe.
 # unmaintained = "workspace": падаем только если unmaintained-крейт — прямая
 # зависимость workspace. Транзитивные (gtk-rs, derivative, instant, unic-* и др.
-# через tauri/wry/egui) логируются как предупреждения; безопасного апгрейда для
-# них на текущий момент нет, обновляем вместе с мажорными релизами tauri/egui.
+# через egui/winit) логируются как предупреждения; безопасного апгрейда для
+# них на текущий момент нет, обновляем вместе с мажорными релизами eframe.
 unmaintained = "workspace"
 # Зафиксированные исключения (только с причиной и датой пересмотра):
 ignore = [
-    "RUSTSEC-2026-0194", # quick-xml 0.39.4: DoS O(N^2) при парсинге XML. Тянется через plist -> tauri; фикса в совместимой ветке нет (проверено 2026-07-26, `cargo update -p quick-xml` нечего обновлять). XML/плисты парсятся только из собственных ресурсов приложения, не из сети. Пересмотреть при обновлении tauri/plist.
-    "RUSTSEC-2026-0195", # quick-xml 0.39.4: memory-exhaustion в NsReader. Тот же источник и та же поверхность атаки, что RUSTSEC-2026-0194. Пересмотреть при обновлении tauri/plist.
+    "RUSTSEC-2026-0194", # quick-xml 0.39.4: DoS O(N^2). Target-specific build dependency wayland-scanner через eframe/winit; приложение не парсит внешний XML. Пересмотреть при обновлении eframe/winit.
+    "RUSTSEC-2026-0195", # quick-xml 0.39.4: memory exhaustion в NsReader. Та же build-time поверхность wayland-scanner. Пересмотреть при обновлении eframe/winit.
 ]
 
 [bans]
@@ -35,15 +34,9 @@ workspace-default-features = "warn"
 external-default-features = "warn"
 # Запрещённые крейты: сетевые стеки на уровне приложения.
 # Приложение заявлено как полностью offline; HTTP/WebSocket клиенты в
-# приложении недопустимы. (reqwest/hyper присутствуют в Cargo.lock только
-# как target-specific транзитивные зависимости самого tauri — на уровне
-# бан-правил они не блокируются, т.к. запрет reqwest сломал бы сборку tauri.
-# Zero-network гарантируется гейтом scripts/check-no-network.mjs: в коде
-# приложения и desktop/src-tauri сетевые API запрещены.)
-deny = [
-    { name = "tauri-plugin-updater" },  # автообновления тянут сеть; решение осознанное
-    { name = "tauri-plugin-http" },     # HTTP из webview через плагин запрещён
-]
+# приложении недопустимы. Zero-network гарантируется гейтом
+# scripts/check-no-network.mjs для web, egui, audio-input и pitch-core.
+deny = []
 
 [licenses]
 version = 2

@@ -8,7 +8,6 @@ import {
   diagnosticsFromMicrophoneFailure,
   measureSignalHealth,
   microphoneTrackLostDiagnostic,
-  nativeStreamFailedDiagnostic,
   normalizeDiagnosticCodes,
   signalDiagnostics,
 } from '../src/domain/diagnostics';
@@ -164,15 +163,7 @@ describe('diagnostic contract integrity', () => {
     expect(normalizeDiagnosticCodes('signal-hum')).toEqual([]);
   });
 
-  it('creates a native stream failure diagnostic on the tauri source', () => {
-    const diagnostic = nativeStreamFailedDiagnostic('tauri');
-    expect(diagnostic.code).toBe('backend-native-stream-failed');
-    expect(diagnostic.category).toBe('backend');
-    expect(diagnostic.severity).toBe('error');
-    expect(diagnostic.source).toBe('tauri');
-  });
-
   it('keeps the source on every created diagnostic', () => {
-    expect(createDiagnostic('signal-silent', 'egui').source).toBe('egui');
+    expect(createDiagnostic('signal-silent', 'web').source).toBe('web');
   });
 });

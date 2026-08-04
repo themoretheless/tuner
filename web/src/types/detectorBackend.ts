@@ -1,3 +1,3 @@
-export type PitchDetectorBackend = 'typescript' | 'wasm';
-export type DetectorBackend = PitchDetectorBackend | 'native';
+export type DetectorBackend = 'typescript' | 'wasm';
+export type PitchDetectorBackend = DetectorBackend;
 export type DetectionFrameSemantics = 'resolved' | 'unresolved';

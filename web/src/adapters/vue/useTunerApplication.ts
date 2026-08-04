@@ -33,7 +33,6 @@ export function useTunerApplication(): TunerApplication {
     syntheticFixture: syntheticAudioFixtureFromLocation(),
   });
   const session = useTunerSession({
-    audioBackend: settings.audioBackend,
     inputs,
     pipelineConfig: settings.pipelineConfig,
     selectedInputDeviceId: settings.selectedInputDeviceId,
@@ -87,7 +86,6 @@ export function useTunerApplication(): TunerApplication {
     showSpectrogram: settings.showSpectrogram,
     showSpectrum: settings.showSpectrum,
     showWaveform: settings.showWaveform,
-    usingNativeAudio: session.usingNativeAudio,
     usingSyntheticAudio: session.usingSyntheticAudio,
   });
   const profile = createProfileController({

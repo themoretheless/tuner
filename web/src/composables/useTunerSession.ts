@@ -1,9 +1,7 @@
 import { computed, onUnmounted, ref, watch, type Ref } from 'vue';
 import { usePitchLoop } from './usePitchLoop';
 import {
-  isAudioFrameInputPort,
   isDeviceSelectableAudioInputPort,
-  isDetectionFrameInputPort,
   isExactPcmCaptureInputPort,
   isDiagnosableAudioInputPort,
   type ExactPcmCapture,
@@ -19,26 +17,20 @@ import {
   type SessionLifecycleSnapshot,
 } from '../session/sessionLifecycle';
 import { DEFAULT_PITCH_DETECTION_RANGE, type PitchDetectionRange } from '../utils/pitch';
-import type { AudioBackend } from '../utils/settingsStorage';
-import type { DetectionFrame, FrameContext } from '../types/frames';
+import type { FrameContext } from '../types/frames';
 import { createDefaultFrameContext } from '../domain/frameContext';
-import { createUnresolvedDetectionFrame } from '../domain/detectionFrame';
 import { createDefaultPipelineConfig, type PipelineConfig } from '../domain/pipelineConfig';
 import {
-  createDiagnostic,
   diagnosticsFromInputWarnings,
   diagnosticsFromMicrophoneFailure,
   microphoneTrackLostDiagnostic,
-  nativeStreamFailedDiagnostic,
   signalDiagnostics,
-  type DiagnosticSource,
   type TunerDiagnostic,
 } from '../domain/diagnostics';
 
 const MAX_WAV_FILE_BYTES = 64 * 1024 * 1024;
 
 interface TunerSessionOptions {
-  audioBackend: Ref<AudioBackend>;
   inputs: TunerInputSet;
   pipelineConfig?: Ref<PipelineConfig>;
   selectedInputDeviceId: Ref<string>;
@@ -47,12 +39,10 @@ interface TunerSessionOptions {
 export function useTunerSession(options: TunerSessionOptions) {
   const audio = options.inputs.web;
   const fileAudio = options.inputs.file;
-  const nativeAudio = options.inputs.native;
   const syntheticAudio = options.inputs.synthetic;
   const inputPorts: AudioInputPortRegistry = {
     file: fileAudio,
     web: audio,
-    native: nativeAudio,
     synthetic: syntheticAudio,
   };
   const detectionRange = ref<PitchDetectionRange>({ ...DEFAULT_PITCH_DETECTION_RANGE });
@@ -72,17 +62,11 @@ export function useTunerSession(options: TunerSessionOptions) {
   const fileInputRequested = computed(() => (
     !syntheticInputRequested.value && fileMode.value && fileAudio.available.value
   ));
-  const nativeInputRequested = computed(() => (
-    !syntheticInputRequested.value &&
-    !fileInputRequested.value &&
-    options.audioBackend.value === 'native' &&
-    nativeAudio.available.value
-  ));
 
   function requestedBackend(): SessionBackend {
     if (syntheticInputRequested.value) return 'synthetic';
     if (fileInputRequested.value) return 'file';
-    return nativeInputRequested.value ? 'native' : 'web';
+    return 'web';
   }
 
   const effectiveInputId = computed<SessionBackend>(() => (
@@ -92,7 +76,6 @@ export function useTunerSession(options: TunerSessionOptions) {
   const requestedInputId = computed(requestedBackend);
   const usingSyntheticAudio = computed(() => effectiveInputId.value === 'synthetic');
   const usingFileAudio = computed(() => effectiveInputId.value === 'file');
-  const usingNativeAudio = computed(() => effectiveInputId.value === 'native');
 
   const activeInputPort = computed<AudioInputPort>(() => (
     inputPorts[effectiveInputId.value]
@@ -103,34 +86,15 @@ export function useTunerSession(options: TunerSessionOptions) {
   });
 
   const pitch = usePitchLoop(
-    () => {
-      const port = activeInputPort.value;
-      return isAudioFrameInputPort(port) ? port.readFrame() : null;
-    },
+    () => activeInputPort.value.readFrame(),
     detectionRange,
     frameContext,
     pipelineConfig,
   );
 
-  watch(pipelineConfig, (config) => {
-    for (const port of Object.values(inputPorts)) {
-      if (isDetectionFrameInputPort(port)) void port.setPipelineConfig(config).catch(() => {});
-    }
-  }, { deep: true, immediate: true });
-
-  const sourceDetectionFrame = computed<DetectionFrame>(() => {
-    const port = activeInputPort.value;
-    if (isDetectionFrameInputPort(port)) {
-      return port.frame.value ?? createUnresolvedDetectionFrame();
-    }
-    return pitch.detectionFrame.value;
-  });
-  const detectionFrame = sourceDetectionFrame;
+  const detectionFrame = pitch.detectionFrame;
   const detectedFrequency = computed(() => detectionFrame.value.freq);
-  const detectionFrameResolved = computed(() => (
-    isDetectionFrameInputPort(activeInputPort.value)
-      || pitch.frameSemantics.value === 'resolved'
-  ));
+  const detectionFrameResolved = computed(() => pitch.frameSemantics.value === 'resolved');
 
   const adapterError = computed(() => activeInputPort.value.error.value);
   const lifecycleError = computed(() => {
@@ -144,37 +108,10 @@ export function useTunerSession(options: TunerSessionOptions) {
     return isDiagnosableAudioInputPort(port) ? port.inputDiagnostics.value : null;
   });
 
-  // Unified typed user-facing diagnostics, shared shape across platforms.
-  // The web backend contributes typed mic failures, track loss, processing
-  // warnings and signal health measured in the pitch loop; the native (Tauri)
-  // backend contributes its typed stream failure plus the signal-quality
-  // codes computed inside the native engine.
+  // Unified typed user-facing diagnostics for microphone failures, processing
+  // warnings and signal health measured in the pitch loop.
   const diagnostics = computed<TunerDiagnostic[]>(() => {
     const result: TunerDiagnostic[] = [];
-    const backend = effectiveInputId.value;
-    const source: DiagnosticSource = backend === 'native' ? 'tauri' : 'web';
-    if (backend === 'native') {
-      if (nativeAudio.error.value) {
-        const typedCode = nativeAudio.errorCode.value;
-        result.push(
-          typedCode
-            ? createDiagnostic(typedCode, 'tauri')
-            : nativeStreamFailedDiagnostic('tauri'),
-        );
-      }
-      for (const code of nativeAudio.recoveryDiagnostics.value) {
-        result.push(createDiagnostic(code, 'tauri'));
-      }
-      for (const code of nativeAudio.signalDiagnostics.value) {
-        result.push(createDiagnostic(code, 'tauri'));
-      }
-      // A fatal recovery failure is reported both as the typed error and as
-      // the last recovery event; keep a single diagnostic per code.
-      return result.filter(
-        (diagnostic, index) =>
-          result.findIndex((candidate) => candidate.code === diagnostic.code) === index,
-      );
-    }
     if (audio.startFailure.value) {
       result.push(...diagnosticsFromMicrophoneFailure(audio.startFailure.value, 'web'));
     }
@@ -183,11 +120,11 @@ export function useTunerSession(options: TunerSessionOptions) {
     }
     const processing = inputDiagnostics.value;
     if (processing) {
-      result.push(...diagnosticsFromInputWarnings(processing.warnings, source));
+      result.push(...diagnosticsFromInputWarnings(processing.warnings, 'web'));
     }
     const health = pitch.signalHealth.value;
     if (health && isListening.value) {
-      result.push(...signalDiagnostics(health, source));
+      result.push(...signalDiagnostics(health, 'web'));
     }
     return result;
   });
@@ -248,9 +185,7 @@ export function useTunerSession(options: TunerSessionOptions) {
     pitch.reset();
     const port = inputPorts[backend];
     const started = await port.start();
-    if (started && isAudioFrameInputPort(port)) {
-      pitch.start();
-    }
+    if (started) pitch.start();
     return started && port.isListening.value;
   }
 
@@ -269,26 +204,10 @@ export function useTunerSession(options: TunerSessionOptions) {
 
   function setDetectionRange(range: PitchDetectionRange) {
     detectionRange.value = range;
-    for (const port of Object.values(inputPorts)) {
-      if (isDetectionFrameInputPort(port)) void port.setDetectionRange(range).catch(() => {});
-    }
   }
 
   function setFrameContext(context: FrameContext) {
     frameContext.value = context;
-    for (const port of Object.values(inputPorts)) {
-      if (isDetectionFrameInputPort(port)) void port.setFrameContext(context).catch(() => {});
-    }
-  }
-
-  async function setAudioBackend(backend: AudioBackend) {
-    if (backend !== 'web' && backend !== 'native') return;
-    fileLoadRevision += 1;
-    const shouldRestart = status.value === 'starting' || status.value === 'listening';
-    if (shouldRestart) await stop();
-    fileMode.value = false;
-    options.audioBackend.value = backend;
-    if (shouldRestart) await start();
   }
 
   async function setInputDevice(deviceId: string) {
@@ -375,15 +294,9 @@ export function useTunerSession(options: TunerSessionOptions) {
     clearError,
     currentFrequency: computed(() => detectionFrame.value.freq),
     detectionFrame,
-    detectionFrameTimebase: computed(() => (
-      isDetectionFrameInputPort(activeInputPort.value) ? null : pitch.frameTimebase.value
-    )),
+    detectionFrameTimebase: pitch.frameTimebase,
     detectionFrameResolved,
-    detectorBackend: computed(() => (
-      isDetectionFrameInputPort(activeInputPort.value)
-        ? activeInputPort.value.detectorBackend
-        : pitch.detectorBackend.value
-    )),
+    detectorBackend: pitch.detectorBackend,
     detectedFrequency,
     detectionRange,
     diagnostics,
@@ -400,14 +313,12 @@ export function useTunerSession(options: TunerSessionOptions) {
     inputDevices: computed(() => deviceInputPort.value?.inputDevices.value ?? []),
     inputDiagnostics,
     isListening,
-    nativeAudioAvailable: computed(() => nativeAudio.available.value),
     refreshInputDevices: () => deviceInputPort.value?.refreshInputDevices() ?? Promise.resolve(),
     requestedInputId,
     resetDetection,
     selectedInputDeviceId: computed(() => (
       deviceInputPort.value?.selectedInputDeviceId.value ?? options.selectedInputDeviceId.value
     )),
-    setAudioBackend,
     setDetectionRange,
     setFrameContext,
     setInputDevice,
@@ -416,7 +327,6 @@ export function useTunerSession(options: TunerSessionOptions) {
     status,
     stop,
     syntheticAudioFixture: syntheticAudio.fixture,
-    usingNativeAudio,
     usingFileAudio,
     useMicrophoneInput,
     usingSyntheticAudio,

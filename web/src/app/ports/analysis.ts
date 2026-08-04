@@ -43,6 +43,5 @@ export interface AnalysisPort {
   readonly themeMode: ThemeMode;
   toggleFullscreen(): Promise<void>;
   toggle(): Promise<void>;
-  readonly usingNativeAudio: boolean;
   readonly waveformFrame: WaveformFrame | null;
 }

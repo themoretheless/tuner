@@ -8,11 +8,10 @@ pub(crate) type SharedTunerState = Arc<Mutex<TunerViewState>>;
 pub(crate) struct TunerViewState {
     pub(crate) cents: f32,
     pub(crate) confidence: f32,
-    /// Stable signal-quality diagnostic codes from the shared cross-platform
-    /// contract (web/src/domain/diagnostics.ts).
+    /// Stable signal-quality diagnostic codes owned by the native client.
     pub(crate) diagnostics: Vec<&'static str>,
     /// Stream-loss recovery telemetry codes from the native backend
-    /// (backend-stream-lost / backend-recovery-*), same contract.
+    /// (backend-stream-lost / backend-recovery-*).
     pub(crate) backend_diagnostics: Vec<&'static str>,
     pub(crate) error: Option<String>,
     pub(crate) frame_id: u64,
@@ -21,8 +20,8 @@ pub(crate) struct TunerViewState {
     pub(crate) level: f32,
     pub(crate) note: Option<String>,
     pub(crate) sample_rate: f32,
-    pub(crate) spectrum: Vec<f32>,
-    pub(crate) waveform: Vec<f32>,
+    pub(crate) spectrum: Arc<[f32]>,
+    pub(crate) waveform: Arc<[f32]>,
 }
 
 impl TunerViewState {
@@ -37,9 +36,8 @@ impl TunerViewState {
         self.level = normalized_ratio(frame.level);
         self.note = Some(frame.note);
         self.sample_rate = sample_rate;
-        self.spectrum = frame.spectrum;
-        self.waveform.clear();
-        self.waveform.extend_from_slice(waveform);
+        self.spectrum = frame.spectrum.into();
+        self.waveform = Arc::from(waveform);
     }
 
     pub(crate) fn clear_detection(&mut self) {
@@ -51,8 +49,8 @@ impl TunerViewState {
         self.is_power = false;
         self.level = 0.0;
         self.note = None;
-        self.spectrum.clear();
-        self.waveform.clear();
+        self.spectrum = Arc::default();
+        self.waveform = Arc::default();
     }
 }
 
@@ -107,6 +105,23 @@ mod tests {
 
         assert_eq!(state.confidence, 0.0);
         assert_eq!(state.level, 1.0);
+    }
+
+    #[test]
+    fn cloned_view_state_shares_signal_snapshots() {
+        let mut state = TunerViewState::default();
+        state.apply(
+            DetectionFrame {
+                spectrum: vec![0.2, 0.4, 0.8],
+                ..DetectionFrame::default()
+            },
+            &[0.1, -0.1, 0.2],
+            48_000.0,
+        );
+        let cloned = state.clone();
+
+        assert!(std::sync::Arc::ptr_eq(&state.waveform, &cloned.waveform));
+        assert!(std::sync::Arc::ptr_eq(&state.spectrum, &cloned.spectrum));
     }
 
     #[test]

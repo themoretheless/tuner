@@ -1,14 +1,24 @@
 # Recommendations & Current Problems Backlog
 
-**Current state audit (findings synced 2026-07-12; verification refreshed 2026-07-21 after the SOLID/GoF implementation and review pass)**
+**Historical stable-ID audit (captured 2026-07-12/21; topology disposition refreshed 2026-08-04)**
 
-This is the canonical **current open-problems extract** for the worktree. It keeps stable `R#` references used by [PLAN.md](PLAN.md). The full ranked **Top 500** lives in [TOP-500-backlog.md](TOP-500-backlog.md); its mirrors remain in this file, [README.md](README.md), and [ARCHITECTURE.md](ARCHITECTURE.md).
+This file preserves stable `R#` evidence and historical review context. It is no
+longer authoritative for execution order; [PLAN.md](PLAN.md) is the current
+two-client plan. Any finding whose only target is the deleted former desktop
+shell is obsolete by topology and must not be reopened without a new grounded
+audit against Vue web or native egui.
 
 **Update:** a second, independent audit pass against this same post-refactor code added **214 more items (`R181`-`R394`)**, organized by a finer 36-piece SOLID/DRY breakdown — see ["Post-Refactor Findings (R181-R394, by SOLID/DRY Piece)"](#post-refactor-findings-r181-r394-by-soliddry-piece) further down.
 
-In the first audit range, **79 findings are verified closed or obsolete and 101 `R#` findings remain open/partial**. The independent `R181`-`R394` pass now has 189 open and 25 closed findings, so the combined current total is 290 open and 104 closed. Closed findings are removed from the current list below and retained in the closure registry so references do not change. The Top 500 is an idea/risk registry, not a claim that 500 independent features are shipped; some entries are mutually exclusive, platform-specific, commercial, or require external signing/accounts.
+The old open/closed counts below are snapshots, not current metrics. The 2026-08-04
+migration removed an entire class of webview bridge, capability, CSP, updater and
+duplicate-native findings. IDs remain unchanged for traceability. The Top 500 is
+an idea/risk registry, not a claim that 500 independent features are shipped.
 
-Audit basis: direct inspection of the changed web, Rust core, shared audio, Tauri and egui paths; `159` Vitest tests with test-source typechecking; `71` pitch-core tests with all features; licensed corpus `19/19`; workspace tests/strict clippy/fmt; generated-source freshness; pure application/Vue-adapter boundary checks; core and egui WASM target checks; Vue production build; eleven browser flows covering shared confidence parity, full-frame WASM, three-capture native/WASM replay, synthetic start/stop, Algorithm evidence, intonation setup, exact PCM debug capture, responsive Library navigation/view-scroll reset, denied permission, track loss/restart and transient device changes; native-wire and egui-view replay projections; manual desktop/`390x844`/`320x700` visual QA; and a full Tauri `.app`/`.dmg` build.
+Current verification basis: Vue/Web Audio + pitch-core WASM and native
+egui/wgpu + audio-input/cpal; 286 Vitest tests, 12 Playwright flows, production
+web/WASM build, workspace tests/clippy/fmt, native/WASM replay parity,
+licensed corpus/SNR/reverb gates and the zero-network scan.
 
 Synced documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) describes the target architecture and links back here.

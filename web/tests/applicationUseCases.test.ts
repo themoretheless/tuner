@@ -14,7 +14,6 @@ describe('framework-independent application use cases', () => {
     const status = cell<SessionStatus>('idle');
     const session = {
       clearError: vi.fn(),
-      setAudioBackend: vi.fn(async () => {}),
       start: vi.fn(async () => { status.value = 'listening'; }),
       status,
       stop: vi.fn(async () => { status.value = 'idle'; }),

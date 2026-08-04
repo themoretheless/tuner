@@ -29,6 +29,7 @@ function initialLang(): SupportedLang {
 }
 
 const lang = ref<SupportedLang>(initialLang())
+if (typeof document !== 'undefined') document.documentElement.lang = lang.value
 
 const ru: Record<string, string> = {
   'app.title': 'Гитарный Тюнер',
@@ -55,7 +56,6 @@ const ru: Record<string, string> = {
   'practice.subtitle': 'Тренировка слуха, метроном и история занятий.',
   'analysis.subtitle': 'Сигнал, история высоты и параметры отображения.',
   'analysis.idle': 'Анализ появится после запуска микрофона',
-  'analysis.native': 'Визуализаторы доступны для Web Audio',
   'analysis.empty.detail': 'Основной тюнер продолжает работать независимо от этого экрана.',
   'intonation.title': 'Мастер мензуры',
   'intonation.detail': 'Сравнение флажолета и зажатой ноты на XII ладу.',
@@ -78,7 +78,6 @@ const ru: Record<string, string> = {
   'pipeline.preset.raw': 'Сырой',
   'pipeline.preset.custom': 'Пользовательский',
   'pipeline.backend': 'Активный backend',
-  'pipeline.backend.native': 'Native Rust',
   'pipeline.backend.wasm': 'WebAssembly Rust',
   'pipeline.backend.typescript': 'TypeScript fallback',
   'pipeline.backend.pending': 'Определится после запуска',
@@ -312,7 +311,7 @@ const ru: Record<string, string> = {
   'pipeline.block.harmonic.help.role': 'Запускается, когда временной кандидат не согласуется с выбранным инструментом. После окна Hann измеряет Goertzel-мощность первых пяти гармоник около цели и требует минимум три локально заметные гармоники, включая первую или вторую.',
   'pipeline.block.harmonic.help.flow': 'Подготовленный кадр + спорный кандидат + цели строя → спектрально измеренная альтернатива около цели либо исходный кандидат. Поиск ограничен примерно ±120 центами вокруг реальной цели.',
   'pipeline.block.harmonic.help.disabled': 'Несовместимый с инструментом результат не получает спектрального второго шанса и обычно отбрасывается. Захват сильного обертона может чаще приводить к пустому кадру или неверной октаве.',
-  'pipeline.block.harmonic.help.tradeoff': 'Снижает ошибки по обертонам без жёсткого snap к ноте, но добавляет несколько спектральных проб и зависит от выбранного строя. Реализован только в Rust/WASM/native backend.',
+  'pipeline.block.harmonic.help.tradeoff': 'Снижает ошибки по обертонам без жёсткого snap к ноте, но добавляет несколько спектральных проб и зависит от выбранного строя. Реализован только в Rust/WASM backend.',
   'pipeline.block.octave.help.role': 'Проверяет гипотезы f, f/2 и 2f по нечётным и чётным гармоникам через Hann + Goertzel. Смена октавы требует двух последовательных подтверждений и использует разные пороги включения и выхода.',
   'pipeline.block.octave.help.flow': 'Согласованный PitchEstimate + подготовленный кадр + допустимый диапазон → исходная, удвоенная или делённая пополам частота; неподтверждённая коррекция временно не публикуется.',
   'pipeline.block.octave.help.disabled': 'Частота арбитража проходит без спектральной коррекции. Детектор может показывать примерно 164.8 Гц вместо низкой E2 82.4 Гц либо ошибку в обратную сторону.',
@@ -336,11 +335,11 @@ const ru: Record<string, string> = {
   'pipeline.block.power.help.role': 'Ищет одновременно звучащую квинту: для частот от 40 Гц проверяет корреляцию первых 512 отсчётов на периоде примерно 1.4983 × fundamental и ставит флаг при нормализованном значении выше 0.5.',
   'pipeline.block.power.help.flow': 'Исходный аудиокадр + уже отслеженная fundamental frequency → логический флаг isPower. На саму выбранную частоту, ноту и cents этот этап не влияет.',
   'pipeline.block.power.help.disabled': 'Дополнительная корреляция не выполняется, а isPower всегда false. Обычная настройка одной струны продолжает работать без изменений.',
-  'pipeline.block.power.help.tradeoff': 'Небольшая дополнительная работа нужна только при наличии стабильной частоты. Эвристика может зависеть от тембра и микрофона; этап доступен только в Rust/WASM/native backend.',
+  'pipeline.block.power.help.tradeoff': 'Небольшая дополнительная работа нужна только при наличии стабильной частоты. Эвристика может зависеть от тембра и микрофона; этап доступен только в Rust/WASM backend.',
   'pipeline.block.frame.help.role': 'Формирует канонический контракт одного кадра: freq, rawFreq, confidence, rms, level, isPower, cents, note, target, inTune и spectrum. UI и история больше не знают внутреннее устройство detector.',
-  'pipeline.block.frame.help.flow': 'Результаты detector, gate, tracker, resolver, power check и необязательного spectrum analyzer → один сериализуемый DetectionFrame для Vue, WASM или native event bridge.',
+  'pipeline.block.frame.help.flow': 'Результаты detector, gate, tracker, resolver, power check и необязательного spectrum analyzer → один сериализуемый DetectionFrame для Vue через WASM или TypeScript fallback.',
   'pipeline.block.frame.help.disabled': 'Этап обязательный: без общего формата backend-пути выдавали бы несовместимые данные и компоненты интерфейса зависели бы от конкретной реализации DSP.',
-  'pipeline.block.frame.help.tradeoff': 'Единый DTO ослабляет связанность и упрощает тесты, но любое новое поле требует синхронно обновить Rust, WASM codec, native contract и TypeScript types. Fallback помечает кадр как unresolved до web-resolver.',
+  'pipeline.block.frame.help.tradeoff': 'Единый DTO ослабляет связанность и упрощает тесты, но любое новое поле требует синхронно обновить Rust, WASM codec и TypeScript types. Fallback помечает кадр как unresolved до web-resolver.',
   dismiss: 'закрыть',
   refresh: 'обновить',
   start: 'старт',
@@ -363,9 +362,6 @@ const ru: Record<string, string> = {
   'input.saved.unavailable': 'Сохранённый микрофон недоступен',
   'input.level': 'УРОВЕНЬ ВХОДА',
   'input.microphone': 'Микрофон',
-  'audio.backend': 'Аудио',
-  'audio.backend.web': 'Web',
-  'audio.backend.native': 'Native',
   'audio.file.open': 'ОТКРЫТЬ WAV',
   'audio.file.replace': 'ЗАМЕНИТЬ WAV',
   'audio.file.microphone': 'Вернуться к микрофону',
@@ -461,7 +457,7 @@ const ru: Record<string, string> = {
   'practice.clear': 'ОЧИСТИТЬ ИСТОРИЮ',
   'quiet.room': 'Тихая комната. Играй по одной струне. Используй ручной выбор для точности.',
   'keyboard.hint': 'Space/M микрофон, 1-9 струны, R референс',
-  footer: 'Гитарный Тюнер — Vue + Tauri/Rust',
+  footer: 'Гитарный Тюнер — Vue + Rust/WASM',
 
   // a11y: screen-reader announcements and non-color tune labels
   'a11y.near.flat': 'ЧУТЬ НИЖЕ — натяни',
@@ -489,11 +485,6 @@ const ru: Record<string, string> = {
   'diagnostics.input-multi-channel': 'Многоканальный вход — используйте моно-вход для точности',
   'diagnostics.input-resampled': 'Частота входа пересчитывается системой — выровняйте частоты устройства и контекста',
   'diagnostics.input-settings-unavailable': 'Параметры входа недоступны — диагностика обработки звука ограничена',
-  'diagnostics.backend-native-stream-failed': 'Сбой нативного аудиопотока — перезапустите прослушивание',
-  'diagnostics.backend-stream-lost': 'Аудиопоток потерян — переподключаем вход…',
-  'diagnostics.backend-recovery-attempted': 'Попытка восстановить аудиовход…',
-  'diagnostics.backend-recovery-succeeded': 'Аудиовход восстановлен — прослушивание продолжается',
-  'diagnostics.backend-recovery-failed': 'Не удалось восстановить аудиовход — переподключите устройство и начните прослушивание заново',
   // i18n (M43): автодетект языка
   'i18n.auto': 'Авто (язык браузера)',
   // pwa (M54): уведомление о доступном обновлении приложения
@@ -538,7 +529,6 @@ const en: Record<string, string> = {
   'practice.subtitle': 'Ear training, metronome, and practice history.',
   'analysis.subtitle': 'Signal views, pitch history, and display preferences.',
   'analysis.idle': 'Analysis appears after the microphone starts',
-  'analysis.native': 'Visualizers are available with Web Audio',
   'analysis.empty.detail': 'The primary tuner keeps working independently from this view.',
   'intonation.title': 'Intonation setup',
   'intonation.detail': 'Compare the 12th-fret harmonic with the fretted 12th note.',
@@ -561,7 +551,6 @@ const en: Record<string, string> = {
   'pipeline.preset.raw': 'Raw',
   'pipeline.preset.custom': 'Custom',
   'pipeline.backend': 'Active backend',
-  'pipeline.backend.native': 'Native Rust',
   'pipeline.backend.wasm': 'WebAssembly Rust',
   'pipeline.backend.typescript': 'TypeScript fallback',
   'pipeline.backend.pending': 'Selected after start',
@@ -795,7 +784,7 @@ const en: Record<string, string> = {
   'pipeline.block.harmonic.help.role': 'Runs when the time-domain candidate conflicts with the active instrument. After a Hann window, it measures Goertzel power at the first five harmonics near a target and requires at least three local matches including harmonic one or two.',
   'pipeline.block.harmonic.help.flow': 'Prepared frame + disputed candidate + tuning targets → a spectrally measured alternative near a real target or the original candidate. Search stays within roughly ±120 cents of a target.',
   'pipeline.block.harmonic.help.disabled': 'An instrument-incompatible result gets no spectral second chance and is usually rejected. A dominant overtone is more likely to create an empty frame or an incorrect octave.',
-  'pipeline.block.harmonic.help.tradeoff': 'Reduces overtone errors without hard snapping, but adds multiple spectral probes and depends on tuning context. It is available only in Rust/WASM/native backends.',
+  'pipeline.block.harmonic.help.tradeoff': 'Reduces overtone errors without hard snapping, but adds multiple spectral probes and depends on tuning context. It is available only in the Rust/WASM backend.',
   'pipeline.block.octave.help.role': 'Tests f, f/2, and 2f hypotheses using odd/even harmonic power from Hann-windowed Goertzel probes. An octave fold needs two consecutive confirmations and separate enter/exit thresholds.',
   'pipeline.block.octave.help.flow': 'Reconciled PitchEstimate + prepared frame + valid frequency range → original, doubled, or halved frequency; an unconfirmed correction is temporarily withheld.',
   'pipeline.block.octave.help.disabled': 'The arbitration frequency passes without spectral correction. A detector may display about 164.8 Hz instead of low E2 at 82.4 Hz, or make the inverse octave error.',
@@ -819,11 +808,11 @@ const en: Record<string, string> = {
   'pipeline.block.power.help.role': 'Looks for a simultaneous fifth: above 40 Hz it correlates the first 512 samples at the period of roughly 1.4983 × fundamental and sets a flag when normalized correlation exceeds 0.5.',
   'pipeline.block.power.help.flow': 'Raw audio frame + already tracked fundamental frequency → boolean isPower. This stage does not change frequency, note, or cents.',
   'pipeline.block.power.help.disabled': 'The extra correlation is skipped and isPower remains false. Normal single-string tuning continues unchanged.',
-  'pipeline.block.power.help.tradeoff': 'A small amount of extra work occurs only after a stable frequency exists. The heuristic depends on timbre and microphone response and is available only in Rust/WASM/native backends.',
+  'pipeline.block.power.help.tradeoff': 'A small amount of extra work occurs only after a stable frequency exists. The heuristic depends on timbre and microphone response and is available only in the Rust/WASM backend.',
   'pipeline.block.frame.help.role': 'Builds the canonical frame contract: freq, rawFreq, confidence, rms, level, isPower, cents, note, target, inTune, and spectrum. UI and history stay independent of detector internals.',
-  'pipeline.block.frame.help.flow': 'Detector, gate, tracker, resolver, power check, and optional spectrum-analyzer outputs → one serializable DetectionFrame for Vue, WASM, or the native event bridge.',
+  'pipeline.block.frame.help.flow': 'Detector, gate, tracker, resolver, power check, and optional spectrum-analyzer outputs → one serializable DetectionFrame for Vue through WASM or the TypeScript fallback.',
   'pipeline.block.frame.help.disabled': 'This stage is mandatory. Without a shared format, backend paths would expose incompatible data and interface components would depend on a specific DSP implementation.',
-  'pipeline.block.frame.help.tradeoff': 'A single DTO reduces coupling and simplifies tests, but every new field must update Rust, the WASM codec, native contract, and TypeScript types together. Fallback frames remain unresolved until web resolution.',
+  'pipeline.block.frame.help.tradeoff': 'A single DTO reduces coupling and simplifies tests, but every new field must update Rust, the WASM codec, and TypeScript types together. Fallback frames remain unresolved until web resolution.',
   dismiss: 'dismiss',
   refresh: 'refresh',
   start: 'start',
@@ -846,9 +835,6 @@ const en: Record<string, string> = {
   'input.saved.unavailable': 'Saved microphone unavailable',
   'input.level': 'INPUT LEVEL',
   'input.microphone': 'Microphone',
-  'audio.backend': 'Audio',
-  'audio.backend.web': 'Web',
-  'audio.backend.native': 'Native',
   'audio.file.open': 'OPEN WAV',
   'audio.file.replace': 'REPLACE WAV',
   'audio.file.microphone': 'Return to microphone',
@@ -944,7 +930,7 @@ const en: Record<string, string> = {
   'practice.clear': 'CLEAR HISTORY',
   'quiet.room': 'Works best in a quiet room. Pluck one string at a time. Use manual selection for best accuracy.',
   'keyboard.hint': 'Space/M mic, 1-9 strings, R reference',
-  footer: 'Guitar Tuner — Vue frontend • Tauri/Rust desktop',
+  footer: 'Guitar Tuner — Vue frontend • Rust/WASM detector',
 
   // a11y: screen-reader announcements and non-color tune labels
   'a11y.near.flat': 'ALMOST — tighten',
@@ -972,11 +958,6 @@ const en: Record<string, string> = {
   'diagnostics.input-multi-channel': 'Multi-channel input — use a mono input for accuracy',
   'diagnostics.input-resampled': 'Input is being resampled — align device and context sample rates',
   'diagnostics.input-settings-unavailable': 'Input settings unavailable — audio-processing diagnostics are limited',
-  'diagnostics.backend-native-stream-failed': 'Native audio stream failed — restart listening',
-  'diagnostics.backend-stream-lost': 'Audio stream lost — reconnecting the input…',
-  'diagnostics.backend-recovery-attempted': 'Trying to recover the audio input…',
-  'diagnostics.backend-recovery-succeeded': 'Audio input recovered — listening continues',
-  'diagnostics.backend-recovery-failed': 'Could not recover the audio input — reconnect the device and start listening again',
   // i18n (M43): browser language auto-detect
   'i18n.auto': 'Auto (browser language)',
   // pwa (M54): app update available notification
@@ -1003,6 +984,7 @@ export function useL10n() {
   }
   const setLang = (value: SupportedLang) => {
     lang.value = value
+    if (typeof document !== 'undefined') document.documentElement.lang = value
     try { localStorage.setItem('lang', value) } catch { /* ignore */ }
   }
   const toggleLang = () => {

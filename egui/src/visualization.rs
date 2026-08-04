@@ -1,15 +1,111 @@
 use crate::state::TunerViewState;
 use eframe::egui;
 use std::collections::VecDeque;
+#[cfg(test)]
+use std::sync::Arc;
 
 const CENTS_HISTORY_LIMIT: usize = 300;
 const SPECTROGRAM_HISTORY_LIMIT: usize = 150;
+const SPECTROGRAM_FREQUENCY_BINS: usize = 80;
+
+struct SpectrogramTexture {
+    image: egui::ColorImage,
+    texture: Option<egui::TextureHandle>,
+    write_index: usize,
+    len: usize,
+    dirty_columns: [bool; SPECTROGRAM_HISTORY_LIMIT],
+}
+
+impl Default for SpectrogramTexture {
+    fn default() -> Self {
+        Self {
+            image: egui::ColorImage::new(
+                [SPECTROGRAM_HISTORY_LIMIT, SPECTROGRAM_FREQUENCY_BINS],
+                egui::Color32::from_gray(15),
+            ),
+            texture: None,
+            write_index: 0,
+            len: 0,
+            dirty_columns: [false; SPECTROGRAM_HISTORY_LIMIT],
+        }
+    }
+}
+
+impl SpectrogramTexture {
+    fn push(&mut self, spectrum: &[f32]) {
+        let column = self.write_index;
+        for bin in 0..SPECTROGRAM_FREQUENCY_BINS {
+            let row = SPECTROGRAM_FREQUENCY_BINS - 1 - bin;
+            self.image.pixels[row * SPECTROGRAM_HISTORY_LIMIT + column] =
+                spectrogram_color(spectrum.get(bin).copied().unwrap_or(0.0));
+        }
+        self.dirty_columns[column] = true;
+        self.write_index = (self.write_index + 1) % SPECTROGRAM_HISTORY_LIMIT;
+        self.len = (self.len + 1).min(SPECTROGRAM_HISTORY_LIMIT);
+    }
+
+    fn clear(&mut self) {
+        self.image.pixels.fill(egui::Color32::from_gray(15));
+        self.texture = None;
+        self.write_index = 0;
+        self.len = 0;
+        self.dirty_columns.fill(false);
+    }
+
+    fn dirty_ranges(&self) -> Vec<(usize, usize)> {
+        let mut ranges = Vec::new();
+        let mut column = 0;
+        while column < SPECTROGRAM_HISTORY_LIMIT {
+            if !self.dirty_columns[column] {
+                column += 1;
+                continue;
+            }
+            let start = column;
+            while column < SPECTROGRAM_HISTORY_LIMIT && self.dirty_columns[column] {
+                column += 1;
+            }
+            ranges.push((start, column));
+        }
+        ranges
+    }
+
+    fn upload(&mut self, context: &egui::Context) -> egui::TextureId {
+        if self.texture.is_none() {
+            self.texture = Some(context.load_texture(
+                "spectrogram",
+                self.image.clone(),
+                egui::TextureOptions::NEAREST,
+            ));
+            self.dirty_columns.fill(false);
+        }
+        for (start, end) in self.dirty_ranges() {
+            let width = end - start;
+            let mut pixels = Vec::with_capacity(width * SPECTROGRAM_FREQUENCY_BINS);
+            for row in 0..SPECTROGRAM_FREQUENCY_BINS {
+                let row_start = row * SPECTROGRAM_HISTORY_LIMIT + start;
+                pixels.extend_from_slice(&self.image.pixels[row_start..row_start + width]);
+            }
+            let image = egui::ColorImage {
+                size: [width, SPECTROGRAM_FREQUENCY_BINS],
+                pixels,
+            };
+            if let Some(texture) = &mut self.texture {
+                texture.set_partial([start, 0], image, egui::TextureOptions::NEAREST);
+            }
+            self.dirty_columns[start..end].fill(false);
+        }
+        self.texture
+            .as_ref()
+            .expect("spectrogram texture is initialized before drawing")
+            .id()
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct VisualizationHistory {
     cents: VecDeque<f32>,
     last_frame_id: u64,
-    spectrogram: VecDeque<Vec<f32>>,
+    spectrogram: SpectrogramTexture,
     pub(crate) show_spectrogram: bool,
 }
 
@@ -21,11 +117,7 @@ impl VisualizationHistory {
         self.last_frame_id = state.frame_id;
         push_bounded(&mut self.cents, state.cents, CENTS_HISTORY_LIMIT);
         if self.show_spectrogram && !state.spectrum.is_empty() {
-            push_bounded(
-                &mut self.spectrogram,
-                state.spectrum.clone(),
-                SPECTROGRAM_HISTORY_LIMIT,
-            );
+            self.spectrogram.push(&state.spectrum);
         }
     }
 
@@ -53,8 +145,8 @@ impl VisualizationHistory {
         draw_spectrum(ui, &state.spectrum, state.frequency, sample_rate);
     }
 
-    pub(crate) fn draw_spectrogram(&self, ui: &mut egui::Ui) {
-        draw_spectrogram(ui, &self.spectrogram);
+    pub(crate) fn draw_spectrogram(&mut self, ui: &mut egui::Ui) {
+        draw_spectrogram(ui, &mut self.spectrogram);
     }
 }
 
@@ -181,37 +273,155 @@ fn draw_spectrum(ui: &mut egui::Ui, spectrum: &[f32], frequency: Option<f32>, sa
     }
 }
 
-fn draw_spectrogram(ui: &mut egui::Ui, history: &VecDeque<Vec<f32>>) {
-    if history.is_empty() {
+fn spectrogram_color(value: f32) -> egui::Color32 {
+    egui::Color32::from_rgb(
+        (value * 255.0).clamp(0.0, 255.0) as u8,
+        (value.sqrt() * 210.0).clamp(0.0, 255.0) as u8,
+        (40.0 + value * 50.0).clamp(0.0, 255.0) as u8,
+    )
+}
+
+fn draw_spectrogram(ui: &mut egui::Ui, spectrogram: &mut SpectrogramTexture) {
+    if spectrogram.len == 0 {
         return;
     }
     ui.add_space(4.0);
     ui.label("Spectrogram");
-    let frequency_bins = 80;
     let size = egui::vec2(ui.available_width().min(520.0), 72.0);
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-    let painter = ui.painter();
-    painter.rect_filled(rect, 2.0, egui::Color32::from_gray(15));
-    let step_width = rect.width() / history.len() as f32;
-    let bin_height = rect.height() / frequency_bins as f32;
-    for (time, frame) in history.iter().enumerate() {
-        let x = rect.min.x + time as f32 * step_width;
-        for bin in 0..frequency_bins {
-            let value = frame.get(bin).copied().unwrap_or(0.0);
-            let y = rect.max.y - (bin + 1) as f32 * bin_height;
-            let color = egui::Color32::from_rgb(
-                (value * 255.0).clamp(0.0, 255.0) as u8,
-                (value.sqrt() * 210.0).clamp(0.0, 255.0) as u8,
-                (40.0 + value * 50.0).clamp(0.0, 255.0) as u8,
-            );
-            painter.rect_filled(
-                egui::Rect::from_min_size(
-                    egui::pos2(x, y),
-                    egui::vec2(step_width.max(0.8), bin_height),
-                ),
-                0.0,
-                color,
-            );
+    let texture_id = spectrogram.upload(ui.ctx());
+    let mut mesh = egui::Mesh::with_texture(texture_id);
+    let capacity = SPECTROGRAM_HISTORY_LIMIT as f32;
+
+    if spectrogram.len < SPECTROGRAM_HISTORY_LIMIT || spectrogram.write_index == 0 {
+        let visible = spectrogram.len as f32 / capacity;
+        mesh.add_rect_with_uv(
+            rect,
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(visible, 1.0)),
+            egui::Color32::WHITE,
+        );
+    } else {
+        let tail_fraction = (SPECTROGRAM_HISTORY_LIMIT - spectrogram.write_index) as f32 / capacity;
+        let split_x = egui::lerp(rect.x_range(), tail_fraction);
+        mesh.add_rect_with_uv(
+            egui::Rect::from_min_max(rect.min, egui::pos2(split_x, rect.max.y)),
+            egui::Rect::from_min_max(
+                egui::pos2(spectrogram.write_index as f32 / capacity, 0.0),
+                egui::pos2(1.0, 1.0),
+            ),
+            egui::Color32::WHITE,
+        );
+        mesh.add_rect_with_uv(
+            egui::Rect::from_min_max(egui::pos2(split_x, rect.min.y), rect.max),
+            egui::Rect::from_min_max(
+                egui::pos2(0.0, 0.0),
+                egui::pos2(spectrogram.write_index as f32 / capacity, 1.0),
+            ),
+            egui::Color32::WHITE,
+        );
+    }
+    ui.painter().add(egui::Shape::mesh(mesh));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state(frame_id: u64, cents: f32) -> TunerViewState {
+        TunerViewState {
+            cents,
+            frame_id,
+            spectrum: Arc::from([0.25, 0.5, 0.75]),
+            ..TunerViewState::default()
         }
+    }
+
+    #[test]
+    fn capture_ignores_duplicate_frames_and_disabled_input() {
+        let mut history = VisualizationHistory {
+            show_spectrogram: true,
+            ..VisualizationHistory::default()
+        };
+        let frame = state(1, 3.0);
+
+        history.capture(&frame, false);
+        assert!(history.cents.is_empty());
+        history.capture(&frame, true);
+        history.capture(&frame, true);
+
+        assert_eq!(history.cents.len(), 1);
+        assert_eq!(history.spectrogram.len, 1);
+    }
+
+    #[test]
+    fn capture_keeps_histories_bounded() {
+        let mut history = VisualizationHistory {
+            show_spectrogram: true,
+            ..VisualizationHistory::default()
+        };
+        for frame_id in 1..=(CENTS_HISTORY_LIMIT as u64 + 25) {
+            history.capture(&state(frame_id, frame_id as f32), true);
+        }
+
+        assert_eq!(history.cents.len(), CENTS_HISTORY_LIMIT);
+        assert_eq!(history.spectrogram.len, SPECTROGRAM_HISTORY_LIMIT);
+        assert_eq!(history.cents.front(), Some(&26.0));
+    }
+
+    #[test]
+    fn clear_resets_both_histories_and_spectrogram_can_reset_independently() {
+        let mut history = VisualizationHistory {
+            show_spectrogram: true,
+            ..VisualizationHistory::default()
+        };
+        history.capture(&state(1, 1.0), true);
+        history.clear_spectrogram();
+        assert_eq!(history.cents.len(), 1);
+        assert_eq!(history.spectrogram.len, 0);
+
+        history.capture(&state(2, 2.0), true);
+        history.clear();
+        assert!(history.cents.is_empty());
+        assert_eq!(history.spectrogram.len, 0);
+    }
+
+    #[test]
+    fn spectrogram_column_preserves_palette_and_frequency_direction() {
+        let mut spectrogram = SpectrogramTexture::default();
+        spectrogram.push(&[1.0]);
+
+        assert_eq!(
+            spectrogram.image.pixels[(SPECTROGRAM_FREQUENCY_BINS - 1) * SPECTROGRAM_HISTORY_LIMIT],
+            spectrogram_color(1.0)
+        );
+        assert_eq!(spectrogram.image.pixels[0], spectrogram_color(0.0));
+        assert_eq!(spectrogram.dirty_ranges(), vec![(0, 1)]);
+    }
+
+    #[test]
+    fn spectrogram_rolls_over_and_tracks_all_dirty_ranges() {
+        let mut spectrogram = SpectrogramTexture {
+            write_index: SPECTROGRAM_HISTORY_LIMIT - 1,
+            len: SPECTROGRAM_HISTORY_LIMIT,
+            ..SpectrogramTexture::default()
+        };
+        spectrogram.push(&[0.25]);
+        spectrogram.push(&[0.5]);
+        spectrogram.push(&[1.0]);
+
+        assert_eq!(spectrogram.len, SPECTROGRAM_HISTORY_LIMIT);
+        assert_eq!(spectrogram.write_index, 2);
+        assert_eq!(
+            spectrogram.dirty_ranges(),
+            vec![
+                (0, 2),
+                (SPECTROGRAM_HISTORY_LIMIT - 1, SPECTROGRAM_HISTORY_LIMIT)
+            ]
+        );
+        assert_eq!(
+            spectrogram.image.pixels
+                [(SPECTROGRAM_FREQUENCY_BINS - 1) * SPECTROGRAM_HISTORY_LIMIT + 1],
+            spectrogram_color(1.0)
+        );
     }
 }

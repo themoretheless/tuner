@@ -20,7 +20,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-production
   cancel-in-progress: false
 
 jobs:
@@ -31,27 +31,19 @@ jobs:
     needs: security
     uses: ./.github/workflows/build-web.yml
 
-  build-tauri:
-    needs: build-web
-    uses: ./.github/workflows/build-tauri.yml
-
   build-egui:
-    needs: build-web
+    needs: security
     uses: ./.github/workflows/build-egui.yml
 
   pages-deploy:
     needs: build-web
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
+    permissions:
+      pages: write
+      id-token: write
+    uses: themoretheless/.github/.github/workflows/deploy-pages.yml@v1
 
   release:
-    needs: [build-web, build-tauri, build-egui]
+    needs: [build-web, build-egui]
 
     runs-on: ubuntu-latest
     steps:
@@ -86,17 +78,9 @@ jobs:
           name: github-pages
           path: _site
 
-      - name: Package web for release
+      - name: Prepare web release archive
         if: steps.version.outputs.skip != 'true'
-        run: tar -cf artifact.tar -C _site .
-
-      - name: Download Tauri artifacts
-        if: steps.version.outputs.skip != 'true' && needs.build-tauri.result == 'success'
-        uses: actions/download-artifact@v8
-        with:
-          pattern: tauri-*
-          path: tauri-artifacts
-          merge-multiple: true
+        run: mv _site/artifact.tar "guitar-tuner-web-${{ steps.version.outputs.tag }}.tar"
 
       - name: Download egui artifacts
         if: steps.version.outputs.skip != 'true' && needs.build-egui.result == 'success'
@@ -121,6 +105,6 @@ jobs:
           prerelease: ${{ steps.version.outputs.is_pre == 'true' }}
           generate_release_notes: true
           files: |
-            artifact.tar
-            tauri-artifacts/**/*
+            guitar-tuner-web-${{ steps.version.outputs.tag }}.tar
             egui-artifacts/**/*
+          fail_on_unmatched_files: true
