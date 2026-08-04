@@ -8,16 +8,13 @@ permissions: {}
 
 jobs:
   review:
-    if: ${{ github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
+      contents: read
       pull-requests: write
-
-    steps:
-      - name: Request and collect Copilot review
-        uses: themoretheless/.github/.github/actions/copilot-review@03333cf03e343cd096218e8df076a3c3fa097c49 # v1
-        with:
-          github-token: ${{ github.token }}
-          # Copilot always emits an overview body; gate only actionable inline comments.
-          fail-on-comments: true
+    uses: themoretheless/.github/.github/workflows/copilot-review.yml@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
+    with:
+      # Copilot always emits an overview body; gate only actionable inline comments.
+      fail_on_comments: true

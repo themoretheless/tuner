@@ -26,37 +26,12 @@ jobs:
 
       - name: Read and validate version
         id: metadata
-        shell: bash
-        run: |
-          node <<'NODE'
-          const { readFileSync } = require('node:fs');
-
-          const expected = JSON.parse(readFileSync('version.json', 'utf8')).version;
-          const jsonFiles = [
-            'web/package.json',
-          ];
-          const cargoFiles = [
-            'Cargo.toml',
-          ];
-
-          for (const file of jsonFiles) {
-            const actual = JSON.parse(readFileSync(file, 'utf8')).version;
-            if (actual !== expected) throw new Error(`${file}: expected ${expected}, got ${actual}`);
-          }
-          for (const file of cargoFiles) {
-            const match = readFileSync(file, 'utf8').match(/^version = "([^"]+)"$/m);
-            if (!match || match[1] !== expected) {
-              throw new Error(`${file}: workspace version must be ${expected}`);
-            }
-          }
-          if (!/^\d+\.\d+\.\d+$/.test(expected)) throw new Error(`invalid release version: ${expected}`);
-          require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, `version=${expected}\n`);
-          NODE
+        run: node scripts/release-metadata.mjs validate
 
       - name: Check version
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: |
-          VERSION=$(node -p 'require("./version.json").version')
+          VERSION="${{ steps.metadata.outputs.version }}"
           LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1 | sed 's/^v//' || echo "0.0.0")
 
           # Check if code files changed (not just CI/docs)
@@ -88,27 +63,18 @@ jobs:
           fi
 
       - name: Setup Vue
-        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-vue@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           npm-cache-dependency-path: web/package-lock.json
           working-directory: web
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
           rust-toolchain: beta
           targets: wasm32-unknown-unknown
           tools: wasm-pack@0.15.0
-          cargo-workspaces: ". -> target"
-
-      - name: Check generated note math
-        working-directory: web
-        run: npm run codegen:check
-
-      - name: Typecheck frontend
-        working-directory: web
-        run: npx vue-tsc --noEmit
 
       - name: Run web tests
         working-directory: web
@@ -128,6 +94,9 @@ jobs:
         env:
           VITE_APP_VERSION: ${{ steps.metadata.outputs.version }}
           VITE_APP_SHA: ${{ inputs.ref || github.sha }}
+
+      - name: Zero-network gate
+        run: node scripts/check-no-network.mjs
 
       - name: SPA fallback for GitHub Pages
         run: cp web/dist/index.html web/dist/404.html

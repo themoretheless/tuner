@@ -1,7 +1,8 @@
 name: Security Gates
 
-# Релизные гейты M8: zero-network, cargo-deny и npm audit.
-# Вызывается из release.yml как обязательный гейт релиза и гоняется на каждый PR.
+# Гейты зависимостей M8: cargo-deny и npm audit.
+# Zero-network проверяется в build-web после production-сборки.
+# Workflow вызывается из release.yml как обязательный гейт и гоняется на каждый PR.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -18,40 +19,7 @@ permissions:
   contents: read
 
 jobs:
-  # 1. Zero-network proof: собираем прод-фронтенд и статически доказываем,
-  #    что ни артефакт, ни исходники, ни прод-CSP, ни Rust-часть не содержат
-  #    сетевых вызовов наружу. См. scripts/check-no-network.mjs.
-  zero-network:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.ref || github.ref }}
-          persist-credentials: false
-
-      - name: Setup Vue
-        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
-        with:
-          node-version: "22"
-          npm-cache-dependency-path: web/package-lock.json
-          working-directory: web
-
-      - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
-        with:
-          rust-toolchain: beta
-          targets: wasm32-unknown-unknown
-          tools: wasm-pack@0.15.0
-          cargo-workspaces: ". -> target"
-
-      - name: Build web (production)
-        working-directory: web
-        run: npm run build
-
-      - name: Zero-network gate
-        run: node scripts/check-no-network.mjs
-
-  # 2. cargo-deny: лицензии, advisories (RustSec), bans, sources. deny.toml в корне.
+  # 1. cargo-deny: лицензии, advisories (RustSec), bans, sources. deny.toml в корне.
   cargo-deny:
     runs-on: ubuntu-latest
     steps:
@@ -61,16 +29,15 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
           rust-toolchain: beta
           tools: cargo-deny
-          cargo-workspaces: ". -> target"
 
       - name: cargo deny check
         run: cargo deny check
 
-  # 3. npm audit для web/ (severity high и выше).
+  # 2. npm audit для web/ (severity high и выше).
   npm-audit:
     runs-on: ubuntu-latest
     steps:
@@ -80,9 +47,9 @@ jobs:
           persist-credentials: false
 
       - name: Setup Vue
-        uses: themoretheless/.github/.github/actions/setup-vue@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-vue@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
-          node-version: "22"
+          node-version-file: .nvmrc
           npm-cache-dependency-path: web/package-lock.json
           working-directory: web
 

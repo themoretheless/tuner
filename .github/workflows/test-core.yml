@@ -20,12 +20,11 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
           rust-toolchain: beta
           components: rustfmt,clippy
           targets: wasm32-unknown-unknown
-          cargo-workspaces: ". -> target"
 
       # pitch-core depends only on rustfft (no cpal/ALSA), so -p keeps the
       # workspace's native-audio members out of the build.

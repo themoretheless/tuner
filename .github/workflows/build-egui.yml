@@ -42,25 +42,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Read package version
+      - name: Read and validate version
         id: metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          VERSION=$(node -p 'require("./version.json").version')
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Invalid package version: $VERSION"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        run: node scripts/release-metadata.mjs validate
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@3117a6afb233141f7f2b7809ed8b0866f3a29e28 # v1
+        uses: themoretheless/.github/.github/actions/setup-rust@0e1f87dda0310901d9db8c0cb0b21b640fc4d85a # v1
         with:
           rust-toolchain: beta
           targets: ${{ matrix.target }}
-          cargo-workspaces: ". -> target"
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -77,183 +67,29 @@ jobs:
 
       - name: Package unsigned native application
         id: package
-        shell: bash
         env:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          set -euo pipefail
-
-          if [[ -e package-work || -e release-artifacts ]]; then
-            echo "::error::Packaging output directories already exist"
-            exit 1
-          fi
-          mkdir -p package-work release-artifacts
-
-          BINARY="guitar-tuner-egui"
-          EXT=""
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            EXT=".exe"
-          fi
-
-          SOURCE="target/${TARGET}/release/${BINARY}${EXT}"
-          if [[ ! -s "$SOURCE" ]]; then
-            echo "::error::Native executable was not produced: $SOURCE"
-            exit 1
-          fi
-
-          case "$RUNNER_OS" in
-            macOS)
-              APP_NAME="Guitar Tuner.app"
-              APP_DIR="package-work/${APP_NAME}"
-              mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-              cp "$SOURCE" "$APP_DIR/Contents/MacOS/$BINARY"
-              chmod 755 "$APP_DIR/Contents/MacOS/$BINARY"
-              cp assets/icons/icon.icns "$APP_DIR/Contents/Resources/icon.icns"
-
-              cat > "$APP_DIR/Contents/Info.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>en</string>
-            <key>CFBundleDisplayName</key>
-            <string>Guitar Tuner</string>
-            <key>CFBundleExecutable</key>
-            <string>guitar-tuner-egui</string>
-            <key>CFBundleIconFile</key>
-            <string>icon.icns</string>
-            <key>CFBundleIdentifier</key>
-            <string>com.tuner.guitar</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundleName</key>
-            <string>Guitar Tuner</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${VERSION}</string>
-            <key>CFBundleVersion</key>
-            <string>${VERSION}</string>
-            <key>LSApplicationCategoryType</key>
-            <string>public.app-category.music</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-            <key>NSMicrophoneUsageDescription</key>
-            <string>Guitar Tuner uses the microphone to detect instrument pitch. Audio is processed entirely on this device.</string>
-          </dict>
-          </plist>
-          EOF
-
-              plutil -lint "$APP_DIR/Contents/Info.plist"
-              case "$TARGET" in
-                aarch64-apple-darwin) PLATFORM="macos-aarch64" ;;
-                x86_64-apple-darwin) PLATFORM="macos-x86_64" ;;
-                *)
-                  echo "::error::Unsupported macOS target: $TARGET"
-                  exit 1
-                  ;;
-              esac
-              PACKAGE_NAME="guitar-tuner-v${VERSION}-${PLATFORM}.app.zip"
-              /usr/bin/ditto -c -k --sequesterRsrc --keepParent \
-                "$APP_DIR" "release-artifacts/$PACKAGE_NAME"
-              ;;
-
-            Windows)
-              BUNDLE_NAME="guitar-tuner-v${VERSION}-windows-x86_64"
-              BUNDLE_DIR="package-work/$BUNDLE_NAME"
-              mkdir -p "$BUNDLE_DIR"
-              cp "$SOURCE" "$BUNDLE_DIR/guitar-tuner.exe"
-              cp assets/icons/icon.ico "$BUNDLE_DIR/guitar-tuner.ico"
-              cat > "$BUNDLE_DIR/README.txt" <<EOF
-          Guitar Tuner ${VERSION} for Windows
-
-          Run guitar-tuner.exe. This is a portable, unsigned build; Windows may
-          show a SmartScreen warning. Audio is processed locally on this device.
-          EOF
-
-              PACKAGE_NAME="${BUNDLE_NAME}.zip"
-              (
-                cd package-work
-                7z a -tzip "../release-artifacts/$PACKAGE_NAME" "$BUNDLE_NAME"
-              )
-              ;;
-
-            Linux)
-              BUNDLE_NAME="guitar-tuner-v${VERSION}-linux-x86_64"
-              BUNDLE_DIR="package-work/$BUNDLE_NAME"
-              mkdir -p "$BUNDLE_DIR"
-              cp "$SOURCE" "$BUNDLE_DIR/guitar-tuner-egui"
-              chmod 755 "$BUNDLE_DIR/guitar-tuner-egui"
-              cp assets/icons/icon.png "$BUNDLE_DIR/guitar-tuner.png"
-              cat > "$BUNDLE_DIR/README.txt" <<EOF
-          Guitar Tuner ${VERSION} for Linux
-
-          Run ./guitar-tuner-egui from this directory. This is a portable,
-          unsigned build; audio is processed locally on this device.
-          EOF
-
-              PACKAGE_NAME="${BUNDLE_NAME}.tar.gz"
-              tar -czf "release-artifacts/$PACKAGE_NAME" \
-                -C package-work "$BUNDLE_NAME"
-              ;;
-
-            *)
-              echo "::error::Unsupported runner OS: $RUNNER_OS"
-              exit 1
-              ;;
-          esac
-
-          echo "name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
-          echo "path=release-artifacts/$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          bash scripts/package-egui-release.sh package \
+            --workspace "$PWD" \
+            --runner-os "$RUNNER_OS" \
+            --target "$TARGET" \
+            --version "$VERSION" \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Verify native release package
-        shell: bash
         env:
           PACKAGE_NAME: ${{ steps.package.outputs.name }}
           PACKAGE_PATH: ${{ steps.package.outputs.path }}
           VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          set -euo pipefail
-
-          if [[ "$PACKAGE_PATH" != "release-artifacts/$PACKAGE_NAME" ]]; then
-            echo "::error::Package output path is inconsistent"
-            exit 1
-          fi
-          if [[ ! -s "$PACKAGE_PATH" ]]; then
-            echo "::error::Expected package is missing or empty: $PACKAGE_PATH"
-            exit 1
-          fi
-
-          PACKAGE_COUNT=$(find release-artifacts -maxdepth 1 -type f | wc -l | tr -d '[:space:]')
-          if [[ "$PACKAGE_COUNT" != "1" ]]; then
-            echo "::error::Expected exactly one release package, found $PACKAGE_COUNT"
-            find release-artifacts -maxdepth 1 -type f -print
-            exit 1
-          fi
-
-          case "$RUNNER_OS" in
-            macOS)
-              unzip -Z1 "$PACKAGE_PATH" \
-                | grep -Fx "Guitar Tuner.app/Contents/Info.plist" >/dev/null
-              unzip -Z1 "$PACKAGE_PATH" \
-                | grep -Fx "Guitar Tuner.app/Contents/MacOS/guitar-tuner-egui" >/dev/null
-              unzip -Z1 "$PACKAGE_PATH" \
-                | grep -Fx "Guitar Tuner.app/Contents/Resources/icon.icns" >/dev/null
-              ;;
-            Windows)
-              7z l "$PACKAGE_PATH" | grep -F "guitar-tuner.exe" >/dev/null
-              7z l "$PACKAGE_PATH" | grep -F "guitar-tuner.ico" >/dev/null
-              7z l "$PACKAGE_PATH" | grep -F "README.txt" >/dev/null
-              ;;
-            Linux)
-              ROOT="guitar-tuner-v${VERSION}-linux-x86_64"
-              tar -tzf "$PACKAGE_PATH" | grep -Fx "$ROOT/guitar-tuner-egui" >/dev/null
-              tar -tzf "$PACKAGE_PATH" | grep -Fx "$ROOT/guitar-tuner.png" >/dev/null
-              tar -tzf "$PACKAGE_PATH" | grep -Fx "$ROOT/README.txt" >/dev/null
-              ;;
-          esac
+          bash scripts/package-egui-release.sh verify \
+            --workspace "$PWD" \
+            --runner-os "$RUNNER_OS" \
+            --version "$VERSION" \
+            --package-name "$PACKAGE_NAME" \
+            --package-path "$PACKAGE_PATH"
 
       - name: Upload egui artifacts
         uses: actions/upload-artifact@v4
