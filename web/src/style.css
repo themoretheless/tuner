@@ -443,6 +443,11 @@ body {
   background: var(--canvas-bg);
 }
 
+/* Names the harmonic overlay drawn on the spectrum, in the same hue as its lines. */
+.spectrum-legend {
+  color: var(--canvas-warning);
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

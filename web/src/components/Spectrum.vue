@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
 import type { CanvasFrame } from '../composables/useHiDpiCanvas'
 import type { SpectrumFrame } from '../composables/useVisualizationFrames'
-import { canvasPalette } from '../utils/canvasPalette'
+import { canvasPalette, type CanvasPalette } from '../utils/canvasPalette'
+import { harmonicMarkers } from '../utils/harmonicMarkers'
 import {
   SPECTRAL_PEAK_MAX_FREQ,
   SPECTRAL_PEAK_MIN_FREQ,
@@ -37,6 +38,10 @@ const peakFrequency = computed(() => {
   if (!props.isListening) return null
   return spectralPeakFrequency(props.frame)
 })
+
+const markers = computed(() =>
+  props.isListening ? harmonicMarkers(props.currentFreq) : [],
+)
 
 function clearCanvas(frame: CanvasFrame) {
   frame.ctx.fillStyle = canvasPalette(frame).background
@@ -103,24 +108,47 @@ function drawFrame(frame: CanvasFrame) {
     ctx.fillRect(x1, h - barH, bw, barH)
   }
 
-  // Highlight harmonics at correct log positions (crisp lines)
-  if (props.currentFreq && props.currentFreq > 40) {
+  drawHarmonicMarkers(frame, palette)
+}
+
+// The fundamental and its overtones, so the peaks of one plucked string read
+// as a single note rather than as several unexplained tones. The fundamental
+// is solid, overtones are dashed and dimmer, and every line carries its
+// multiple so the overlay explains itself.
+function drawHarmonicMarkers(frame: CanvasFrame, palette: CanvasPalette) {
+  const { ctx, w, h } = frame
+  if (!markers.value.length) return
+
+  ctx.save()
+  ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace'
+  ctx.textBaseline = 'top'
+  ctx.lineWidth = 1
+
+  for (const marker of markers.value) {
+    const isFundamental = marker.harmonic === 1
+    // Pixel-snapped so a 1px line stays crisp instead of straddling two pixels,
+    // and held inside the canvas: a partial landing exactly on MAX_FREQ maps to
+    // w, one pixel past the last drawable column, which would hide the line
+    // while its label still showed.
+    const x = Math.min(Math.floor(marker.position * w), w - 1) + 0.5
+    ctx.globalAlpha = isFundamental ? 0.75 : 0.4
     ctx.strokeStyle = palette.warning
-    ctx.lineWidth = 1
-    for (let harm = 2; harm <= 5; harm++) {
-      const harmFreq = props.currentFreq * harm
-      if (harmFreq > MAX_FREQ) break
-      // map freq -> log t -> screen x
-      const t = Math.log(harmFreq / MIN_FREQ) / Math.log(MAX_FREQ / MIN_FREQ)
-      if (t >= 0 && t <= 1) {
-        const x = t * w + 0.5
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x, h)
-        ctx.stroke()
-      }
-    }
+    ctx.setLineDash(isFundamental ? [] : [3, 3])
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, h)
+    ctx.stroke()
+
+    const label = `×${marker.harmonic}`
+    // Flip the label inside the canvas when the line sits at the right edge.
+    const labelWidth = ctx.measureText(label).width
+    const flip = x + labelWidth + 3 > w
+    ctx.globalAlpha = isFundamental ? 0.95 : 0.65
+    ctx.fillStyle = palette.warning
+    ctx.fillText(label, flip ? x - labelWidth - 2 : x + 2, 2)
   }
+
+  ctx.restore()
 }
 </script>
 
@@ -137,8 +165,11 @@ function drawFrame(frame: CanvasFrame) {
       class="visual-canvas block w-full rounded-lg border"
       :class="{ 'opacity-40': !isListening }"
     />
-    <div class="flex justify-between text-[10px] mt-1 text-slate-500 font-mono">
+    <div class="flex justify-between items-center gap-2 text-[10px] mt-1 text-slate-500 font-mono">
       <div>{{ MIN_FREQ }} Hz</div>
+      <div v-if="markers.length" class="spectrum-legend truncate">
+        {{ t('spectrum.harmonics') }}
+      </div>
       <div>{{ MAX_FREQ }} Hz</div>
     </div>
   </div>

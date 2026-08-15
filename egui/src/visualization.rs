@@ -7,6 +7,15 @@ use std::sync::Arc;
 const CENTS_HISTORY_LIMIT: usize = 300;
 const SPECTROGRAM_HISTORY_LIMIT: usize = 150;
 const SPECTROGRAM_FREQUENCY_BINS: usize = 80;
+/// Overtones drawn over the spectrum, counting the fundamental as the first.
+/// Same cap as the web host's `harmonicMarkers`.
+const HARMONIC_MARKER_MAX: usize = 5;
+/// The engine reports `spectrum_bins` magnitudes from a transform four times
+/// that length (512 bins of a 2048-point FFT), so a bin spans
+/// `sample_rate / (bins * 4)` Hz.
+const SPECTRUM_FFT_OVERSAMPLE: usize = 4;
+/// Space a harmonic label needs to the right of its line before it has to flip.
+const LABEL_MARGIN: f32 = 16.0;
 
 struct SpectrogramTexture {
     image: egui::ColorImage,
@@ -258,19 +267,62 @@ fn draw_spectrum(ui: &mut egui::Ui, spectrum: &[f32], frequency: Option<f32>, sa
         );
     }
 
+    // Fundamental plus overtones, so the peaks of one plucked string read as a
+    // single note instead of several unexplained tones. Matches the web host:
+    // solid fundamental, dimmer overtones, every line labeled with its multiple.
     if let Some(frequency) = frequency {
-        let fft_size = spectrum.len() * 4;
-        for harmonic in 2..=5 {
-            let bin = ((frequency * harmonic as f32 / (sample_rate / fft_size as f32)) as usize)
-                .min(bin_count - 1);
+        let fft_size = spectrum.len() * SPECTRUM_FFT_OVERSAMPLE;
+        for harmonic in 1..=HARMONIC_MARKER_MAX {
+            let partial = frequency * harmonic as f32;
+            let Some(bin) = spectrum_bin(partial, sample_rate, fft_size, bin_count) else {
+                // Partials only climb from here, so none of the rest fit either.
+                break;
+            };
             let x = rect.min.x + bin as f32 * bar_width;
-            painter.vline(
-                x,
-                rect.y_range(),
-                egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 220, 80)),
+            let fundamental = harmonic == 1;
+            let color = if fundamental {
+                egui::Color32::from_rgb(255, 220, 80)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(255, 220, 80, 120)
+            };
+            painter.vline(x, rect.y_range(), egui::Stroke::new(1.0, color));
+
+            // Keep the label inside the plot when its line sits near the edge.
+            let (anchor, offset) = if x + LABEL_MARGIN > rect.max.x {
+                (egui::Align2::RIGHT_TOP, -2.0)
+            } else {
+                (egui::Align2::LEFT_TOP, 2.0)
+            };
+            painter.text(
+                egui::pos2(x + offset, rect.min.y + 1.0),
+                anchor,
+                format!("×{harmonic}"),
+                egui::FontId::monospace(9.0),
+                color,
             );
         }
     }
+}
+
+/// Index of the drawn bin holding `frequency`, or `None` when it falls past the
+/// plotted range. Out-of-range partials are dropped rather than clamped to the
+/// last bin, which would stack phantom lines on the right edge.
+fn spectrum_bin(
+    frequency: f32,
+    sample_rate: f32,
+    fft_size: usize,
+    bin_count: usize,
+) -> Option<usize> {
+    if frequency <= 0.0 || sample_rate <= 0.0 || fft_size == 0 || bin_count == 0 {
+        return None;
+    }
+    // A NaN input slips past the comparisons above and lands here.
+    let bin = (frequency * fft_size as f32 / sample_rate).round();
+    if !bin.is_finite() || bin < 0.0 {
+        return None;
+    }
+    let bin = bin as usize;
+    (bin < bin_count).then_some(bin)
 }
 
 fn spectrogram_color(value: f32) -> egui::Color32 {
@@ -423,5 +475,79 @@ mod tests {
                 [(SPECTROGRAM_FREQUENCY_BINS - 1) * SPECTROGRAM_HISTORY_LIMIT + 1],
             spectrogram_color(1.0)
         );
+    }
+    const SAMPLE_RATE: f32 = 48_000.0;
+    const SPECTRUM_BINS: usize = 512;
+    const DRAWN_BINS: usize = 200;
+
+    fn fft_size() -> usize {
+        SPECTRUM_BINS * SPECTRUM_FFT_OVERSAMPLE
+    }
+
+    #[test]
+    fn maps_a_frequency_to_its_bin() {
+        // 2048-point FFT at 48 kHz: 23.4375 Hz per bin.
+        assert_eq!(
+            spectrum_bin(23.4375 * 4.0, SAMPLE_RATE, fft_size(), DRAWN_BINS),
+            Some(4)
+        );
+    }
+
+    #[test]
+    fn drops_partials_past_the_drawn_range_instead_of_clamping() {
+        // 200 drawn bins reach ~4.7 kHz; anything above must not be plotted.
+        let beyond = DRAWN_BINS as f32 * SAMPLE_RATE / fft_size() as f32 + 100.0;
+        assert_eq!(
+            spectrum_bin(beyond, SAMPLE_RATE, fft_size(), DRAWN_BINS),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_degenerate_input() {
+        assert_eq!(spectrum_bin(0.0, SAMPLE_RATE, fft_size(), DRAWN_BINS), None);
+        assert_eq!(
+            spectrum_bin(-110.0, SAMPLE_RATE, fft_size(), DRAWN_BINS),
+            None
+        );
+        assert_eq!(
+            spectrum_bin(f32::NAN, SAMPLE_RATE, fft_size(), DRAWN_BINS),
+            None
+        );
+        assert_eq!(spectrum_bin(110.0, 0.0, fft_size(), DRAWN_BINS), None);
+        assert_eq!(spectrum_bin(110.0, SAMPLE_RATE, 0, DRAWN_BINS), None);
+        assert_eq!(spectrum_bin(110.0, SAMPLE_RATE, fft_size(), 0), None);
+    }
+
+    #[test]
+    fn plots_every_partial_of_a_low_string_and_stops_high_up() {
+        // Low E: all five partials sit inside the drawn range.
+        let low = (1..=HARMONIC_MARKER_MAX)
+            .filter(|harmonic| {
+                spectrum_bin(
+                    82.41 * *harmonic as f32,
+                    SAMPLE_RATE,
+                    fft_size(),
+                    DRAWN_BINS,
+                )
+                .is_some()
+            })
+            .count();
+        assert_eq!(low, HARMONIC_MARKER_MAX);
+
+        // A high note runs out of axis part way up, and the survivors are the
+        // low partials rather than a pile at the edge.
+        let high: Vec<usize> = (1..=HARMONIC_MARKER_MAX)
+            .filter_map(|harmonic| {
+                spectrum_bin(
+                    1500.0 * harmonic as f32,
+                    SAMPLE_RATE,
+                    fft_size(),
+                    DRAWN_BINS,
+                )
+            })
+            .collect();
+        assert_eq!(high.len(), 3);
+        assert!(high.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }
