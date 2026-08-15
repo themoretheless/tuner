@@ -10,6 +10,7 @@ export type { CustomTemperamentPayload, CustomTuningPayload } from '../domain/cu
 
 export interface TuningStateOptions {
   settings: SettingsStore;
+  frameResolved?: Readonly<Ref<boolean>>;
   onResetDetection?: () => void;
 }
 
@@ -23,6 +24,7 @@ export function useTuningState(
     a4: settings.a4,
     activeInstrument: settings.activeInstrument,
     detectedFrequency,
+    frameResolved: options.frameResolved,
     isChromaticMode: model.isChromaticMode,
     selectedString: model.selectedString,
     strings: model.strings,
@@ -71,6 +73,9 @@ export function useTuningState(
     if (!model.temperamentOptions.value.some((item) => item.id === settings.temperament.value)) {
       settings.temperament.value = 'equal';
     }
+    // Storage normalization (`normalizePersistedSettings`) already resolves
+    // `lastTuningId` against the tunings available for the active instrument,
+    // so the fallback below only runs for in-session inconsistencies.
     const saved = model.allTunings.value.find((tuning) => (
       tuning.id === settings.lastTuningId.value
     )) || model.resolveDefaultTuning(settings.activeInstrument.value);

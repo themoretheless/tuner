@@ -3,6 +3,7 @@ import { useDetectionFramePresentation } from '../../../composables/useDetection
 import { createFrameContext } from '../../../domain/frameContext';
 import type { PitchDetectionRange } from '../../../utils/pitch';
 import type {
+  DetectedNote,
   Note,
   NoteName,
   Temperament,
@@ -21,7 +22,7 @@ export interface DetectionTuningPort {
   a4: Readonly<Ref<number>>;
   cents: Readonly<Ref<number>>;
   currentNoteDisplay: Readonly<Ref<string | null>>;
-  detectedNote: Readonly<Ref<unknown | null>>;
+  detectedNote: Readonly<Ref<DetectedNote | null>>;
   detectionRange: Readonly<Ref<PitchDetectionRange>>;
   isChromaticMode: Readonly<Ref<boolean>>;
   isInTune: Readonly<Ref<boolean>>;

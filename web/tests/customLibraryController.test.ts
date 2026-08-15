@@ -82,6 +82,5 @@ describe('custom library controller', () => {
       instrument: 'missing',
     }])).toBe(1);
     expect(customTunings.value[0].instrument).toBe('bass');
-    expect(controller.exportCustomTunings()).toBe(customTunings.value);
   });
 });

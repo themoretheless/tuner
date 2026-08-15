@@ -220,6 +220,14 @@ mod tests {
     }
 
     #[test]
+    fn default_fingerprint_matches_cross_language_golden_value() {
+        // web/tests/pipelineConfig.test.ts pins the same number; the web
+        // client uses it to recognize frames produced by a foreign
+        // configuration, so both sides must agree byte-for-byte.
+        assert_eq!(PipelineConfig::default().fingerprint(), 161_782_394);
+    }
+
+    #[test]
     fn fingerprint_is_stable_and_changes_with_normalized_configuration() {
         let stable = PipelineConfig::default().fingerprint();
         let fast = PipelineConfig {

@@ -83,7 +83,11 @@ export function createSettingsStore(storage: SettingsStoragePort = defaultStorag
     scope.stop();
   }
 
-  scope.run(() => watch(Object.values(state.refs), scheduleSave));
+  // Deep: several settings are arrays and objects (custom tunings, practice
+  // history, string offsets, pipeline config). A shallow watcher would only
+  // see whole-value replacement, so the first in-place mutation would stop
+  // being persisted without any visible error.
+  scope.run(() => watch(Object.values(state.refs), scheduleSave, { deep: true }));
   void load();
 
   return {

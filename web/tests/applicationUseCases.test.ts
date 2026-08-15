@@ -33,7 +33,7 @@ describe('framework-independent application use cases', () => {
     expect(stopReferenceTone).toHaveBeenCalledOnce();
   });
 
-  it('normalizes display commands without a Vue runtime', async () => {
+  it('ignores unrecognized display commands instead of resetting the user to defaults', async () => {
     const toggle = vi.fn(async () => {});
     const displayMode = cell<DisplayMode>('needle');
     const layoutMode = cell<LayoutMode>('stage');
@@ -51,10 +51,18 @@ describe('framework-independent application use cases', () => {
     controller.setThemeMode('invalid');
     await controller.toggleFullscreen();
 
-    expect(displayMode.value).toBe('gauge');
-    expect(layoutMode.value).toBe('default');
-    expect(themeMode.value).toBe('dark');
+    expect(displayMode.value).toBe('needle');
+    expect(layoutMode.value).toBe('stage');
+    expect(themeMode.value).toBe('light');
     expect(toggle).toHaveBeenCalledOnce();
+
+    controller.setDisplayMode('strobe');
+    controller.setLayoutMode('compact');
+    controller.setThemeMode('colorblind');
+
+    expect(displayMode.value).toBe('strobe');
+    expect(layoutMode.value).toBe('compact');
+    expect(themeMode.value).toBe('colorblind');
   });
 
   it('validates profile import before interrupting the active session', async () => {

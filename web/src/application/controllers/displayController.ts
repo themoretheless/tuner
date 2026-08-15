@@ -18,17 +18,30 @@ export interface DisplayControllerDependencies {
 export function createDisplayController(dependencies: DisplayControllerDependencies) {
   return {
     setDisplayMode(value: unknown) {
-      dependencies.displayMode.value = normalizeDisplayMode(value);
+      assignValid(dependencies.displayMode, value, normalizeDisplayMode);
     },
     setLayoutMode(value: unknown) {
-      dependencies.layoutMode.value = normalizeLayoutMode(value);
+      assignValid(dependencies.layoutMode, value, normalizeLayoutMode);
     },
     setLeftHanded(value: boolean) {
       dependencies.leftHanded.value = Boolean(value);
     },
     setThemeMode(value: unknown) {
-      dependencies.themeMode.value = normalizeThemeMode(value);
+      assignValid(dependencies.themeMode, value, normalizeThemeMode);
     },
     toggleFullscreen: dependencies.fullscreen.toggle,
   };
+}
+
+// A command carrying an unrecognized value is a caller bug, not a request to
+// switch to the default: silently coercing it would flip the user's current
+// theme or layout to something they never asked for.
+function assignValid<Value>(
+  target: WritableValue<Value>,
+  value: unknown,
+  normalize: (input: unknown) => Value,
+) {
+  const normalized = normalize(value);
+  if (normalized !== value) return;
+  target.value = normalized;
 }

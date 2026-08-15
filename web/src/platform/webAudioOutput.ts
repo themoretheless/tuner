@@ -123,10 +123,15 @@ export function createWebAudioOutputPort(
   return { createScope, dispose };
 }
 
+// A timed tone that ends at full gain clicks. When the caller sets a duration
+// but no release, fade out over this window instead of cutting the oscillator.
+const MIN_RELEASE_SECONDS = 0.02;
+
 function configureEnvelope(gain: AudioParam, request: ToneRequest, startAt: number) {
   const attack = clampDuration(request.attackSeconds);
   const duration = clampDuration(request.durationSeconds);
-  const release = Math.min(clampDuration(request.releaseSeconds), duration);
+  const requestedRelease = clampDuration(request.releaseSeconds) || MIN_RELEASE_SECONDS;
+  const release = Math.min(requestedRelease, duration);
   gain.cancelScheduledValues(startAt);
   if (attack > 0) {
     gain.setValueAtTime(0.0001, startAt);

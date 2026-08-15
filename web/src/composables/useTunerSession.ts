@@ -99,14 +99,13 @@ export function useTunerSession(options: TunerSessionOptions) {
     }
   }, { deep: true, immediate: true });
 
-  const sourceDetectionFrame = computed<DetectionFrame>(() => {
+  const detectionFrame = computed<DetectionFrame>(() => {
     const port = activeInputPort.value;
     if (isDetectionFrameInputPort(port)) {
       return port.frame.value ?? createUnresolvedDetectionFrame();
     }
     return pitch.detectionFrame.value;
   });
-  const detectionFrame = sourceDetectionFrame;
   const detectedFrequency = computed(() => detectionFrame.value.freq);
   const detectionFrameResolved = computed(() => (
     isDetectionFrameInputPort(activeInputPort.value)

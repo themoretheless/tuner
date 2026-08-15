@@ -19,6 +19,28 @@ describe('settings store', () => {
     store.dispose();
   });
 
+  it('persists in-place mutations of structured settings', async () => {
+    const save = vi.fn(async () => {});
+    const store = createSettingsStore({ load: async () => ({}), save });
+    await store.load();
+
+    vi.useFakeTimers();
+    try {
+      // Mutated in place, not replaced: a shallow watcher would never see it
+      // and the change would be lost on reload.
+      store.pipelineConfig.value.holdEnabled = false;
+      await vi.advanceTimersByTimeAsync(200);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({
+      pipelineConfig: expect.objectContaining({ holdEnabled: false }),
+    }));
+    store.dispose();
+  });
+
   it('keeps separate stores isolated', async () => {
     const first = createSettingsStore({ load: async () => ({}), save: async () => {} });
     const second = createSettingsStore({ load: async () => ({}), save: async () => {} });

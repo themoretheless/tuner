@@ -100,10 +100,6 @@ export function createCustomLibraryController(options: CustomLibraryControllerOp
     }
   }
 
-  function exportCustomTunings() {
-    return options.customTunings.value;
-  }
-
   function importCustomTunings(tunings: Tuning[]) {
     const normalized = normalizeImportedTunings(
       tunings,
@@ -125,7 +121,6 @@ export function createCustomLibraryController(options: CustomLibraryControllerOp
     deleteCustomTemperament,
     deleteCustomTuning,
     deleteInstrumentProfile,
-    exportCustomTunings,
     importCustomTunings,
     saveCustomTemperament,
     saveCustomTuning,

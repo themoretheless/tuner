@@ -54,6 +54,46 @@ describe('ConfidenceEvidenceEstimator', () => {
     expect(estimator.observe(observation(146.8)).stability).toBeCloseTo(0.72);
   });
 
+  it('does not claim fresh evidence for rejected frames', () => {
+    const estimator = new ConfidenceEvidenceEstimator();
+    estimator.observe(observation(82.4));
+    const rejected = estimator.observe({
+      ...observation(82.4),
+      decision: 'adaptive-gate-rejected' as const,
+    });
+
+    expect(rejected.calibrated).toBe(0);
+    expect(rejected.uncertaintyCents).toBe(100);
+    expect(estimator.observe(observation(82.4)).stability).toBeCloseTo(0.72);
+  });
+
+  it('does not seed window history with a suspected octave-pending frequency', () => {
+    const estimator = new ConfidenceEvidenceEstimator();
+    const pending = estimator.observe({
+      ...observation(164.8),
+      decision: 'octave-pending' as const,
+    });
+
+    expect(pending.calibrated).toBe(0);
+    expect(estimator.observe(observation(82.4)).stability).toBeCloseTo(0.72);
+  });
+
+  it('mirrors the Rust agreement rules for partial detector evidence', () => {
+    const single = new ConfidenceEvidenceEstimator().observe({
+      ...observation(110),
+      secondary: null,
+    });
+    expect(single.agreement).toBeCloseTo(0.68);
+
+    // Two detectors where one reports an unusable frequency is trouble, not
+    // agreement: Rust falls through to the no-evidence arm and so must TS.
+    const unusable = new ConfidenceEvidenceEstimator().observe({
+      ...observation(110),
+      secondary: { confidence: 0.9, frequency: 0 },
+    });
+    expect(unusable.agreement).toBe(0);
+  });
+
   it('marks a candidate that belongs to another selected-instrument string', () => {
     expect(detectCompetingTarget(110, 82.4069, [82.4069, 110, 146.832])).toMatchObject({
       candidateFrequency: 110,

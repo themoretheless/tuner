@@ -57,6 +57,14 @@ function toggleMic() {
         <button type="button" @click="tuner.clearError()">{{ t('dismiss') }}</button>
       </div>
 
+      <div
+        v-if="tuner.isListening && tuner.detectorBackend === 'typescript'"
+        class="degraded-banner"
+        role="status"
+      >
+        {{ t('detector.degraded') }}
+      </div>
+
       <NoteDisplay
         :confidence="tuner.detectionFrame.confidence"
         :display="tuner.currentNoteDisplay"
