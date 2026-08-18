@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: themoretheless/.github/.github/workflows/copilot-review.yml@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
+    uses: themoretheless/.github/.github/workflows/copilot-review.yml@d66cd190a0d7a8b45f909dfa97597be34ec93f1f # first-party actions
     with:
       # Copilot always emits an overview body; gate only actionable inline comments.
       fail_on_comments: true
