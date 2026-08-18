@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 audio-input = { path = "../audio-input" }
-eframe = { version = "0.27", default-features = false, features = ["accesskit", "default_fonts", "persistence", "wgpu", "wayland", "x11"] }
-egui = "0.27"
-cpal = "0.15"
+eframe = { version = "0.36", default-features = false, features = ["accesskit", "default_fonts", "persistence", "wgpu", "wayland", "x11"] }
+egui = "0.36"
+cpal = "0.18"
 pitch-core = { path = "../pitch-core", default-features = false }
 
 [dev-dependencies]
