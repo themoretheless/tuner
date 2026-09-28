@@ -26,6 +26,23 @@ describe('streaming pitch fallback', () => {
       .toBeCloseTo(82.45, 1);
   });
 
+  it('averages the two central history values on even length', () => {
+    // Regression: the upper-of-two median fed the larger frame into the
+    // smoother whenever the history held exactly two frames (right after a
+    // commit), biasing the track upward. The Rust tracker fixed the same bug
+    // in pitch-core/src/tracking.rs::history_median. Here: acquire at 100 Hz
+    // (history = [100]), then one inlier at 101 Hz makes history length 2;
+    // the filter must see the averaged middle (~100.5 Hz) and settle near
+    // 100.10 Hz, not the upper value (which pulled the readout to ~100.35 Hz).
+    const tracker = new StreamingPitchTracker();
+    expect(tracker.update({ confidence: 0.9, frequency: 100 }, loud)).toBeNull();
+    expect(tracker.update({ confidence: 0.9, frequency: 100 }, loud)?.frequency)
+      .toBeCloseTo(100, 3);
+    const published = tracker.update({ confidence: 0.9, frequency: 101 }, loud)?.frequency;
+    expect(published).toBeGreaterThan(100.02);
+    expect(published).toBeLessThan(100.2);
+  });
+
   it('does not publish stable low-level room hum', () => {
     const tracker = new StreamingPitchTracker();
     tracker.setContext(createDefaultFrameContext());

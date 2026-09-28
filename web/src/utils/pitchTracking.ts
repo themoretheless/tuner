@@ -145,7 +145,14 @@ export class StreamingPitchTracker {
       this.history.push(candidate);
       if (this.history.length > 3) this.history.shift();
       const sorted = [...this.history].sort((left, right) => left - right);
-      const median = sorted[Math.floor(sorted.length / 2)];
+      // Even count: average the two central order statistics. Taking just the
+      // upper one biases the track upward right after a commit, when the
+      // history holds exactly two frames — the same regression the Rust
+      // tracker fixed in pitch-core/src/tracking.rs::history_median.
+      const upper = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 === 0
+        ? (sorted[upper - 1] + sorted[upper]) / 2
+        : sorted[upper];
       const residual = Math.abs(centsBetween(median, this.stableLog));
       const alpha = residual < 12 ? 0.2 : residual < 35 ? 0.35 : 0.55;
       this.stableLog += alpha * (median - this.stableLog);
