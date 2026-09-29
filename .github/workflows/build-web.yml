@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.ref }}
           fetch-depth: 0
@@ -29,14 +29,14 @@ jobs:
         run: node scripts/release-metadata.mjs validate
 
       - name: Setup Vue
-        uses: themoretheless/.github/.github/actions/setup-vue@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
+        uses: themoretheless/.github/.github/actions/setup-vue@d66cd190a0d7a8b45f909dfa97597be34ec93f1f # first-party actions
         with:
           node-version-file: .nvmrc
           npm-cache-dependency-path: web/package-lock.json
           working-directory: web
 
       - name: Setup Rust
-        uses: themoretheless/.github/.github/actions/setup-rust@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
+        uses: themoretheless/.github/.github/actions/setup-rust@d66cd190a0d7a8b45f909dfa97597be34ec93f1f # first-party actions
         with:
           rust-toolchain: beta
           targets: wasm32-unknown-unknown
@@ -69,6 +69,6 @@ jobs:
         run: cp web/dist/index.html web/dist/404.html
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: web/dist
