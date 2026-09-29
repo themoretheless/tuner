@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -73,7 +73,13 @@ function expectClose(actual: number, expected: number, tolerance: number, label:
   expect(Math.abs(actual - expected), label).toBeLessThanOrEqual(tolerance);
 }
 
-describe('Rust/Web music-domain parity', () => {
+// The parity gate compares web data against a live `cargo run` of the Rust
+// domain snapshot. On machines without a Rust toolchain the suite is skipped
+// instead of failing on spawnSync ENOENT; CI always installs Rust before
+// `npm test` (setup-rust in build-web.yml), so the gate stays blocking there.
+const hasCargo = spawnSync('cargo', ['--version'], { stdio: 'ignore' }).error == null;
+
+describe.skipIf(!hasCargo)('Rust/Web music-domain parity', () => {
   beforeAll(() => {
     loadRustSnapshot();
   }, 120_000);
