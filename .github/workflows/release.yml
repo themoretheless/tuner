@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -83,7 +83,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -116,7 +116,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.version.outputs.skip != 'true'
-        uses: themoretheless/.github/.github/actions/create-github-release@2d3bc163ca57318e89e801795a0b0356d5a9d941 # first-party actions
+        uses: themoretheless/.github/.github/actions/create-github-release@d66cd190a0d7a8b45f909dfa97597be34ec93f1f # first-party actions
         with:
           tag: ${{ steps.version.outputs.tag }}
           prerelease: ${{ steps.version.outputs.is_pre == 'true' }}
