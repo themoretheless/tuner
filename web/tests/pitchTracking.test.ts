@@ -104,4 +104,17 @@ describe('streaming pitch fallback', () => {
     expect(tracker.update({ confidence: 0.95, frequency: 160 }, loud)).toBeNull();
     expect(tracker.telemetry().selected).toBeNull();
   });
+  it('commits a new note that wins a 2:1 majority over interleaved inliers', () => {
+    const tracker = new StreamingPitchTracker();
+    const at = (frequency: number) => tracker.update({ confidence: 0.95, frequency }, loud);
+    at(110);
+    at(110);
+    let last = null as ReturnType<typeof at>;
+    for (let round = 0; round < 12; round += 1) {
+      at(146.8324);
+      at(146.8324);
+      last = at(110);
+    }
+    expect(last?.frequency).toBeCloseTo(146.83, 0);
+  });
 });

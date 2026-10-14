@@ -95,13 +95,13 @@ impl AdaptiveSignalGate {
             return true;
         }
 
-        if self.calibrated_frames < CALIBRATION_FRAMES {
-            self.calibrated_frames += 1;
-            self.update_noise_floor(stats.rms);
-            return false;
-        }
-
+        // Only frames that look like noise may teach the floor, during
+        // calibration too: a handling bump or a loud wrong string learned as
+        // "silence" would otherwise lift the floor above every real note.
         if !strong_attack && !trusted_estimate {
+            if self.calibrated_frames < CALIBRATION_FRAMES {
+                self.calibrated_frames += 1;
+            }
             self.update_noise_floor(stats.rms);
         }
         false
@@ -185,5 +185,16 @@ mod tests {
         let prior = PitchPrior::default();
         let mut gate = AdaptiveSignalGate::new(0.0025, 0.012);
         assert!(gate.observe(stats(0.006), estimate(220.0, 0.95), &prior));
+    }
+
+    #[test]
+    fn a_loud_burst_during_calibration_is_not_learned_as_noise() {
+        let prior = PitchPrior::default();
+        let mut gate = AdaptiveSignalGate::new(0.0025, 0.012);
+        for _ in 0..4 {
+            assert!(!gate.observe(stats(0.03), None, &prior));
+        }
+        assert!(gate.noise_floor() < 0.004, "floor {}", gate.noise_floor());
+        assert!(gate.observe(stats(0.01), estimate(110.0, 0.98), &prior));
     }
 }
