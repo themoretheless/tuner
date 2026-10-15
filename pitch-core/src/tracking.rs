@@ -580,7 +580,11 @@ mod tests {
             last = tracker.update(estimate(110.0), &prior);
         }
         let current = tracker.current().or(last).expect("track");
-        assert!((current.frequency - 146.83).abs() < 1.0, "{}", current.frequency);
+        assert!(
+            (current.frequency - 146.83).abs() < 1.0,
+            "{}",
+            current.frequency
+        );
     }
 
     #[test]
@@ -596,6 +600,10 @@ mod tests {
             tracker.update(estimate(82.4069), &prior);
         }
         let current = tracker.current().expect("track");
-        assert!((current.frequency - 164.81).abs() < 1.5, "{}", current.frequency);
+        assert!(
+            (current.frequency - 164.81).abs() < 1.5,
+            "{}",
+            current.frequency
+        );
     }
 }
