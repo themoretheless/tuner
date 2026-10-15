@@ -140,8 +140,11 @@ export class StreamingPitchTracker {
 
     const distance = Math.abs(centsBetween(candidate, this.stableLog));
     if (distance <= INLIER_CENTS) {
-      this.clearPending();
-      this.unstableFrames = 0;
+      // Mirrors tracking.rs: decay change evidence instead of wiping it, so
+      // a majority for a new note still commits through interleaved inliers.
+      this.pendingStreak = Math.max(0, this.pendingStreak - 1);
+      if (this.pendingStreak === 0) this.clearPending();
+      this.unstableFrames = Math.max(0, this.unstableFrames - 1);
       this.history.push(candidate);
       if (this.history.length > 3) this.history.shift();
       const sorted = [...this.history].sort((left, right) => left - right);
@@ -255,12 +258,12 @@ export class StreamingPitchTracker {
       this.belowGateFrames = 0;
       return true;
     }
-    if (this.calibratedFrames < ADAPTIVE.calibrationFrames) {
-      this.calibratedFrames += 1;
+    // Mirrors gate.rs: only noise-like frames may teach the floor, during
+    // calibration too.
+    if (!strongAttack && !trusted) {
+      if (this.calibratedFrames < ADAPTIVE.calibrationFrames) this.calibratedFrames += 1;
       this.updateNoiseFloor(stats.rms);
-      return false;
     }
-    if (!strongAttack && !trusted) this.updateNoiseFloor(stats.rms);
     return false;
   }
 

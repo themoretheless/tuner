@@ -220,8 +220,15 @@ impl PitchTracker {
 
         let distance = cents_between_logs(candidate_log2, stable_log2).abs();
         if distance <= INLIER_TOLERANCE_CENTS {
-            self.clear_pending();
-            self.unstable_streak = 0;
+            // Decay the change evidence instead of wiping it. A single inlier
+            // between outliers (a ringing old string while a new one sounds,
+            // detector flipping between two periods) used to reset both
+            // counters, so a 2:1 majority for a new note could never commit.
+            self.pending_streak = self.pending_streak.saturating_sub(1);
+            if self.pending_streak == 0 {
+                self.clear_pending();
+            }
+            self.unstable_streak = self.unstable_streak.saturating_sub(1);
             self.push_history(candidate_log2);
             let median = self.history_median();
             // One-euro replaces the legacy stepped alpha (0.20/0.35/0.55):
@@ -558,5 +565,45 @@ mod tests {
         assert!(prior.competing_target(220.1).is_some());
         assert!(prior.competing_target(82.5).is_none());
         assert!(prior.competing_target(164.8).is_none());
+    }
+
+    #[test]
+    fn a_majority_for_a_new_note_commits_despite_interleaved_inliers() {
+        let mut tracker = PitchTracker::new();
+        let prior = PitchPrior::default();
+        tracker.update(estimate(110.0), &prior);
+        tracker.update(estimate(110.0), &prior);
+        let mut last = None;
+        for _ in 0..12 {
+            tracker.update(estimate(146.8324), &prior);
+            tracker.update(estimate(146.8324), &prior);
+            last = tracker.update(estimate(110.0), &prior);
+        }
+        let current = tracker.current().or(last).expect("track");
+        assert!(
+            (current.frequency - 146.83).abs() < 1.0,
+            "{}",
+            current.frequency
+        );
+    }
+
+    #[test]
+    fn an_octave_change_commits_through_a_rare_stray_inlier() {
+        let mut tracker = PitchTracker::new();
+        let prior = PitchPrior::default();
+        tracker.update(estimate(82.4069), &prior);
+        tracker.update(estimate(82.4069), &prior);
+        for _ in 0..10 {
+            for _ in 0..5 {
+                tracker.update(estimate(164.8138), &prior);
+            }
+            tracker.update(estimate(82.4069), &prior);
+        }
+        let current = tracker.current().expect("track");
+        assert!(
+            (current.frequency - 164.81).abs() < 1.5,
+            "{}",
+            current.frequency
+        );
     }
 }
